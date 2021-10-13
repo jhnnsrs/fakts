@@ -9,7 +9,7 @@ packages = [{include = "konfik"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^1.8.2"
-koil = "^0.1.24"
+koil = "^0.1.27"
 aiohttp_cors = "^0.7.0"
 PyYAML = "^5.4.1"
 QtPy = "^1.11.2"
