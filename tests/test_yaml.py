@@ -1,12 +1,12 @@
-from konfik import Konfik
-from konfik.grants.yaml import YamlGrant
+from fakts import Fakts
+from fakts.grants.yaml import YamlGrant
 import os
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
 def test_loading():
-    konfik = Konfik(grants=[YamlGrant(filepath=TESTS_FOLDER + "/bergen.yaml")])
+    konfik = Fakts(grants=[YamlGrant(filepath=TESTS_FOLDER + "/bergen.yaml")])
     konfik.load()
 
     assert konfik.load_group("herre") != {}, "No Konfik for group {herre} found"

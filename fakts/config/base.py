@@ -1,6 +1,7 @@
 from typing import Type, TypeVar
 from pydantic import BaseSettings
-from konfik.konfik import Konfik, get_current_konfik
+import fakts
+from fakts.fakts import Fakts, get_current_fakts
 
 
 Class = TypeVar("Class")
@@ -13,8 +14,8 @@ class Config(BaseSettings):
 
 
     @classmethod
-    def from_konfik(cls: Type[Class], konfik: Konfik = None, **overwrites) -> Class:
+    def from_fakts(cls: Type[Class], fakts: Fakts = None, **overwrites) -> Class:
         group = cls.__config__.group
         assert group is not "undefined", f"Please overwrite the Metaclass Config parameter group and point at your group {cls}"
-        konfik = konfik or get_current_konfik()
-        return cls(**konfik.load_group(group))
+        fakts = fakts or get_current_fakts()
+        return cls(**fakts.load_group(group))

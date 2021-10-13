@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from konfik.beacon.beacon import KonfikEndpoint
+from fakts.beacon.beacon import FaktsEndpoint
 from socket import socket, AF_INET, SOCK_DGRAM 
 import asyncio
 import json
@@ -51,7 +51,7 @@ class EndpointDiscovery:
 
                     try:
                         endpoint = json.loads(endpoint)
-                        endpoint = KonfikEndpoint(**endpoint)
+                        endpoint = FaktsEndpoint(**endpoint)
                         await self.handle_new_potential_endpoint(endpoint)
                         if name_filter and endpoint.name != name_filter: continue
                         return endpoint
@@ -90,7 +90,7 @@ class EndpointDiscovery:
 
                     try:
                         endpoint = json.loads(endpoint)
-                        endpoint = KonfikEndpoint(**endpoint)
+                        endpoint = FaktsEndpoint(**endpoint)
                         if name_filter and endpoint.name != name_filter: continue
                         if endpoint.url not in self.discovered_endpoints:
                             yield endpoint

@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Generic, Type, TypeVar
 from pydantic.main import BaseModel
-from konfik.beacon.beacon import KonfikEndpoint
+from fakts.beacon.beacon import FaktsEndpoint
 import webbrowser
 import asyncio
 import uuid
@@ -47,8 +47,9 @@ async def wait_for_post(starturl, redirect_host="localhost", redirect_port=6767,
     })
     cors.add(app.router.add_post(redirect_path, wrapped_post_future(token_future, state)))
 
-    webserver_future = asyncio.wait_for(web._run_app(app, host=redirect_host, port=redirect_port, print=print_function,handle_signals=handle_signals), timeout)
-    done, pending = await asyncio.wait([token_future, webserver_future], return_when=asyncio.FIRST_COMPLETED)
+
+    webserver_task = asyncio.get_event_loop().create_task(web._run_app(app, host=redirect_host, port=redirect_port, print=print_function,handle_signals=handle_signals))
+    done, pending = await asyncio.wait([token_future, webserver_task, asyncio.sleep(timeout)], return_when=asyncio.FIRST_COMPLETED)
 
     for tf in done:
         if tf == token_future:
@@ -68,7 +69,7 @@ async def wait_for_post(starturl, redirect_host="localhost", redirect_port=6767,
     return post_json
 
 
-class KonfikRetriever:
+class FaktsRetriever:
     REDIRECT_HOST = "localhost"
     REDIRECT_PORT = 6767
     REDIRECT_PATH = "/"
@@ -80,7 +81,7 @@ class KonfikRetriever:
         self.redirect_path = redirect_path or self.REDIRECT_PATH
 
 
-    async def aretrieve(self, config: KonfikEndpoint, **kwargs):
+    async def aretrieve(self, config: FaktsEndpoint, **kwargs):
         post_data = await wait_for_post(config.url, redirect_host=self.redirect_host, redirect_port=self.redirect_port, redirect_path=self.redirect_path)
         return post_data
 

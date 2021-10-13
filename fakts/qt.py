@@ -1,9 +1,9 @@
-from konfik import Konfik
+from fakts import Fakts
 from qtpy import QtCore, QtWidgets
 
 
 
-class QtKonfik(Konfik, QtWidgets.QWidget):
+class QtKonfik(Fakts, QtWidgets.QWidget):
     loaded_signal = QtCore.Signal(bool)
 
     def __init__(self, *args, **kwargs) -> None:

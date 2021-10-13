@@ -1,10 +1,10 @@
 
 
-from konfik.grants.base import KonfigGrant
+from fakts.grants.base import FaktsGrant
 import yaml
 
 
-class YamlGrant(KonfigGrant):
+class YamlGrant(FaktsGrant):
 
     def __init__(self, filepath) -> None:
         super().__init__()

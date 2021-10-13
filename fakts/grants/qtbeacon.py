@@ -3,9 +3,9 @@
 
 from qtpy.QtCore import Signal
 from koil.koil import get_current_koil
-from konfik.beacon.beacon import KonfikEndpoint
-from konfik.grants.base import GrantException, KonfigGrant
-from konfik.beacon import EndpointDiscovery, KonfikRetriever
+from fakts.beacon.beacon import FaktsEndpoint
+from fakts.grants.base import GrantException, FaktsGrant
+from fakts.beacon import EndpointDiscovery, FaktsRetriever
 from qtpy import QtWidgets
 import asyncio
 
@@ -21,7 +21,7 @@ class RetrieveDialog(QtWidgets.QDialog):
 
 
 class SelfScanWidget(QtWidgets.QWidget):
-    user_endpoint = Signal(KonfikEndpoint)
+    user_endpoint = Signal(FaktsEndpoint)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -38,7 +38,7 @@ class SelfScanWidget(QtWidgets.QWidget):
     def on_add(self):
         host = self.lineEdit.text()
         url = f"http://{host}:3000/setupapp"
-        endpoint = KonfikEndpoint(url=url, name="Self Added")
+        endpoint = FaktsEndpoint(url=url, name="Self Added")
         self.user_endpoint.emit(endpoint)
 
 
@@ -47,8 +47,8 @@ class UserCancelledException(GrantException):
     
 
 
-class QtSelectableBeaconGrant(KonfigGrant, QtWidgets.QWidget):
-    new_endpoint = Signal(KonfikEndpoint)
+class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QWidget):
+    new_endpoint = Signal(FaktsEndpoint)
     show_signal = Signal()
     hide_signal = Signal()
 
@@ -150,7 +150,7 @@ class QtSelectableBeaconGrant(KonfigGrant, QtWidgets.QWidget):
             endpoint = await self.select_endpoint
         
             self.retrieve_start.emit()
-            retriev = KonfikRetriever()
+            retriev = FaktsRetriever()
 
             self.retrieving_task = self.loop.create_task(retriev.aretrieve(endpoint))
 

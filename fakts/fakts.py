@@ -1,20 +1,20 @@
 from typing import List
 from koil import koil
 import yaml
-from konfik.grants.base import KonfigGrant
+from fakts.grants.base import FaktsGrant
 import os
-from konfik.grants.yaml import YamlGrant
+from fakts.grants.yaml import YamlGrant
 import logging
 
 
 logger = logging.getLogger(__name__)
 
-class Konfik:
+class Fakts:
 
     def __init__(self, *args, grants = [YamlGrant(filepath="bergen.yaml")], save_conf="bergen.yaml", register= True, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.loaded = False
-        self.grants: List[KonfigGrant] = grants
+        self.grants: List[FaktsGrant] = grants
         assert len(self.grants) > 0, "Please provide allowed Grants to retrieve the Konfiguration from"
         self.konfig_dict = {}
         self.grantResponse = None
@@ -29,7 +29,7 @@ class Konfik:
                 logger.info(f"Couldn't load local conf-file {save_conf}. We will have to refetch!")
 
         if register:
-            set_current_konfik(self)
+            set_current_fakts(self)
 
     
     def load_config_from_file(self, filepath = None):
@@ -101,15 +101,15 @@ class Konfik:
 
 
 
-CURRENT_KONFIK = None
+CURRENT_FAKTS = None
 
-def get_current_konfik(**kwargs) -> Konfik:
-    global CURRENT_KONFIK
-    if not CURRENT_KONFIK:
-        CURRENT_KONFIK = Konfik(**kwargs)
-    return CURRENT_KONFIK
+def get_current_fakts(**kwargs) -> Fakts:
+    global CURRENT_FAKTS
+    if not CURRENT_FAKTS:
+        CURRENT_FAKTS = Fakts(**kwargs)
+    return CURRENT_FAKTS
 
-def set_current_konfik(konfik) -> Konfik:
-    global CURRENT_KONFIK
-    if CURRENT_KONFIK: print("Hmm there was another konfik set, maybe thats cool but more likely not")
-    CURRENT_KONFIK = konfik
+def set_current_fakts(fakts) -> Fakts:
+    global CURRENT_FAKTS
+    if CURRENT_FAKTS: print("Hmm there was another fakts set, maybe thats cool but more likely not")
+    CURRENT_FAKTS = fakts

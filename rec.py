@@ -1,6 +1,5 @@
 import asyncio
-from konfik.beacon import KonfigBeacon, KonfikEndpoint
-from konfik.discovery import EndpointDiscovery
+from fakts.beacon import EndpointDiscovery
 
 async def w(endpoint):
     print(endpoint)

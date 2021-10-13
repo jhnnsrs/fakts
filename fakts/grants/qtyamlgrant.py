@@ -1,6 +1,6 @@
 
 
-from konfik.grants.base import GrantException, KonfigGrant
+from fakts.grants.base import GrantException, FaktsGrant
 import yaml
 from koil.qt import FutureWrapper
 from qtpy import QtWidgets
@@ -9,7 +9,7 @@ from qtpy import QtWidgets
 class NoFileSelected(GrantException):
     pass
 
-class QtYamlGrant(KonfigGrant, QtWidgets.QWidget):
+class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
 
     def __init__(self, filepath) -> None:
         super().__init__()

@@ -5,7 +5,7 @@ class GrantException(Exception):
     pass
 
 
-class KonfigGrant:
+class FaktsGrant:
 
 
     async def aload(self, **kwargs):

@@ -1,8 +1,8 @@
 import asyncio
-from konfik.beacon import EndpointBeacon, KonfikEndpoint
+from fakts.beacon import EndpointBeacon, FaktsEndpoint
 
 
-beacon = EndpointBeacon(advertised_endpoints= [KonfikEndpoint(url="http://p-tnagerl-lab1:3000/setupapp", name="Best Man")])
+beacon = EndpointBeacon(advertised_endpoints= [FaktsEndpoint(url="http://p-tnagerl-lab1:3000/setupapp", name="Best Man")])
 
 
 async def main():

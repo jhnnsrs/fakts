@@ -5,7 +5,7 @@ import asyncio
 import json
 from koil import koil
 
-class KonfikEndpoint(BaseModel):
+class FaktsEndpoint(BaseModel):
     url: str
     name: str
 
@@ -23,7 +23,7 @@ class EndpointBeacon:
     MAGIC_PHRASE = "beacon-konfig"
 
 
-    def __init__(self, broadcast_port=None, bind=None, magic_phrase = None, broadcast_adress = None,  advertised_endpoints: List[KonfikEndpoint] = [], interval=1) -> None:
+    def __init__(self, broadcast_port=None, bind=None, magic_phrase = None, broadcast_adress = None,  advertised_endpoints: List[FaktsEndpoint] = [], interval=1) -> None:
         self.broadcast_port = broadcast_port or self.BROADCAST_PORT
         self.bind = bind or self.BIND
         self.magic_phrase = magic_phrase or self.MAGIC_PHRASE
@@ -34,7 +34,7 @@ class EndpointBeacon:
         self.interval = interval
 
 
-    def endpoint_to_message(self, config: KonfikEndpoint):
+    def endpoint_to_message(self, config: FaktsEndpoint):
         return bytes(self.magic_phrase + json.dumps(config.dict()), "utf8")
 
 
