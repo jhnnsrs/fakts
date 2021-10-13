@@ -3,7 +3,7 @@ from qtpy import QtCore, QtWidgets
 
 
 
-class QtKonfik(Fakts, QtWidgets.QWidget):
+class QtFakts(Fakts, QtWidgets.QWidget):
     loaded_signal = QtCore.Signal(bool)
 
     def __init__(self, *args, **kwargs) -> None:

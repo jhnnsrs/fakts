@@ -16,14 +16,13 @@ class Fakts:
         self.loaded = False
         self.grants: List[FaktsGrant] = grants
         assert len(self.grants) > 0, "Please provide allowed Grants to retrieve the Konfiguration from"
-        self.konfig_dict = {}
-        self.grantResponse = None
+        self.fakts = {}
         self.failedResponses = []
 
         self.save_conf = save_conf
         if self.save_conf:
             try:
-                self.konfig_dict = self.load_config_from_file()
+                self.fakts = self.load_config_from_file()
                 self.loaded = True
             except:
                 logger.info(f"Couldn't load local conf-file {save_conf}. We will have to refetch!")
@@ -39,7 +38,7 @@ class Fakts:
 
     def load_group(self, group_name):
         assert self.loaded, "Konfik needs to be loaded before we can access call load()"
-        config = self.konfig_dict
+        config = self.fakts
         for subgroup in group_name.split("."):
             try:
                 config = config[subgroup]
@@ -50,32 +49,27 @@ class Fakts:
 
 
     async def arefresh(self):
-        if self.save_conf:
-            with open(self.save_conf,"w") as file:
-                yaml.dump(self.grantResponse, file)
+        await self.aload()
 
     async def aload(self):
         for grant in self.grants:
             try:
-                self.grantResponse = await grant.aload()
+                self.fakts = await grant.aload()
                 break
             except Exception as e:
                 self.failedResponses.append(f"{grant.__class__.__name__} failed with {e}")
 
-        assert self.grantResponse, f"We did not received any valid Responses from our Grants. {self.failedResponses}"
+        assert self.fakts, f"We did not received any valid Responses from our Grants. {self.failedResponses}"
 
         if self.save_conf:
             with open(self.save_conf,"w") as file:
-                yaml.dump(self.grantResponse, file)
-
+                yaml.dump(self.fakts, file)
 
         self.loaded = True
-        self.konfig_dict = self.grantResponse
 
     async def adelete(self):
-        self.grantResponse = None
         self.loaded = False
-        self.konfig_dict = self.grantResponse
+        self.fakts = None
 
         if self.save_conf:
             os.remove(self.save_conf)
