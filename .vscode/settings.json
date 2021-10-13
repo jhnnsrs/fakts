@@ -24,5 +24,10 @@
         "activityBar.background": "#1E321C",
         "titleBar.activeBackground": "#2A4627",
         "titleBar.activeForeground": "#FAFCF9"
+    },
+    "files.exclude": {
+        "**/venv": true,
+        "**/__pycache__": true,
+        "**/.pytest_cache": true
     }
 }
