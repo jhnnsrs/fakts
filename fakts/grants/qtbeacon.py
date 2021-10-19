@@ -55,7 +55,7 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QWidget):
     retrieve_start = Signal()
     retrieve_end = Signal()
 
-    def __init__(self, *args, timeout = 14, **kwargs) -> None:
+    def __init__(self, *args, timeout = 6000, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.retrieve_dialog = RetrieveDialog()
         self.retrieve_dialog.button.clicked.connect(self.on_cancel_retrieval)

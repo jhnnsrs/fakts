@@ -1,6 +1,6 @@
 from fakts import Fakts
 from qtpy import QtCore, QtWidgets
-
+from koil.qt import FutureWrapper
 
 
 class QtFakts(Fakts, QtWidgets.QWidget):
