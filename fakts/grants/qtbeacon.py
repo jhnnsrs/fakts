@@ -47,7 +47,7 @@ class UserCancelledException(GrantException):
     
 
 
-class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QWidget):
+class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
     new_endpoint = Signal(FaktsEndpoint)
     show_signal = Signal()
     hide_signal = Signal()

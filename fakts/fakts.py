@@ -17,7 +17,7 @@ class Fakts:
         self.grants: List[FaktsGrant] = grants
         assert len(self.grants) > 0, "Please provide allowed Grants to retrieve the Konfiguration from"
         self.fakts = {}
-        self.failedResponses = []
+        self.failedResponses = {}
 
         self.save_conf = save_conf
         if self.save_conf:
@@ -57,7 +57,7 @@ class Fakts:
                 self.fakts = await grant.aload()
                 break
             except Exception as e:
-                self.failedResponses.append(f"{grant.__class__.__name__} failed with {e}")
+                self.failedResponses[grant.__class__.__name__] = e
 
         assert self.fakts, f"We did not received any valid Responses from our Grants. {self.failedResponses}"
 
