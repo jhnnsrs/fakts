@@ -22,8 +22,6 @@ class IncorrectStateException(Exception):
 def wrapped_post_future(future, state):
 
     async def web_token_response(request):
-
-        print(state) #TODO: Implement checking for state here
         future.set_result(await request.json())
         return web.json_response(data={"ok": True})
 
@@ -35,7 +33,7 @@ async def wait_for_post(starturl, redirect_host="localhost", redirect_port=6767,
     state = uuid.uuid4()
     redirect_uri = quote(f"http://{redirect_host}:{redirect_port}{redirect_path}")
 
-    webbrowser.open(starturl +f"?redirect_uri={redirect_uri}&state={state}")
+    webbrowser.open_new(starturl +f"?redirect_uri={redirect_uri}&state={state}")
 
     token_future = asyncio.get_event_loop().create_future()
 

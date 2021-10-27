@@ -4,6 +4,11 @@ from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST
 import asyncio
 import json
 from koil import koil
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class FaktsEndpoint(BaseModel):
     url: str
@@ -53,9 +58,8 @@ class EndpointBeacon:
         
         while True:
             for message in messages:
-                print(message)
                 transport.sendto(message, (self.broadcast_adress, self.broadcast_port))
-                print(f"Send Message {message}")
+                logger.info(f"Send Message {message}")
 
             await asyncio.sleep(self.interval)
 

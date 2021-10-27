@@ -5,13 +5,13 @@ from fakts.grants.base import FaktsGrant
 import os
 from fakts.grants.yaml import YamlGrant
 import logging
-
+import sys
 
 logger = logging.getLogger(__name__)
 
 class Fakts:
 
-    def __init__(self, *args, grants = [YamlGrant(filepath="bergen.yaml")], save_conf="bergen.yaml", register= True, **kwargs) -> None:
+    def __init__(self, *args, grants = [YamlGrant(filepath="bergen.yaml")], fakts_path = "fakts.yaml", register= True, force_reload=False,  **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.loaded = False
         self.grants: List[FaktsGrant] = grants
@@ -19,20 +19,22 @@ class Fakts:
         self.fakts = {}
         self.failedResponses = {}
 
-        self.save_conf = save_conf
-        if self.save_conf:
+
+        self.fakts_path = fakts_path
+        if self.fakts_path:
             try:
                 self.fakts = self.load_config_from_file()
-                self.loaded = True
+                self.loaded = not force_reload
+                logger.info(f"Loaded fakts from local file {self.fakts_path}. Delete this file or pass force_reload to Fakts")
             except:
-                logger.info(f"Couldn't load local conf-file {save_conf}. We will have to refetch!")
+                logger.info(f"Couldn't load local conf-file {self.fakts_path}. We will have to refetch!")
 
         if register:
             set_current_fakts(self)
 
     
     def load_config_from_file(self, filepath = None):
-        with open(filepath or self.save_conf,"r") as file:
+        with open(filepath or self.fakts_path,"r") as file:
             return yaml.load(file, Loader=yaml.FullLoader)
 
 
@@ -43,7 +45,7 @@ class Fakts:
             try:
                 config = config[subgroup]
             except KeyError as e:
-                print(f"Could't find {subgroup} in {config}")
+                logger.error(f"Could't find {subgroup} in {config}")
                 config = {}
         return config
 
@@ -55,14 +57,16 @@ class Fakts:
         for grant in self.grants:
             try:
                 self.fakts = await grant.aload()
+                logger.error(f"Grant {grant} succeeded")
                 break
             except Exception as e:
+                logger.error(f"Grant {grant} failed")
                 self.failedResponses[grant.__class__.__name__] = e
 
         assert self.fakts, f"We did not received any valid Responses from our Grants. {self.failedResponses}"
 
-        if self.save_conf:
-            with open(self.save_conf,"w") as file:
+        if self.fakts_path:
+            with open(self.fakts_path,"w") as file:
                 yaml.dump(self.fakts, file)
 
         self.loaded = True
@@ -71,14 +75,14 @@ class Fakts:
         self.loaded = False
         self.fakts = None
 
-        if self.save_conf:
-            os.remove(self.save_conf)
+        if self.fakts_path:
+            os.remove(self.fakts_path)
 
-    def load(self):
-        return koil(self.aload())
+    def load(self, **kwargs):
+        return koil(self.aload(), **kwargs)
 
-    def delete(self):
-        return koil(self.adelete())
+    def delete(self, **kwargs):
+        return koil(self.adelete(), **kwargs)
 
 
 
@@ -105,5 +109,5 @@ def get_current_fakts(**kwargs) -> Fakts:
 
 def set_current_fakts(fakts) -> Fakts:
     global CURRENT_FAKTS
-    if CURRENT_FAKTS: print("Hmm there was another fakts set, maybe thats cool but more likely not")
+    if CURRENT_FAKTS: logger.error("Hmm there was another fakts set, maybe thats cool but more likely not")
     CURRENT_FAKTS = fakts

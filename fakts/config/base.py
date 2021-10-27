@@ -16,6 +16,6 @@ class Config(BaseSettings):
     @classmethod
     def from_fakts(cls: Type[Class], fakts: Fakts = None, **overwrites) -> Class:
         group = cls.__config__.group
-        assert group is not "undefined", f"Please overwrite the Metaclass Config parameter group and point at your group {cls}"
+        assert group != "undefined", f"Please overwrite the Metaclass Config parameter group and point at your group {cls}"
         fakts = fakts or get_current_fakts()
         return cls(**fakts.load_group(group))

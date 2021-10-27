@@ -11,7 +11,7 @@ class NoFileSelected(GrantException):
 
 class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
 
-    def __init__(self, filepath) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self.frequest = FutureWrapper()
         self.frequest.call.connect(self.on_open_filepath)
@@ -29,9 +29,7 @@ class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
 
 
     async def aload(self, **kwargs):
-
         filepath = await self.frequest.acall()
-        print(filepath)
         with open(filepath,"r") as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
 

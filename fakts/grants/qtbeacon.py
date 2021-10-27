@@ -8,6 +8,10 @@ from fakts.grants.base import GrantException, FaktsGrant
 from fakts.beacon import EndpointDiscovery, FaktsRetriever
 from qtpy import QtWidgets
 import asyncio
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class RetrieveDialog(QtWidgets.QDialog):
@@ -174,6 +178,6 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
             try:
                 await emitting_task
             except asyncio.CancelledError as e:
-                print(e)
+                logger.info("Cancelled the Discovery task")
         
         

@@ -4,6 +4,11 @@ from socket import socket, AF_INET, SOCK_DGRAM
 import asyncio
 import json
 from koil import koil
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):
     pass
@@ -40,7 +45,7 @@ class EndpointDiscovery:
         loop = asyncio.get_event_loop()
         read_queue = asyncio.Queue()
         transport, pr = await loop.create_datagram_endpoint(lambda: DiscoveryProtocol(read_queue),sock=s)
-        print(transport, pr)
+
 
         while True:
             data, addr = await read_queue.get()
@@ -57,17 +62,17 @@ class EndpointDiscovery:
                         return endpoint
 
                     except json.JSONDecodeError as e:
-                        print("Received Request but it was not valid json")
+                        logger.error("Received Request but it was not valid json")
                         if self.strict: raise e
 
                     except Exception as e:
-                        print(f"Received Request caused Exception {e}")
+                        logger.error(f"Received Request caused Exception {e}")
                         if self.strict: raise e
                 else:
-                    print(f"Received Non Magic Response {data}")
+                    logger.error(f"Received Non Magic Response {data}. Maybe somebody sends")
 
             except UnicodeEncodeError as e:
-                print("Couldn't decode received message")
+                logger.info("Couldn't decode received message")
                 if self.strict: raise e
 
             
@@ -79,7 +84,6 @@ class EndpointDiscovery:
         loop = asyncio.get_event_loop()
         read_queue = asyncio.Queue()
         transport, pr = await loop.create_datagram_endpoint(lambda: DiscoveryProtocol(read_queue),sock=s)
-        print(transport, pr)
 
         while True:
             data, addr = await read_queue.get()
@@ -92,26 +96,37 @@ class EndpointDiscovery:
                         endpoint = json.loads(endpoint)
                         endpoint = FaktsEndpoint(**endpoint)
                         if name_filter and endpoint.name != name_filter: continue
-                        if endpoint.url not in self.discovered_endpoints:
+                        if endpoint.name not in self.discovered_endpoints:
                             yield endpoint
-                            self.discovered_endpoints[endpoint.url] = endpoint
+                            self.discovered_endpoints[endpoint.name] = endpoint
 
                     except json.JSONDecodeError as e:
-                        print("Received Request but it was not valid json")
+                        logger.error("Received Request but it was not valid json")
                         if self.strict: raise e
 
                     except Exception as e:
-                        print(f"Received Request caused Exception {e}")
+                        logger.error(f"Received Request caused Exception {e}")
                         if self.strict: raise e
                 else:
-                    print(f"Received Non Magic Response {data}")
+                    logger.error(f"Received Non Magic Response {data}. Maybe somebody sends")
 
             except UnicodeEncodeError as e:
-                print("Couldn't decode received message")
+                logger.error("Couldn't decode received message")
                 if self.strict: raise e
 
 
+    async def ascan_list(self, timeout=5, **kwargs):
+        
+        async def appender():
+            async for i in self.ascan_gen(**kwargs):
+                logger.debug(f"Disocvered {i} in Time")
 
+        try:
+            appending_task = await asyncio.wait_for(appender(), timeout=timeout) #async for should cancel this task
+        except asyncio.TimeoutError as e:
+            logger.info("Stopped checking")
+            return self.discovered_endpoints
+            
 
 
     def scan(self, **kwargs):

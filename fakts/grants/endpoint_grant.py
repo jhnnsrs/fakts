@@ -16,8 +16,11 @@ async def retrieve_konfik(endpoint: FaktsEndpoint):
     return await retriev.aretrieve(endpoint)
 
 
-class BeaconGrant(FaktsGrant):
+class EndpointGrant(FaktsGrant):
+
+    def __init__(self, endpoint: FaktsEndpoint) -> None:
+        self._endpoint = endpoint
+        super().__init__()
 
     async def aload(self, **kwargs):
-        endpoint = await discover_endpoint(**kwargs)
-        return await retrieve_konfik(endpoint)
+        return await retrieve_konfik(self._endpoint)
