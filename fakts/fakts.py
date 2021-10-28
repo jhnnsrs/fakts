@@ -1,4 +1,5 @@
 from typing import List
+from fakts.utils import update_nested
 from koil import koil
 import yaml
 from fakts.grants.base import FaktsGrant
@@ -6,28 +7,29 @@ import os
 from fakts.grants.yaml import YamlGrant
 import logging
 import sys
-
+from koil import get_current_koil, Koil
 logger = logging.getLogger(__name__)
 
 class Fakts:
 
-    def __init__(self, *args, grants = [YamlGrant(filepath="bergen.yaml")], fakts_path = "fakts.yaml", register= True, force_reload=False,  **kwargs) -> None:
+    def __init__(self, *args, grants = [YamlGrant(filepath="bergen.yaml")], fakts_path = "fakts.yaml", register= True, force_reload=False, hard_fakts= {}, koil: Koil = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.loaded = False
         self.grants: List[FaktsGrant] = grants
-        assert len(self.grants) > 0, "Please provide allowed Grants to retrieve the Konfiguration from"
-        self.fakts = {}
+        self.grantExceptions = []
+        self.fakts = hard_fakts
         self.failedResponses = {}
+        self.koil = koil or get_current_koil()
 
 
         self.fakts_path = fakts_path
-        if self.fakts_path:
-            try:
-                self.fakts = self.load_config_from_file()
-                self.loaded = not force_reload
-                logger.info(f"Loaded fakts from local file {self.fakts_path}. Delete this file or pass force_reload to Fakts")
-            except:
-                logger.info(f"Couldn't load local conf-file {self.fakts_path}. We will have to refetch!")
+        try:
+            config =  self.load_config_from_file()
+            self.fakts = update_nested(self.fakts, config)
+            self.loaded = True
+            logger.info(f"Loaded fakts from local file {self.fakts_path}. Delete this file or pass force_reload to Fakts")
+        except:
+            logger.info(f"Couldn't load local conf-file {self.fakts_path}. We will have to refetch!")
 
         if register:
             set_current_fakts(self)
@@ -54,16 +56,18 @@ class Fakts:
         await self.aload()
 
     async def aload(self):
+        assert len(self.grants) > 0, "Please provide allowed Grants to retrieve the Fakts from"
+
         for grant in self.grants:
             try:
-                self.fakts = await grant.aload()
-                logger.error(f"Grant {grant} succeeded")
-                break
+                print(self.fakts)
+                additional_fakts = await grant.aload(previous=self.fakts)
+                self.fakts = update_nested(self.fakts, additional_fakts)
+                self.grantExceptions.append(None)
             except Exception as e:
-                logger.error(f"Grant {grant} failed")
-                self.failedResponses[grant.__class__.__name__] = e
+                self.grantExceptions.append(e)
 
-        assert self.fakts, f"We did not received any valid Responses from our Grants. {self.failedResponses}"
+        assert self.fakts != {}, f"We did not received any valid Responses from our Grants"
 
         if self.fakts_path:
             with open(self.fakts_path,"w") as file:

@@ -8,8 +8,8 @@ class GrantException(Exception):
 class FaktsGrant:
 
 
-    async def aload(self, **kwargs):
+    async def aload(self, previous = {}, **kwargs):
         raise NotImplementedError()
 
-    def load(self, as_task=False, **kwargs):
-        return koil(self.load(**kwargs), as_task=as_task)
+    def load(self, previous ={}, as_task=False, **kwargs):
+        return koil(self.load(previous=previous, **kwargs), as_task=as_task)

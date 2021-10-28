@@ -11,13 +11,18 @@ async def discover_endpoint(name_filter= None):
     discov = EndpointDiscovery()
     return await discov.ascan_first(name_filter=name_filter)
 
-async def retrieve_konfik(endpoint: FaktsEndpoint):
-    retriev = FaktsRetriever()
-    return await retriev.aretrieve(endpoint)
+
 
 
 class BeaconGrant(FaktsGrant):
 
-    async def aload(self, **kwargs):
-        endpoint = await discover_endpoint(**kwargs)
-        return await retrieve_konfik(endpoint)
+    def __init__(self, *args, dicovery_protocol: EndpointDiscovery = None, retriever_protocol: FaktsRetriever = None, **kwargs) -> None:
+
+        self._discov = dicovery_protocol or EndpointDiscovery()
+        self._retriev = retriever_protocol  or FaktsRetriever()
+
+        super().__init__(*args, **kwargs)
+
+    async def aload(self, previous={}, **kwargs):
+        endpoint = await self._discov.ascan_first(**previous)
+        return await self._retriev.aretrieve(endpoint, previous=previous)

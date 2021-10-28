@@ -2,6 +2,7 @@
 
 
 from qtpy.QtCore import Signal
+from fakts.grants.beacon import BeaconGrant
 from koil.koil import get_current_koil
 from fakts.beacon.beacon import FaktsEndpoint
 from fakts.grants.base import GrantException, FaktsGrant
@@ -51,7 +52,7 @@ class UserCancelledException(GrantException):
     
 
 
-class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
+class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
     new_endpoint = Signal(FaktsEndpoint)
     show_signal = Signal()
     hide_signal = Signal()
@@ -61,8 +62,11 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
 
     def __init__(self, *args, timeout = 6000, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+
         self.retrieve_dialog = RetrieveDialog()
         self.retrieve_dialog.button.clicked.connect(self.on_cancel_retrieval)
+
+        
         self.timeout = timeout
         self.new_endpoint.connect(self.on_new_endpoint)
         self.show_signal.connect(self.on_show)
@@ -85,6 +89,11 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
 
         self.select_endpoint = None
         self.retrieving_task = None
+
+
+
+
+
         self.layout.addWidget(self.listWidget)
         self.layout.addWidget(self.scanWidget)
         self.layout.addWidget(self.cancelButton)
@@ -137,14 +146,13 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
 
 
     async def emit_endpoints(self):
-        discov = EndpointDiscovery()
 
-        async for endpoint in discov.ascan_gen():
+        async for endpoint in self._discov.ascan_gen():
             self.new_endpoint.emit(endpoint)
 
 
 
-    async def aload(self, **kwargs):
+    async def aload(self, previous = {}, **kwargs):
         self.show_signal.emit()
         emitting_task = self.loop.create_task(self.emit_endpoints())
         self.select_endpoint = self.loop.create_future()
@@ -154,9 +162,7 @@ class QtSelectableBeaconGrant(FaktsGrant, QtWidgets.QDialog):
             endpoint = await self.select_endpoint
         
             self.retrieve_start.emit()
-            retriev = FaktsRetriever()
-
-            self.retrieving_task = self.loop.create_task(retriev.aretrieve(endpoint))
+            self.retrieving_task = self.loop.create_task(self._retriev.aretrieve(endpoint, previous=previous))
 
             konfik = await asyncio.wait_for(self.retrieving_task, timeout=self.timeout)
 

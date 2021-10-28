@@ -7,8 +7,9 @@ import asyncio
 import uuid
 from aiohttp import web
 import aiohttp_cors
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from koil import koil
+
 
 class RetrieverException(Exception):
     pass
@@ -27,13 +28,25 @@ def wrapped_post_future(future, state):
 
     return web_token_response
 
-async def wait_for_post(starturl, redirect_host="localhost", redirect_port=6767, redirect_path = "/", timeout=400, print_function= False, handle_signals=False):
+async def wait_for_post(starturl, previous={}, redirect_host="localhost", redirect_port=6767, redirect_path = "/", timeout=400, print_function= False, handle_signals=False):
     
 
     state = uuid.uuid4()
-    redirect_uri = quote(f"http://{redirect_host}:{redirect_port}{redirect_path}")
+    #redirect_uri = quote(f"http://{redirect_host}:{redirect_port}{redirect_path}")
 
-    webbrowser.open_new(starturl +f"?redirect_uri={redirect_uri}&state={state}")
+    params = {
+        "state": state,
+        "redirect_uri": f"http://{redirect_host}:{redirect_port}{redirect_path}",
+        "scopes": previous.get("herre", {}).get("scopes", None),
+        "name": previous.get("herre", {}).get("name", None),
+        "client_id": previous.get("herre", {}).get("client_id", None),
+    }
+
+    print(params, previous)
+
+    querystring = urlencode({key: value for key, value in params.items() if value != None})
+
+    webbrowser.open_new(starturl + "?" + querystring)
 
     token_future = asyncio.get_event_loop().create_future()
 
@@ -79,9 +92,12 @@ class FaktsRetriever:
         self.redirect_path = redirect_path or self.REDIRECT_PATH
 
 
-    async def aretrieve(self, config: FaktsEndpoint, **kwargs):
-        post_data = await wait_for_post(config.url, redirect_host=self.redirect_host, redirect_port=self.redirect_port, redirect_path=self.redirect_path)
+    async def aretrieve(self, config: FaktsEndpoint, previous={}):
+        post_data = await wait_for_post(config.url, previous = previous, redirect_host=self.redirect_host, redirect_port=self.redirect_port, redirect_path=self.redirect_path)
         return post_data
 
     def retrieve(self, config, as_task=True, **kwargs):
         return koil(self.aretrieve(config, **kwargs), as_task=as_task)
+
+
+

@@ -9,6 +9,8 @@ from qtpy import QtWidgets
 class NoFileSelected(GrantException):
     pass
 
+
+
 class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
 
     def __init__(self) -> None:
@@ -28,9 +30,9 @@ class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
         self.hide()
 
 
-    async def aload(self, **kwargs):
+    async def aload(self, previous = {}, **kwargs):
         filepath = await self.frequest.acall()
         with open(filepath,"r") as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
-
+        
         return config
