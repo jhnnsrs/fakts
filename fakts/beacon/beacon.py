@@ -11,14 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class FaktsEndpoint(BaseModel):
-    url: str
-    name: str
-
+    url: str = "http://localhost:3000/setupapp"
+    name: str = "default"
 
 
 class BeaconProtocol(asyncio.DatagramProtocol):
     pass
-
 
 
 class EndpointBeacon:
@@ -27,8 +25,15 @@ class EndpointBeacon:
     BROADCAST_ADDRESS = "<broadcast>"
     MAGIC_PHRASE = "beacon-konfig"
 
-
-    def __init__(self, broadcast_port=None, bind=None, magic_phrase = None, broadcast_adress = None,  advertised_endpoints: List[FaktsEndpoint] = [], interval=1) -> None:
+    def __init__(
+        self,
+        broadcast_port=None,
+        bind=None,
+        magic_phrase=None,
+        broadcast_adress=None,
+        advertised_endpoints: List[FaktsEndpoint] = [],
+        interval=1,
+    ) -> None:
         self.broadcast_port = broadcast_port or self.BROADCAST_PORT
         self.bind = bind or self.BIND
         self.magic_phrase = magic_phrase or self.MAGIC_PHRASE
@@ -38,24 +43,22 @@ class EndpointBeacon:
         assert len(self.advertised_endpoints) > 0, "No config points provided"
         self.interval = interval
 
-
     def endpoint_to_message(self, config: FaktsEndpoint):
         return bytes(self.magic_phrase + json.dumps(config.dict()), "utf8")
 
-
     async def arun(self):
 
-        s = socket(AF_INET, SOCK_DGRAM) #create UDP socket
+        s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
         s.bind((self.bind, 0))
-        s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) #this is a broadcast socket
-
+        s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)  # this is a broadcast socket
 
         loop = asyncio.get_event_loop()
-        transport, pr = await loop.create_datagram_endpoint(BeaconProtocol,sock=s)
+        transport, pr = await loop.create_datagram_endpoint(BeaconProtocol, sock=s)
 
+        messages = [
+            self.endpoint_to_message(config) for config in self.advertised_endpoints
+        ]
 
-        messages = [self.endpoint_to_message(config) for config in self.advertised_endpoints]       
-        
         while True:
             for message in messages:
                 transport.sendto(message, (self.broadcast_adress, self.broadcast_port))
@@ -63,8 +66,5 @@ class EndpointBeacon:
 
             await asyncio.sleep(self.interval)
 
-    
     def run(self):
         return koil(self.arun())
-
-
