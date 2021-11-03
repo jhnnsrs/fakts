@@ -1,4 +1,3 @@
-from PyQt5.QtGui import QTextLine
 from fakts import Fakts
 from qtpy import QtCore, QtWidgets
 from koil.qt import FutureWrapper
