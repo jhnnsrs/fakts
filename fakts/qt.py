@@ -13,11 +13,11 @@ class QtFakts(Fakts, QtWidgets.QWidget):
         self.setWindowTitle("Retrieval Wizard")
 
         self.showf = FutureWrapper()
-        self.showf.call.connect(self.handle_show)
+        self.showf.wire(self.handle_show)
         self.showfref = None
 
         self.hidef = FutureWrapper()
-        self.hidef.call.connect(self.handle_hide)
+        self.hidef.wire(self.handle_hide)
 
         self.title = QtWidgets.QLabel("Konfig Wizard")
         self.title.setAlignment(QtCore.Qt.AlignCenter)

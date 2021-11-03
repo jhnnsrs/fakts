@@ -6,9 +6,12 @@ import webbrowser
 import asyncio
 import uuid
 from aiohttp import web
-import aiohttp_cors
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, parse_qs
 from koil import koil
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RetrieverException(Exception):
@@ -19,15 +22,26 @@ class IncorrectStateException(Exception):
     pass
 
 
-def wrapped_post_future(future, state):
+def wrapped_get_future(future, state):
     async def web_token_response(request):
-        future.set_result(await request.json())
-        return web.json_response(data={"ok": True})
+        loop = asyncio.get_event_loop()
+        logger.info("Received Reply from user")
+        result = parse_qs(request.query_string)
+        qs_state = result["state"][0]
+        config = json.loads(result["config"][0])
+
+        if qs_state != state:
+            loop.call_soon_threadsafe(
+                future.exception, RetrieverException("Danger! Invalid State")
+            )
+
+        loop.call_soon_threadsafe(future.set_result, config)
+        raise web.HTTPFound("/redirect")
 
     return web_token_response
 
 
-async def wait_for_post(
+async def wait_for_get(
     starturl,
     previous={},
     redirect_host="localhost",
@@ -38,7 +52,7 @@ async def wait_for_post(
     handle_signals=False,
 ):
 
-    state = uuid.uuid4()
+    state = str(uuid.uuid4())
     # redirect_uri = quote(f"http://{redirect_host}:{redirect_port}{redirect_path}")
 
     params = {
@@ -58,17 +72,8 @@ async def wait_for_post(
     token_future = asyncio.get_event_loop().create_future()
 
     app = web.Application()
-    cors = aiohttp_cors.setup(
-        app,
-        defaults={
-            "*": aiohttp_cors.ResourceOptions(
-                allow_headers="*",
-            )
-        },
-    )
-    cors.add(
-        app.router.add_post(redirect_path, wrapped_post_future(token_future, state))
-    )
+
+    app.router.add_get(redirect_path, wrapped_get_future(token_future, state))
 
     webserver_task = asyncio.get_event_loop().create_task(
         web._run_app(
@@ -122,7 +127,7 @@ class FaktsRetriever:
         self.redirect_path = redirect_path or self.REDIRECT_PATH
 
     async def aretrieve(self, config: FaktsEndpoint, previous={}):
-        post_data = await wait_for_post(
+        post_data = await wait_for_get(
             config.url,
             previous=previous,
             redirect_host=self.redirect_host,

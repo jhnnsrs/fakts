@@ -9,7 +9,6 @@ from fakts.grants.yaml import YamlGrant
 from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
 import logging
 import sys
-from koil import get_current_koil, Koil
 
 logger = logging.getLogger(__name__)
 
