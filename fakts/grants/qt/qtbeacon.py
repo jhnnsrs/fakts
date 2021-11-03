@@ -1,6 +1,3 @@
-
-
-
 from qtpy.QtCore import Signal
 from fakts.grants.beacon import BeaconGrant
 from koil.koil import get_current_koil
@@ -16,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class RetrieveDialog(QtWidgets.QDialog):
-
-    def __init__(self,*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.button = QtWidgets.QPushButton("Cancel")
         self.layout = QtWidgets.QHBoxLayout()
@@ -39,7 +35,6 @@ class SelfScanWidget(QtWidgets.QWidget):
         self.addButton.clicked.connect(self.on_add)
         self.setLayout(self.layout)
 
-
     def on_add(self):
         host = self.lineEdit.text()
         url = f"http://{host}:3000/setupapp"
@@ -49,7 +44,6 @@ class SelfScanWidget(QtWidgets.QWidget):
 
 class UserCancelledException(GrantException):
     pass
-    
 
 
 class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
@@ -60,23 +54,19 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
     retrieve_start = Signal()
     retrieve_end = Signal()
 
-    def __init__(self, *args, timeout = 6000, **kwargs) -> None:
+    def __init__(self, *args, timeout=6000, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.retrieve_dialog = RetrieveDialog()
         self.retrieve_dialog.button.clicked.connect(self.on_cancel_retrieval)
 
-        
         self.timeout = timeout
         self.new_endpoint.connect(self.on_new_endpoint)
         self.show_signal.connect(self.on_show)
         self.hide_signal.connect(self.on_hide)
-        
 
         self.retrieve_start.connect(self.show_retrieve_dialog)
         self.retrieve_end.connect(self.hide_retrieve_dialog)
-
-        self.loop = get_current_koil().loop
 
         self.endpoints = []
         self.layout = QtWidgets.QVBoxLayout()
@@ -90,15 +80,10 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
         self.select_endpoint = None
         self.retrieving_task = None
 
-
-
-
-
         self.layout.addWidget(self.listWidget)
         self.layout.addWidget(self.scanWidget)
         self.layout.addWidget(self.cancelButton)
         self.setLayout(self.layout)
-
 
     def on_endpoint_clicked(self, item):
         index = self.listWidget.indexFromItem(item).row()
@@ -108,10 +93,16 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
         self.loop.call_soon_threadsafe(self.select_endpoint.set_result, endpoint)
 
     def on_cancel(self, endpoint):
-        self.loop.call_soon_threadsafe(self.select_endpoint.set_exception, UserCancelledException("User cancelled the Selection"))
+        self.loop.call_soon_threadsafe(
+            self.select_endpoint.set_exception,
+            UserCancelledException("User cancelled the Selection"),
+        )
 
     def on_cancel_retrieval(self, endpoint):
-        self.loop.call_soon_threadsafe(self.retrieving_task.set_exception, UserCancelledException("User cancelled the Retrieval"))
+        self.loop.call_soon_threadsafe(
+            self.retrieving_task.set_exception,
+            UserCancelledException("User cancelled the Retrieval"),
+        )
 
     def on_show(self):
         self.show()
@@ -127,12 +118,18 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
 
     def closeEvent(self, event):
         # do stuff
-        if self.select_endpoint: self.loop.call_soon_threadsafe(self.select_endpoint.set_exception, UserCancelledException("User cancelled the Selection"))
-        if self.retrieving_task: self.loop.call_soon_threadsafe(self.select_endpoint.set_exception, UserCancelledException("User cancelled the Selection"))
+        if self.select_endpoint:
+            self.loop.call_soon_threadsafe(
+                self.select_endpoint.set_exception,
+                UserCancelledException("User cancelled the Selection"),
+            )
+        if self.retrieving_task:
+            self.loop.call_soon_threadsafe(
+                self.select_endpoint.set_exception,
+                UserCancelledException("User cancelled the Selection"),
+            )
 
-        event.accept() # let the window close
-        
-
+        event.accept()  # let the window close
 
     def on_new_endpoint(self, config):
         self.listWidget.clear()
@@ -144,15 +141,13 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
 
         self.listWidget.itemClicked.connect(self.on_endpoint_clicked)
 
-
     async def emit_endpoints(self):
 
         async for endpoint in self._discov.ascan_gen():
             self.new_endpoint.emit(endpoint)
 
-
-
-    async def aload(self, previous = {}, **kwargs):
+    async def aload(self, previous={}, **kwargs):
+        self.loop = asyncio.get_event_loop()
         self.show_signal.emit()
         emitting_task = self.loop.create_task(self.emit_endpoints())
         self.select_endpoint = self.loop.create_future()
@@ -160,9 +155,11 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
         konfik = None
         try:
             endpoint = await self.select_endpoint
-        
+
             self.retrieve_start.emit()
-            self.retrieving_task = self.loop.create_task(self._retriev.aretrieve(endpoint, previous=previous))
+            self.retrieving_task = self.loop.create_task(
+                self._retriev.aretrieve(endpoint, previous=previous)
+            )
 
             konfik = await asyncio.wait_for(self.retrieving_task, timeout=self.timeout)
 
@@ -172,7 +169,6 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
                 await self.retrieving_task
             except asyncio.CancelledError as e:
                 pass
-
 
             self.retrieve_end.emit()
             self.hide_signal.emit()
@@ -185,5 +181,3 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
                 await emitting_task
             except asyncio.CancelledError as e:
                 logger.info("Cancelled the Discovery task")
-        
-        

@@ -9,18 +9,17 @@ class QtFakts(Fakts, QtWidgets.QWidget):
     error_signal = QtCore.Signal(Exception)
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args,  **kwargs)
+        super().__init__(*args, **kwargs)
         self.layout = QtWidgets.QVBoxLayout()
         self.setWindowTitle("Retrieval Wizard")
 
-
-        self.showf = FutureWrapper(koil = self.koil)
+        self.showf = FutureWrapper()
         self.showf.call.connect(self.handle_show)
         self.showfref = None
 
-        self.hidef = FutureWrapper(koil = self.koil)
+        self.hidef = FutureWrapper()
         self.hidef.call.connect(self.handle_hide)
-        
+
         self.title = QtWidgets.QLabel("Konfig Wizard")
         self.title.setAlignment(QtCore.Qt.AlignCenter)
         self.layout.addWidget(self.title)
@@ -35,9 +34,7 @@ class QtFakts(Fakts, QtWidgets.QWidget):
         self.start_button.clicked.connect(self.on_start)
         self.layout.addWidget(self.start_button)
 
-
         self.setLayout(self.layout)
-
 
     def handle_show(self, ref, *args, **kwargs):
         self.show()
@@ -50,9 +47,8 @@ class QtFakts(Fakts, QtWidgets.QWidget):
     def on_start(self):
         self.showf.resolve.emit(self.showfref, None)
 
-
     async def aload(self):
-        await self.showf.acall() # await user starts
+        await self.showf.acall()  # await user starts
         try:
             nana = await super().aload()
             self.loaded_signal.emit(True)
@@ -63,11 +59,7 @@ class QtFakts(Fakts, QtWidgets.QWidget):
             await self.hidef.acall()
             raise e
 
-
     async def adelete(self):
         nana = await super().adelete()
         self.loaded_signal.emit(False)
         return nana
-
-
-    

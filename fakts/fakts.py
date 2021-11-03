@@ -25,7 +25,6 @@ class Fakts:
         force_reload=False,
         subapp: str = None,
         hard_fakts={},
-        koil: Koil = None,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -35,7 +34,6 @@ class Fakts:
         self.grantExceptions = []
         self.fakts = hard_fakts
         self.failedResponses = {}
-        self.koil = koil or get_current_koil()
         self.subapp = subapp
         self.fakts_path = f"{subapp}.{fakts_path}" if subapp else fakts_path
 
