@@ -41,10 +41,10 @@ class QtFakts(Fakts, QtWidgets.QWidget):
 
     def handle_hide(self, ref, *args, **kwargs):
         self.close()
-        self.hidef.resolve.emit(ref, None)
+        self.hidef.resolve(ref, None)
 
     def on_start(self):
-        self.showf.resolve.emit(self.showfref, None)
+        self.showf.resolve(self.showfref, None)
 
     async def aload(self):
         await self.showf.acall()  # await user starts
