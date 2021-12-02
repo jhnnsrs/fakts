@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.1.34"
+version = "0.1.38"
 description = "easy configuration discovery based on UDP broadcasts and konfig beacons (servers that redirect configs back to the client)"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -9,7 +9,7 @@ packages = [{include = "fakts"}]
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^1.8.2"
-koil = "^0.1.55"
+koil = "^0.1.58"
 PyYAML = ">= 5.2"
 QtPy = "^1.11.2"
 

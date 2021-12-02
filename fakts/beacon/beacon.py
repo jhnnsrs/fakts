@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class FaktsEndpoint(BaseModel):
-    url: str = "http://localhost:3000/setupapp"
+    url: str = "http://localhost/setupapp"
     name: str = "default"
 
 
@@ -23,7 +23,7 @@ class EndpointBeacon:
     BIND = ""
     BROADCAST_PORT = 45678
     BROADCAST_ADDRESS = "<broadcast>"
-    MAGIC_PHRASE = "beacon-konfig"
+    MAGIC_PHRASE = "beacon-fakts"
 
     def __init__(
         self,

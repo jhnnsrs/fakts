@@ -37,7 +37,7 @@ class SelfScanWidget(QtWidgets.QWidget):
 
     def on_add(self):
         host = self.lineEdit.text()
-        url = f"http://{host}:3000/setupapp"
+        url = f"http://{host}/setupapp"
         endpoint = FaktsEndpoint(url=url, name="Self Added")
         self.user_endpoint.emit(endpoint)
 

@@ -22,7 +22,7 @@ class IncorrectStateException(Exception):
     pass
 
 
-def wrapped_get_future(future, state):
+def wrapped_get_future(future: asyncio.Future, state: str):
     async def web_token_response(request):
         loop = asyncio.get_event_loop()
         logger.info("Received Reply from user")
@@ -32,11 +32,12 @@ def wrapped_get_future(future, state):
 
         if qs_state != state:
             loop.call_soon_threadsafe(
-                future.exception, RetrieverException("Danger! Invalid State")
+                future.set_exception, RetrieverException("Danger! Invalid State")
             )
+            return web.Response(text="Error! Invalid State.")
 
         loop.call_soon_threadsafe(future.set_result, config)
-        raise web.HTTPFound("/redirect")
+        return web.Response(text="You can close me now !")
 
     return web_token_response
 
@@ -53,7 +54,6 @@ async def wait_for_get(
 ):
 
     state = str(uuid.uuid4())
-    # redirect_uri = quote(f"http://{redirect_host}:{redirect_port}{redirect_path}")
 
     params = {
         "state": state,
