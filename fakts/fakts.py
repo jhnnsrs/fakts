@@ -31,6 +31,7 @@ class Fakts:
         self.grants: List[FaktsGrant] = grants
         self.middlewares: List[FaktsMiddleware] = middlewares
         self.grantExceptions = []
+        self.hard_fakts = hard_fakts
         self.fakts = hard_fakts
         self.failedResponses = {}
         self.subapp = subapp
@@ -101,7 +102,7 @@ class Fakts:
 
     async def adelete(self):
         self.loaded = False
-        self.fakts = None
+        self.fakts = self.hard_fakts  # reset to original state
 
         if self.fakts_path:
             os.remove(self.fakts_path)

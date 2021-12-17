@@ -3,8 +3,9 @@ from qtpy import QtCore, QtWidgets
 from koil.qt import FutureWrapper
 
 
-class QtFakts(Fakts, QtWidgets.QWidget):
-    loaded_signal = QtCore.Signal(bool)
+class QtFakts(QtWidgets.QDialog, Fakts):
+    loaded_signal = QtCore.Signal()
+    deleted_signal = QtCore.Signal()
     error_signal = QtCore.Signal(Exception)
 
     def __init__(self, *args, **kwargs) -> None:
@@ -50,7 +51,7 @@ class QtFakts(Fakts, QtWidgets.QWidget):
         await self.showf.acall()  # await user starts
         try:
             nana = await super().aload()
-            self.loaded_signal.emit(True)
+            self.loaded_signal.emit()
             await self.hidef.acall()
             return nana
         except Exception as e:
@@ -60,5 +61,5 @@ class QtFakts(Fakts, QtWidgets.QWidget):
 
     async def adelete(self):
         nana = await super().adelete()
-        self.loaded_signal.emit(False)
+        self.deleted_signal.emit()
         return nana

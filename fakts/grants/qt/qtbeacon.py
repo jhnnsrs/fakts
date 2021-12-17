@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class RetrieveDialog(QtWidgets.QDialog):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.setWindowTitle("Check your Broswer")
         self.button = QtWidgets.QPushButton("Cancel")
         self.layout = QtWidgets.QHBoxLayout()
         self.layout.addWidget(self.button)
@@ -56,8 +57,9 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
 
     def __init__(self, *args, timeout=6000, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self.setWindowTitle("Search Endpoints...")
 
-        self.retrieve_dialog = RetrieveDialog()
+        self.retrieve_dialog = RetrieveDialog(parent=self)
         self.retrieve_dialog.button.clicked.connect(self.on_cancel_retrieval)
 
         self.timeout = timeout
@@ -97,12 +99,14 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
             self.select_endpoint.set_exception,
             UserCancelledException("User cancelled the Selection"),
         )
+        self.hide()
 
     def on_cancel_retrieval(self, endpoint):
         self.loop.call_soon_threadsafe(
             self.retrieving_task.set_exception,
             UserCancelledException("User cancelled the Retrieval"),
         )
+        self.hide()
 
     def on_show(self):
         self.show()

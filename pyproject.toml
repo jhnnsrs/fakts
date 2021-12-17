@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.1.38"
+version = "0.1.39"
 description = "easy configuration discovery based on UDP broadcasts and konfig beacons (servers that redirect configs back to the client)"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -16,7 +16,8 @@ QtPy = "^1.11.2"
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
 pytest-aiohttp = "^0.3.0"
-tox = "^3.24.3"
+pytest-cov = "^3.0.0"
+black = "^21.12b0"
 
 
 [build-system]
