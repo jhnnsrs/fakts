@@ -1,12 +1,12 @@
 # fakts
 
-[![codecov](https://codecov.io/gh/jhnnsrs/turms/branch/master/graph/badge.svg?token=UGXEA2THBV)](https://codecov.io/gh/jhnnsrs/turms)
-[![PyPI version](https://badge.fury.io/py/turms.svg)](https://pypi.org/project/turms/)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://pypi.org/project/turms/)
+[![codecov](https://codecov.io/gh/jhnnsrs/fakts/branch/master/graph/badge.svg?token=UGXEA2THBV)](https://codecov.io/gh/jhnnsrs/fakts)
+[![PyPI version](https://badge.fury.io/py/fakts.svg)](https://pypi.org/project/fakts/)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://pypi.org/project/fakts/)
 ![Maintainer](https://img.shields.io/badge/maintainer-jhnnsrs-blue)
-[![PyPI pyversions](https://img.shields.io/pypi/pyversions/turms.svg)](https://pypi.python.org/pypi/turms/)
-[![PyPI status](https://img.shields.io/pypi/status/turms.svg)](https://pypi.python.org/pypi/turms/)
-[![PyPI download day](https://img.shields.io/pypi/dm/turms.svg)](https://pypi.python.org/pypi/turms/)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/fakts.svg)](https://pypi.python.org/pypi/fakts/)
+[![PyPI status](https://img.shields.io/pypi/status/fakts.svg)](https://pypi.python.org/pypi/fakts/)
+[![PyPI download day](https://img.shields.io/pypi/dm/fakts.svg)](https://pypi.python.org/pypi/fakts/)
 
 ### DEVELOPMENT
 
@@ -64,5 +64,5 @@ fakts beacon "http://localhost:3000/beacon"
 fakts init --client="napari"
 ```
 
-In this scenario the client will open a webbrowser with the get parameter set to params (in addition to a state to combat redirect attacks, and a redirect_uri) and
-wait for a redirect to its redirect_uri on localhost.
+In this scenario the client will open a webbrowser with the query parameters set to the init params (in addition to a state to combat redirect attacks, and a redirect_uri) and
+wait for a redirect to its redirect_uri on localhost with the configuration in the query params
