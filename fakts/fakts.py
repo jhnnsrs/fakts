@@ -77,6 +77,9 @@ class Fakts:
     async def arefresh(self):
         await self.aload()
 
+    def get(self, *args, **kwargs):
+        return koil(self.aget(*args, **kwargs), **kwargs)
+
     async def aload(self):
         assert (
             len(self.grants) > 0
