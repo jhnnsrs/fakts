@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.1.39"
+version = "0.1.40"
 description = "asynchronous configuration protocol for dynamic client-server relations"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -19,6 +19,7 @@ pytest = "^6.2.5"
 pytest-aiohttp = "^0.3.0"
 tox = "^3.24.5"
 black = "^21.12b0"
+pytest-cov = "^3.0.0"
 
 
 [build-system]
