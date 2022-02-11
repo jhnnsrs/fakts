@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class FaktsEndpoint(BaseModel):
-    url: str = "http://localhost/setupapp"
+    url: str = "http://localhost:3000/setupapp"
     name: str = "default"
 
 

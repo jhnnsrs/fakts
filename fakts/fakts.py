@@ -1,4 +1,7 @@
+import asyncio
+import contextvars
 from typing import List
+from fakts.errors import GroupsNotFound, NoFaktsFound, NoGrantConfigured
 from fakts.middleware.base import FaktsMiddleware
 from fakts.utils import update_nested
 from koil import koil
@@ -17,47 +20,56 @@ class Fakts:
     def __init__(
         self,
         *args,
-        grants=[YamlGrant(filepath="bergen.yaml")],
-        middlewares=[OverwrittenEnvMiddleware()],
+        grants=[],
+        middlewares=[],
+        assert_groups=[],
         fakts_path="fakts.yaml",
         register=True,
-        force_reload=False,
         subapp: str = None,
         hard_fakts={},
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.loaded = False
         self.grants: List[FaktsGrant] = grants
         self.middlewares: List[FaktsMiddleware] = middlewares
-        self.grantExceptions = []
         self.hard_fakts = hard_fakts
-        self.fakts = hard_fakts
-        self.failedResponses = {}
+        self.fakts = {}
+        self.assert_groups = set(assert_groups)
         self.subapp = subapp
         self.fakts_path = f"{subapp}.{fakts_path}" if subapp else fakts_path
-
-        try:
-            config = self.load_config_from_file()
-            self.fakts = update_nested(self.fakts, config)
-            self.loaded = True
-            logger.info(
-                f"Loaded fakts from local file {self.fakts_path}. Delete this file or pass force_reload to Fakts"
-            )
-        except:
-            logger.info(
-                f"Couldn't load local conf-file {self.fakts_path}. We will have to refetch!"
-            )
+        self._lock = None
 
         if register:
-            set_current_fakts(self)
+            set_global_fakts(self)
 
-    def load_config_from_file(self, filepath=None):
-        with open(filepath or self.fakts_path, "r") as file:
-            return yaml.load(file, Loader=yaml.FullLoader)
+    async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
+        """Get Config
 
-    async def aget(self, group_name, bypass_middleware=False):
-        assert self.loaded, "Konfik needs to be loaded before we can access call load()"
+        Gets the currently active configuration for the group_name. This is a loop
+        save function, and will guard the current fakts state through an async lock.
+
+        Steps:
+            1. Acquire lock.
+            2. If not yet loaded and auto_load is True, load (reloading should be done seperatily)
+            3. Pass through middleware (can be opt out by setting bypass_iddleware to True)
+            4. Return groups fakts
+
+        Args:
+            group_name (str): The group name in the fakts
+            bypass_middleware (bool, optional): Bypasses the Middleware (e.g. no overwrites). Defaults to False.
+            auto_load (bool, optional): Should we autoload the configuration through grants if nothing has been set? Defaults to True.
+
+        Returns:
+            dict: The active fakts
+        """
+
+        if not self._lock:
+            self._lock = asyncio.Lock()
+
+        async with self._lock:
+            if not self.fakts:
+                await self.aload()
+
         config = {**self.fakts}
 
         if not bypass_middleware:
@@ -80,32 +92,57 @@ class Fakts:
     def get(self, *args, **kwargs):
         return koil(self.aget(*args, **kwargs), **kwargs)
 
-    async def aload(self):
-        assert (
-            len(self.grants) > 0
-        ), "Please provide allowed Grants to retrieve the Fakts from"
+    async def aload(self, force_refresh=False):
 
+        self.fakts = {}
+
+        if not force_refresh:
+            try:
+                with open(self.fakts_path, "r") as file:
+                    config = yaml.load(file, Loader=yaml.FullLoader)
+                    self.fakts = update_nested(self.hard_fakts, config)
+
+                if self.assert_groups.issubset(set(self.fakts.keys())):
+                    # Configuration is valid, we can load it
+                    return self.fakts
+
+            except:
+                pass
+
+        if len(self.grants) == 0:
+            raise NoGrantConfigured(
+                "Local fakts were insufficient and fakts has no grants configured. Please add a grant to your fakts instance or initialize your fakts instance with a Grant"
+            )
+
+        grant_exceptions = {}
         for grant in self.grants:
             try:
                 additional_fakts = await grant.aload(previous=self.fakts)
                 self.fakts = update_nested(self.fakts, additional_fakts)
-                self.grantExceptions.append(None)
             except Exception as e:
-                self.grantExceptions.append(e)
+                grant_exceptions.add(e)
 
-        assert (
-            self.fakts != {}
-        ), f"We did not received any valid Responses from our Grants"
+        if not self.assert_groups.issubset(set(self.fakts.keys())):
+
+            error_description = (
+                "This might be due to following exceptions in grants {grant_exceptions}"
+                if grant_exceptions
+                else "All Grants were sucessful. But none retrieved these keys!"
+            )
+
+            raise GroupsNotFound(
+                f"Could not find {self.assert_groups - set(self.fakts.keys())}. "
+                + error_description
+            )
 
         if self.fakts_path:
             with open(self.fakts_path, "w") as file:
                 yaml.dump(self.fakts, file)
 
-        self.loaded = True
+        return self.fakts
 
     async def adelete(self):
-        self.loaded = False
-        self.fakts = self.hard_fakts  # reset to original state
+        self.fakts = {}
 
         if self.fakts_path:
             os.remove(self.fakts_path)
@@ -116,21 +153,37 @@ class Fakts:
     def delete(self, **kwargs):
         return koil(self.adelete(), **kwargs)
 
+    def __enter__(self):
+        current_fakts.set(self)
+        return self
 
-CURRENT_FAKTS = None
-
-
-def get_current_fakts(**kwargs) -> Fakts:
-    global CURRENT_FAKTS
-    if not CURRENT_FAKTS:
-        CURRENT_FAKTS = Fakts(**kwargs)
-    return CURRENT_FAKTS
+    def __exit__(self, *args, **kwargs):
+        current_fakts.set(None)
 
 
-def set_current_fakts(fakts) -> Fakts:
-    global CURRENT_FAKTS
-    if CURRENT_FAKTS:
-        logger.error(
-            "Hmm there was another fakts set, maybe thats cool but more likely not"
-        )
-    CURRENT_FAKTS = fakts
+current_fakts = contextvars.ContextVar("current_fakts", default=None)
+GLOBAL_FAKTS = None
+
+
+def set_global_fakts(fakts):
+    global GLOBAL_FAKTS
+    GLOBAL_FAKTS = fakts
+
+
+def get_current_fakts(allow_global=True, creation_kwargs={}):
+
+    fakts = current_fakts.get()
+    if fakts:
+        return fakts
+
+    if not allow_global:
+        raise NoFaktsFound("No current fakts found and global fakts are not allowed")
+
+    if GLOBAL_FAKTS:
+        return GLOBAL_FAKTS
+
+    if os.getenv("FAKTS_ALLOW_GLOBAL_DEFAULT", "True") == "True":
+        set_global_fakts(Fakts(**creation_kwargs))
+        return GLOBAL_FAKTS
+
+    return GLOBAL_FAKTS
