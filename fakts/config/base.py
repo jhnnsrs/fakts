@@ -1,7 +1,7 @@
 from typing import Type, TypeVar
 from pydantic import BaseSettings
 import fakts
-from fakts.fakts import Fakts, get_current_fakts
+from fakts.fakts import Fakts, current_fakts
 
 
 Class = TypeVar("Class")
@@ -20,5 +20,5 @@ class Config(BaseSettings):
         assert (
             group != "undefined"
         ), f"Please overwrite the Metaclass Config parameter group and point at your group {cls}"
-        fakts = fakts or get_current_fakts()
+        fakts = fakts or current_fakts.get()
         return cls(**await fakts.aget(group, bypass_middleware=bypass_middleware))

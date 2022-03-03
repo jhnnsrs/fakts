@@ -12,14 +12,16 @@ python = "^3.7"
 pydantic = "^1.8.2"
 PyYAML = ">= 5.2"
 QtPy = "^1.11.2"
-koil = "^0.1.59"
+koil = "^0.1.83"
 
 [tool.poetry.dev-dependencies]
-pytest = "^6.2.5"
+pytest = "^7.0.1"
 pytest-aiohttp = "^0.3.0"
 tox = "^3.24.5"
 black = "^21.12b0"
 pytest-cov = "^3.0.0"
+pytest-qt = "^4.0.2"
+PyQt5 = "^5.15.6"
 
 
 [build-system]

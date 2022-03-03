@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST
 import asyncio
 import json
-from koil import koil
+from koil import unkoil
 import logging
 
 
@@ -67,4 +67,4 @@ class EndpointBeacon:
             await asyncio.sleep(self.interval)
 
     def run(self):
-        return koil(self.arun())
+        return unkoil(self.arun)

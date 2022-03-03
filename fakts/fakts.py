@@ -13,9 +13,14 @@ from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
 import logging
 import sys
 
+from koil.decorators import koilable
+from koil.helpers import unkoil
+
 logger = logging.getLogger(__name__)
+current_fakts = contextvars.ContextVar("current_fakts", default=None)
 
 
+@koilable(add_connectors=True)
 class Fakts:
     def __init__(
         self,
@@ -24,7 +29,6 @@ class Fakts:
         middlewares=[],
         assert_groups=[],
         fakts_path="fakts.yaml",
-        register=True,
         subapp: str = None,
         hard_fakts={},
         **kwargs,
@@ -38,9 +42,6 @@ class Fakts:
         self.subapp = subapp
         self.fakts_path = f"{subapp}.{fakts_path}" if subapp else fakts_path
         self._lock = None
-
-        if register:
-            set_global_fakts(self)
 
     async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
         """Get Config
@@ -90,24 +91,29 @@ class Fakts:
         await self.aload()
 
     def get(self, *args, **kwargs):
-        return koil(self.aget(*args, **kwargs), **kwargs)
+        return unkoil(self.aget, *args, **kwargs)
+
+    @property
+    def healthy(self):
+        try:
+            with open(self.fakts_path, "r") as file:
+                config = yaml.load(file, Loader=yaml.FullLoader)
+                self.fakts = update_nested(self.hard_fakts, config)
+
+            if self.assert_groups.issubset(set(self.fakts.keys())):
+                # Configuration is valid, we can load it
+                return True
+
+        except:
+            return False
 
     async def aload(self, force_refresh=False):
-
+        print("Called")
         self.fakts = {}
 
         if not force_refresh:
-            try:
-                with open(self.fakts_path, "r") as file:
-                    config = yaml.load(file, Loader=yaml.FullLoader)
-                    self.fakts = update_nested(self.hard_fakts, config)
-
-                if self.assert_groups.issubset(set(self.fakts.keys())):
-                    # Configuration is valid, we can load it
-                    return self.fakts
-
-            except:
-                pass
+            if self.healthy:
+                return self.fakts
 
         if len(self.grants) == 0:
             raise NoGrantConfigured(
@@ -120,12 +126,12 @@ class Fakts:
                 additional_fakts = await grant.aload(previous=self.fakts)
                 self.fakts = update_nested(self.fakts, additional_fakts)
             except Exception as e:
-                grant_exceptions.add(e)
+                grant_exceptions[grant.__class__.__name__] = e
 
         if not self.assert_groups.issubset(set(self.fakts.keys())):
 
             error_description = (
-                "This might be due to following exceptions in grants {grant_exceptions}"
+                f"This might be due to following exceptions in grants {grant_exceptions}"
                 if grant_exceptions
                 else "All Grants were sucessful. But none retrieved these keys!"
             )
@@ -148,42 +154,14 @@ class Fakts:
             os.remove(self.fakts_path)
 
     def load(self, **kwargs):
-        return koil(self.aload(), **kwargs)
+        return unkoil(self.aload, **kwargs)
 
     def delete(self, **kwargs):
-        return koil(self.adelete(), **kwargs)
+        return unkoil(self.adelete, **kwargs)
 
-    def __enter__(self):
+    async def __aenter__(self):
         current_fakts.set(self)
         return self
 
-    def __exit__(self, *args, **kwargs):
+    async def __aexit__(self, *args, **kwargs):
         current_fakts.set(None)
-
-
-current_fakts = contextvars.ContextVar("current_fakts", default=None)
-GLOBAL_FAKTS = None
-
-
-def set_global_fakts(fakts):
-    global GLOBAL_FAKTS
-    GLOBAL_FAKTS = fakts
-
-
-def get_current_fakts(allow_global=True, creation_kwargs={}):
-
-    fakts = current_fakts.get()
-    if fakts:
-        return fakts
-
-    if not allow_global:
-        raise NoFaktsFound("No current fakts found and global fakts are not allowed")
-
-    if GLOBAL_FAKTS:
-        return GLOBAL_FAKTS
-
-    if os.getenv("FAKTS_ALLOW_GLOBAL_DEFAULT", "True") == "True":
-        set_global_fakts(Fakts(**creation_kwargs))
-        return GLOBAL_FAKTS
-
-    return GLOBAL_FAKTS
