@@ -4,12 +4,22 @@ from fakts import Fakts
 from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant
 from koil.qt import QtKoil, QtTask
 
+from fakts.grants.qt.qtyamlgrant import QtYamlGrant
+
 
 class Faktual(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtSelectableBeaconGrant()])
+        self.fakts = Fakts(grants=[QtYamlGrant()])
+
+        self.load_fakts_task = QtTask(self.fakts.aload)
+        self.load_fakts_task.errored.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
+        self.load_fakts_task.returned.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
 
         self.button_greet = QtWidgets.QPushButton("Greet")
         self.greet_label = QtWidgets.QLabel("")
@@ -23,9 +33,7 @@ class Faktual(QtWidgets.QWidget):
         self.button_greet.clicked.connect(self.greet)
 
     def greet(self):
-        task: QtTask = self.fakts.load(force_refresh=True, as_task=True)
-        task.errored.connect(lambda x: self.greet_label.setText(repr(x)))
-        task.run()
+        self.load_fakts_task.run(force_refresh=True)
 
 
 if __name__ == "__main__":

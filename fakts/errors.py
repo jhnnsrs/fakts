@@ -12,3 +12,7 @@ class NoGrantConfigured(FaktsError):
 
 class GroupsNotFound(FaktsError):
     pass
+
+
+class NoGrantSucessfull(FaktsError):
+    pass

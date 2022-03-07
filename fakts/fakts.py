@@ -1,7 +1,12 @@
 import asyncio
 import contextvars
-from typing import List
-from fakts.errors import GroupsNotFound, NoFaktsFound, NoGrantConfigured
+from typing import List, Type
+from fakts.errors import (
+    GroupsNotFound,
+    NoFaktsFound,
+    NoGrantConfigured,
+    NoGrantSucessfull,
+)
 from fakts.middleware.base import FaktsMiddleware
 from fakts.utils import update_nested
 from koil import koil
@@ -17,7 +22,7 @@ from koil.decorators import koilable
 from koil.helpers import unkoil
 
 logger = logging.getLogger(__name__)
-current_fakts = contextvars.ContextVar("current_fakts", default=None)
+current_fakts = contextvars.ContextVar("current_fakts")
 
 
 @koilable(add_connectors=True)
@@ -31,6 +36,7 @@ class Fakts:
         fakts_path="fakts.yaml",
         subapp: str = None,
         hard_fakts={},
+        force_refresh=False,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -42,6 +48,30 @@ class Fakts:
         self.subapp = subapp
         self.fakts_path = f"{subapp}.{fakts_path}" if subapp else fakts_path
         self._lock = None
+        self.force_refresh = force_refresh
+        self.loaded = False
+
+        try:
+            with open(self.fakts_path, "r") as file:
+                config = yaml.load(file, Loader=yaml.FullLoader)
+                self.fakts = update_nested(self.hard_fakts, config)
+        except Exception as e:
+            print(e)
+            logger.info("No fakts file found. We will have to use grants!")
+
+        if self.force_refresh:
+            self.fakts = {}
+
+        if not self.fakts:
+            assert (
+                len(self.grants) >= 1
+            ), f"No grants configured and we did not find fakts at path {self.fakts_path}. Please make sure you configure fakts correctly."
+
+        for grant in self.grants:
+            assert hasattr(grant, "aload"), "Grant must have an aload method"
+            assert not isinstance(grant, type), "SHould not be a class"
+
+        print(f"Fakts are {self.fakts}")
 
     async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
         """Get Config
@@ -64,12 +94,9 @@ class Fakts:
             dict: The active fakts
         """
 
-        if not self._lock:
-            self._lock = asyncio.Lock()
-
-        async with self._lock:
-            if not self.fakts:
-                await self.aload()
+        assert (
+            self.loaded
+        ), "Fakts not loaded, please load first. (By entering the fakts context)"
 
         config = {**self.fakts}
 
@@ -95,25 +122,13 @@ class Fakts:
 
     @property
     def healthy(self):
-        try:
-            with open(self.fakts_path, "r") as file:
-                config = yaml.load(file, Loader=yaml.FullLoader)
-                self.fakts = update_nested(self.hard_fakts, config)
+        return self.assert_groups.issubset(set(self.fakts.keys()))
 
-            if self.assert_groups.issubset(set(self.fakts.keys())):
-                # Configuration is valid, we can load it
-                return True
-
-        except:
-            return False
-
-    async def aload(self, force_refresh=False):
-        print("Called")
-        self.fakts = {}
-
-        if not force_refresh:
+    async def aload(self):
+        if not self.force_refresh:
             if self.healthy:
-                return self.fakts
+                self.loaded = True
+                return
 
         if len(self.grants) == 0:
             raise NoGrantConfigured(
@@ -128,6 +143,7 @@ class Fakts:
             except Exception as e:
                 grant_exceptions[grant.__class__.__name__] = e
 
+        print(grant_exceptions)
         if not self.assert_groups.issubset(set(self.fakts.keys())):
 
             error_description = (
@@ -141,11 +157,14 @@ class Fakts:
                 + error_description
             )
 
+        if not self.fakts:
+            raise NoGrantSucessfull(f"No Grants sucessfull {grant_exceptions}")
+
         if self.fakts_path:
             with open(self.fakts_path, "w") as file:
                 yaml.dump(self.fakts, file)
 
-        return self.fakts
+        self.loaded = True
 
     async def adelete(self):
         self.fakts = {}
@@ -160,8 +179,9 @@ class Fakts:
         return unkoil(self.adelete, **kwargs)
 
     async def __aenter__(self):
-        current_fakts.set(self)
+        self._token = current_fakts.set(self)
+        await self.aload()
         return self
 
     async def __aexit__(self, *args, **kwargs):
-        current_fakts.set(None)
+        current_fakts.reset(self._token)

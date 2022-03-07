@@ -3,7 +3,7 @@ from qtpy import QtCore, QtWidgets
 from koil.qt import QtFuture, QtCoro
 
 
-class QtFakts(QtWidgets.QDialog, Fakts):
+class QtFakts(QtWidgets.QWidget, Fakts):
     loaded_signal = QtCore.Signal()
     deleted_signal = QtCore.Signal()
     error_signal = QtCore.Signal(Exception)

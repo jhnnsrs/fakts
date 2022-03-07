@@ -121,8 +121,6 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
     async def aload(self, previous={}, **kwargs):
         loop = asyncio.get_event_loop()
         emitting_task = loop.create_task(self.emit_endpoints())
-        print("nana")
-        print("lalal")
         try:
 
             await self.show_coro.acall()

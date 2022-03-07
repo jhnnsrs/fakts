@@ -1,26 +1,28 @@
 import asyncio
 from koil import Koil
 from PyQt5 import QtWidgets, QtCore
+from fakts.fakts import Fakts
 from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant
+from fakts.grants.qt.qtyamlgrant import QtSelectYaml, QtYamlGrant
 from fakts.qt import QtFakts
+from koil.qt import QtKoil, QtTask
+import os
+
+TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
-async def sleep_and_resolve():
-    await asyncio.sleep(0.1)
-    return 1
-
-
-async def sleep_and_yield(times=5):
-    for i in range(times):
-        await asyncio.sleep(0.1)
-        print(i)
-        yield i
-
-
-class Faktual(QtWidgets.QWidget):
+class FaktualBeacon(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fakts = QtFakts(grants=[QtSelectableBeaconGrant()])
+        self.koil = QtKoil()
+        self.fakts = Fakts(grants=[QtSelectableBeaconGrant()])
+        self.load_fakts_task = QtTask(self.fakts.aload)
+        self.load_fakts_task.errored.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
+        self.load_fakts_task.returned.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
 
         self.button_greet = QtWidgets.QPushButton("Greet")
         self.greet_label = QtWidgets.QLabel("")
@@ -34,57 +36,83 @@ class Faktual(QtWidgets.QWidget):
         self.button_greet.clicked.connect(self.greet)
 
     def greet(self):
-        self.fakts.connect(as_task=True)
-        self.fakts.
+        self.load_fakts_task.run(force_refresh=True)
+        self.greet_label.setText("Loading...")
 
 
-def test_no_interference(qtbot):
+class FaktualYaml(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.koil = QtKoil()
+        self.fakts = Fakts(grants=[QtYamlGrant()])
+        self.load_fakts_task = QtTask(self.fakts.aload)
+        self.load_fakts_task.errored.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
+        self.load_fakts_task.returned.connect(
+            lambda x: self.greet_label.setText(repr(x))
+        )
+
+        self.button_greet = QtWidgets.QPushButton("Greet")
+        self.greet_label = QtWidgets.QLabel("")
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.button_greet)
+        layout.addWidget(self.greet_label)
+
+        self.setLayout(layout)
+
+        self.button_greet.clicked.connect(self.greet)
+
+    def greet(self):
+        self.load_fakts_task.run(force_refresh=True)
+        self.greet_label.setText("Loading...")
+
+
+def test_no_interference(qtbot, monkeypatch):
     """Tests if just adding koil interferes with normal
     qtpy widgets.
 
     Args:
         qtbot (_type_): _description_
     """
-    widget = KoiledWidget()
+    widget = FaktualBeacon()
     qtbot.addWidget(widget)
 
+    monkeypatch.setattr(
+        QtSelectYaml,
+        "ask",
+        classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/selectable_yaml.yaml"),
+    )
+
     # click in the Greet button and make sure it updates the appropriate label
-    qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
+    with qtbot.waitSignal(widget.load_fakts_task.returned) as b:
+        # click in the Greet button and make sure it updates the appropriate label
+        qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
+        assert widget.greet_label.text() == "Loading..."
 
-    assert widget.greet_label.text() == "Hello!"
+    assert b.args[0] == "Hello, world!"
 
 
-def test_call_task(qtbot):
-    """Tests if we can call a task from a koil widget."""
-    widget = KoiledInterferingWidget()
+def test_no_interference(qtbot, monkeypatch):
+    """Tests if just adding koil interferes with normal
+    qtpy widgets.
+
+    Args:
+        qtbot (_type_): _description_
+    """
+    widget = FaktualYaml()
     qtbot.addWidget(widget)
 
-    # click in the Greet button and make sure it updates the appropriate label
-    qtbot.mouseClick(widget.call_task_button, QtCore.Qt.LeftButton)
-    with qtbot.waitSignal(widget.task.returned) as b:
-        print(b)
+    monkeypatch.setattr(
+        QtSelectYaml,
+        "ask",
+        classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/selectable_yaml.yaml"),
+    )
 
+    with qtbot.waitSignal(widget.load_fakts_task.returned) as b:
+        # click in the Greet button and make sure it updates the appropriate label
+        qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
 
-def test_call_gen(qtbot):
-    """Tests if we can call a task from a koil widget."""
-    widget = KoiledInterferingWidget()
-    qtbot.addWidget(widget)
-
-    # click in the Greet button and make sure it updates the appropriate label
-    qtbot.mouseClick(widget.call_gen_button, QtCore.Qt.LeftButton)
-    with qtbot.waitSignal(widget.task.yielded) as b:
-        print(b)
-
-
-def test_call_future(qtbot):
-    """Tests if we can call a task from a koil widget."""
-    widget = KoiledInterferingFutureWidget()
-    qtbot.addWidget(widget)
-
-    # click in the Greet button and make sure it updates the appropriate label
-    qtbot.mouseClick(widget.call_task_button, QtCore.Qt.LeftButton)
-    with qtbot.waitSignal(widget.task.returned, raising=False, timeout=1):
-        pass
-
-    assert widget.task_was_run == True
-    assert widget.coroutine_was_run == True
+        assert widget.greet_label.text() == "Loading..."
+    assert isinstance(b.args[0], dict)
