@@ -179,9 +179,9 @@ class Fakts:
         return unkoil(self.adelete, **kwargs)
 
     async def __aenter__(self):
-        self._token = current_fakts.set(self)
+        current_fakts.set(self)
         await self.aload()
         return self
 
     async def __aexit__(self, *args, **kwargs):
-        current_fakts.reset(self._token)
+        current_fakts.set(None)
