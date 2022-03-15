@@ -29,4 +29,4 @@ class Config(BaseSettings):
         try:
             return cls(**await fakts.aget(group, bypass_middleware=bypass_middleware))
         except ValidationError as e:
-            raise ConfigError(f"{fakts.fakts} was not sufficient") from e
+            raise ConfigError(f"{fakts.loaded_fakts} was not sufficient") from e

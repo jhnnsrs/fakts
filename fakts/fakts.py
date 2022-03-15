@@ -1,6 +1,9 @@
 import asyncio
 import contextvars
-from typing import List, Type
+from typing import Any, Dict, List, Optional, Set, Type
+
+from pydantic import BaseModel, Field
+from typer import Option
 from fakts.errors import (
     GroupsNotFound,
     NoFaktsFound,
@@ -17,7 +20,7 @@ from fakts.grants.yaml import YamlGrant
 from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
 import logging
 import sys
-
+from pydantic import root_validator
 from koil.decorators import koilable
 from koil.helpers import unkoil
 
@@ -26,52 +29,42 @@ current_fakts = contextvars.ContextVar("current_fakts")
 
 
 @koilable(add_connectors=True)
-class Fakts:
-    def __init__(
-        self,
-        *args,
-        grants=[],
-        middlewares=[],
-        assert_groups=[],
-        fakts_path="fakts.yaml",
-        subapp: str = None,
-        hard_fakts={},
-        force_refresh=False,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self.grants: List[FaktsGrant] = grants
-        self.middlewares: List[FaktsMiddleware] = middlewares
-        self.hard_fakts = hard_fakts
-        self.fakts = {}
-        self.assert_groups = set(assert_groups)
-        self.subapp = subapp
-        self.fakts_path = f"{subapp}.{fakts_path}" if subapp else fakts_path
-        self._lock = None
-        self.force_refresh = force_refresh
-        self.loaded = False
+class Fakts(BaseModel):
+    grants: List[FaktsGrant] = Field(default_factory=list)
+    middlewares: List[FaktsMiddleware] = Field(default_factory=list)
+    hard_fakts: Dict[str, Any] = Field(default_factory=dict)
+    assert_groups: Set[str] = Field(default_factory=set)
+    subapp: str = ""
+    fakts_path: str = "fakts.yaml"
+    force_refresh: bool = False
+
+    _loaded: bool = False
+    _lock: asyncio.Lock = None
+    _fakts_path: str = ""
+    loaded_fakts = {}
+
+    @root_validator
+    def validate_integrity(cls, values):
+
+        _fakts_path = (
+            f'{values["subapp"]}.{values["fakts_path"]}'
+            if values["subapp"]
+            else values["fakts_path"]
+        )
 
         try:
-            with open(self.fakts_path, "r") as file:
+            with open(_fakts_path, "r") as file:
                 config = yaml.load(file, Loader=yaml.FullLoader)
-                self.fakts = update_nested(self.hard_fakts, config)
-        except Exception as e:
-            print(e)
-            logger.info("No fakts file found. We will have to use grants!")
+                values["loaded_fakts"] = update_nested(values["hard_fakts"], config)
+        except:
+            logger.info("Could not load fakts from file")
 
-        if self.force_refresh:
-            self.fakts = {}
+        if not values["loaded_fakts"] and not values["grants"]:
+            raise ValueError(
+                f"No grants configured and we did not find fakts at path {_fakts_path}. Please make sure you configure fakts correctly."
+            )
 
-        if not self.fakts:
-            assert (
-                len(self.grants) >= 1
-            ), f"No grants configured and we did not find fakts at path {self.fakts_path}. Please make sure you configure fakts correctly."
-
-        for grant in self.grants:
-            assert hasattr(grant, "aload"), "Grant must have an aload method"
-            assert not isinstance(grant, type), "SHould not be a class"
-
-        print(f"Fakts are {self.fakts}")
+        return values
 
     async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
         """Get Config
@@ -95,10 +88,10 @@ class Fakts:
         """
 
         assert (
-            self.loaded
+            self._loaded
         ), "Fakts not loaded, please load first. (By entering the fakts context)"
 
-        config = {**self.fakts}
+        config = {**self.loaded_fakts}
 
         if not bypass_middleware:
             for middleware in self.middlewares:
@@ -122,12 +115,15 @@ class Fakts:
 
     @property
     def healthy(self):
-        return self.assert_groups.issubset(set(self.fakts.keys()))
+        return (
+            self.assert_groups.issubset(set(self.loaded_fakts.keys()))
+            and self.loaded_fakts
+        )
 
     async def aload(self):
         if not self.force_refresh:
             if self.healthy:
-                self.loaded = True
+                self._loaded = True
                 return
 
         if len(self.grants) == 0:
@@ -138,13 +134,12 @@ class Fakts:
         grant_exceptions = {}
         for grant in self.grants:
             try:
-                additional_fakts = await grant.aload(previous=self.fakts)
-                self.fakts = update_nested(self.fakts, additional_fakts)
+                additional_fakts = await grant.aload(previous=self.loaded_fakts)
+                self.loaded_fakts = update_nested(self.loaded_fakts, additional_fakts)
             except Exception as e:
                 grant_exceptions[grant.__class__.__name__] = e
 
-        print(grant_exceptions)
-        if not self.assert_groups.issubset(set(self.fakts.keys())):
+        if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
 
             error_description = (
                 f"This might be due to following exceptions in grants {grant_exceptions}"
@@ -153,21 +148,21 @@ class Fakts:
             )
 
             raise GroupsNotFound(
-                f"Could not find {self.assert_groups - set(self.fakts.keys())}. "
+                f"Could not find {self.assert_groups - set(self.loaded_fakts.keys())}. "
                 + error_description
             )
 
-        if not self.fakts:
+        if not self.loaded_fakts:
             raise NoGrantSucessfull(f"No Grants sucessfull {grant_exceptions}")
 
         if self.fakts_path:
             with open(self.fakts_path, "w") as file:
-                yaml.dump(self.fakts, file)
+                yaml.dump(self.loaded_fakts, file)
 
-        self.loaded = True
+        self._loaded = True
 
     async def adelete(self):
-        self.fakts = {}
+        self.loaded_fakts = {}
 
         if self.fakts_path:
             os.remove(self.fakts_path)
@@ -185,3 +180,7 @@ class Fakts:
 
     async def __aexit__(self, *args, **kwargs):
         current_fakts.set(None)
+
+    class Config:
+        arbitrary_types_allowed = True
+        underscore_attrs_are_private = True
