@@ -1,6 +1,7 @@
+from pydantic import Field
 from fakts.grants.base import GrantException, FaktsGrant
 import yaml
-from koil.qt import QtCoro
+from koil.qt import QtCoro, QtFuture
 from qtpy import QtWidgets
 
 
@@ -9,28 +10,41 @@ class NoFileSelected(GrantException):
 
 
 class QtSelectYaml(QtWidgets.QFileDialog):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFileMode(QtWidgets.QFileDialog.ExistingFile)
+        self.setNameFilter("YAML files (*.yaml)")
+
     @classmethod
-    def ask(cls, text, parent=None):
-        filepath, weird = cls.getOpenFileName(parent=parent, caption=text)
+    def ask(self, parent=None):
+        filepath, weird = self.getOpenFileName(parent=parent, caption="Select a Yaml")
         return filepath
 
 
-class QtYamlGrant(FaktsGrant, QtWidgets.QWidget):
-    def __init__(self) -> None:
-        super().__init__()
-        self.get_file_coro = QtCoro(self.on_open_filepath, autoresolve=True)
+class WrappingWidget(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.get_file_coro = QtCoro(self.open_file)
 
-    def on_open_filepath(self, ref):
-        filepath = QtSelectYaml.ask("Select a Yaml", parent=self)
-        return filepath
+    def open_file(self, future: QtFuture):
+        filepath = QtSelectYaml.ask(parent=self)
+
+        if filepath:
+            future.resolve(filepath)
+        else:
+            future.reject(NoFileSelected("No file selected"))
+
+
+class QtYamlGrant(FaktsGrant):
+    widget: WrappingWidget = Field(default_factory=WrappingWidget)
 
     async def aload(self, previous={}, **kwargs):
-        print("Here?")
-        filepath = await self.get_file_coro.acall()
-        print(filepath)
+        filepath = await self.widget.get_file_coro.acall()
         with open(filepath, "r") as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
 
-        print("Config")
-        print(config)
         return config
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {QtWidgets.QFileDialog: lambda x: x.__class__.__name__}

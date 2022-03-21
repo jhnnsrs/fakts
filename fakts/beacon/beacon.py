@@ -1,9 +1,11 @@
-from typing import List
+from ast import Pass
+from typing import List, Optional
 from pydantic import BaseModel
-from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST
+from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, getaddrinfo
 import asyncio
 import json
-from koil import unkoil
+from koil import unkoil, koilable, Koil
+from koil.composition import KoiledModel
 import logging
 
 
@@ -19,37 +21,26 @@ class BeaconProtocol(asyncio.DatagramProtocol):
     pass
 
 
-class EndpointBeacon:
-    BIND = ""
-    BROADCAST_PORT = 45678
-    BROADCAST_ADDRESS = "<broadcast>"
-    MAGIC_PHRASE = "beacon-fakts"
+class Binding(BaseModel):
+    interface: str
+    broadcast_addr: str
+    bind_addr: str
+    broadcast_port: int = 45678
+    magic_phrase: str = "beacon-fakts"
 
-    def __init__(
-        self,
-        broadcast_port=None,
-        bind=None,
-        magic_phrase=None,
-        broadcast_adress=None,
-        advertised_endpoints: List[FaktsEndpoint] = [],
-        interval=1,
-    ) -> None:
-        self.broadcast_port = broadcast_port or self.BROADCAST_PORT
-        self.bind = bind or self.BIND
-        self.magic_phrase = magic_phrase or self.MAGIC_PHRASE
-        self.broadcast_adress = broadcast_adress or self.BROADCAST_ADDRESS
 
-        self.advertised_endpoints = advertised_endpoints
-        assert len(self.advertised_endpoints) > 0, "No config points provided"
-        self.interval = interval
+class EndpointBeacon(KoiledModel):
+    koil: Optional[Koil]
+    advertised_endpoints: List[FaktsEndpoint]
+    binding: Binding
+    interval: int = 5
 
     def endpoint_to_message(self, config: FaktsEndpoint):
-        return bytes(self.magic_phrase + json.dumps(config.dict()), "utf8")
+        return bytes(self.binding.magic_phrase + json.dumps(config.dict()), "utf8")
 
     async def arun(self):
-
-        s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
-        s.bind((self.bind, 0))
+        s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket.
+        s.bind((self.binding.bind_addr, 0))
         s.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)  # this is a broadcast socket
 
         loop = asyncio.get_event_loop()
@@ -61,10 +52,18 @@ class EndpointBeacon:
 
         while True:
             for message in messages:
-                transport.sendto(message, (self.broadcast_adress, self.broadcast_port))
+                transport.sendto(
+                    message, (self.binding.broadcast_addr, self.binding.broadcast_port)
+                )
                 logger.info(f"Send Message {message}")
 
             await asyncio.sleep(self.interval)
 
     def run(self):
         return unkoil(self.arun)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        Pass

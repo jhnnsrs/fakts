@@ -3,9 +3,7 @@ import yaml
 
 
 class YamlGrant(FaktsGrant):
-    def __init__(self, filepath="random.yaml") -> None:
-        super().__init__()
-        self.filepath = filepath
+    filepath: str = "random.yaml"
 
     async def aload(self, previous={}, **kwargs):
         with open(self.filepath, "r") as file:

@@ -1,3 +1,4 @@
+from pydantic import Field
 from fakts.beacon.beacon import FaktsEndpoint
 from fakts.grants.base import FaktsGrant, GrantException
 from fakts.beacon import EndpointDiscovery, FaktsRetriever
@@ -21,28 +22,15 @@ class NoBeaconsFound(PrompingBeaconGrantException):
 
 
 class CLIBeaconGrant(FaktsGrant):
-    def __init__(
-        self,
-        *args,
-        dicovery_protocol: EndpointDiscovery = None,
-        retriever_protocol: FaktsRetriever = None,
-        timeout=4,
-        console=None,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-
-        self._discov = dicovery_protocol or EndpointDiscovery()
-        self._retriev = retriever_protocol or FaktsRetriever()
-        self._console = console or Console()
-        self._timeout = timeout
+    discovery_protocol: EndpointDiscovery = Field(default_facotry=EndpointDiscovery)
+    retriever_protocol: FaktsRetriever = Field(default_facotry=FaktsRetriever)
+    timeout: int = 4
 
     async def aload(self, previous={}, **kwargs):
 
-        with self._console.status(
-            f"Waiting {self._timeout} seconds for Beacon Answers"
-        ):
-            endpoints = await self._discov.ascan_list(timeout=self._timeout)
+        console = Console()
+        with console.status(f"Waiting {self._timeout} seconds for Beacon Answers"):
+            endpoints = await self.discovery_protocol.ascan_list(timeout=self.timeout)
 
         if len(endpoints.keys()) == 0:
             raise NoBeaconsFound("We couldn't find any beacon in your local network")
@@ -52,7 +40,7 @@ class CLIBeaconGrant(FaktsGrant):
             "Which Endpoint do you want", choices=choices_name, default=choices_name[0]
         )
 
-        with self._console.status(
-            f"Please check your browser window to finish the setup"
-        ):
-            return await self._retriev.aretrieve(endpoints[endpoint_name], previous)
+        with console.status(f"Please check your browser window to finish the setup"):
+            return await self.retriever_protocol.aretrieve(
+                endpoints[endpoint_name], previous
+            )

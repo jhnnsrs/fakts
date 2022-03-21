@@ -3,10 +3,8 @@ import contextvars
 from typing import Any, Dict, List, Optional, Set, Type
 
 from pydantic import BaseModel, Field
-from typer import Option
 from fakts.errors import (
     GroupsNotFound,
-    NoFaktsFound,
     NoGrantConfigured,
     NoGrantSucessfull,
 )
@@ -21,6 +19,7 @@ from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
 import logging
 import sys
 from pydantic import root_validator
+from koil.composition import KoiledModel
 from koil.decorators import koilable
 from koil.helpers import unkoil
 
@@ -28,8 +27,7 @@ logger = logging.getLogger(__name__)
 current_fakts = contextvars.ContextVar("current_fakts")
 
 
-@koilable(add_connectors=True)
-class Fakts(BaseModel):
+class Fakts(KoiledModel):
     grants: List[FaktsGrant] = Field(default_factory=list)
     middlewares: List[FaktsMiddleware] = Field(default_factory=list)
     hard_fakts: Dict[str, Any] = Field(default_factory=dict)
@@ -37,6 +35,11 @@ class Fakts(BaseModel):
     subapp: str = ""
     fakts_path: str = "fakts.yaml"
     force_refresh: bool = False
+
+    load_on_enter: bool = True
+    """Should we load on connect?"""
+    delete_on_exit: bool = False
+    """Should we delete on connect?"""
 
     _loaded: bool = False
     _lock: asyncio.Lock = None
@@ -46,14 +49,14 @@ class Fakts(BaseModel):
     @root_validator
     def validate_integrity(cls, values):
 
-        _fakts_path = (
+        values["fakts_path"] = (
             f'{values["subapp"]}.{values["fakts_path"]}'
             if values["subapp"]
             else values["fakts_path"]
         )
 
         try:
-            with open(_fakts_path, "r") as file:
+            with open(values["fakts_path"], "r") as file:
                 config = yaml.load(file, Loader=yaml.FullLoader)
                 values["loaded_fakts"] = update_nested(values["hard_fakts"], config)
         except:
@@ -61,7 +64,7 @@ class Fakts(BaseModel):
 
         if not values["loaded_fakts"] and not values["grants"]:
             raise ValueError(
-                f"No grants configured and we did not find fakts at path {_fakts_path}. Please make sure you configure fakts correctly."
+                f"No grants configured and we did not find fakts at path {values['fakts_path']}. Please make sure you configure fakts correctly."
             )
 
         return values
@@ -120,11 +123,11 @@ class Fakts(BaseModel):
             and self.loaded_fakts
         )
 
-    async def aload(self):
+    async def aload(self) -> Dict[str, Any]:
         if not self.force_refresh:
             if self.healthy:
                 self._loaded = True
-                return
+                return self.loaded_fakts
 
         if len(self.grants) == 0:
             raise NoGrantConfigured(
@@ -160,6 +163,7 @@ class Fakts(BaseModel):
                 yaml.dump(self.loaded_fakts, file)
 
         self._loaded = True
+        return self.loaded_fakts
 
     async def adelete(self):
         self.loaded_fakts = {}
@@ -175,12 +179,18 @@ class Fakts(BaseModel):
 
     async def __aenter__(self):
         current_fakts.set(self)
-        await self.aload()
+        if self.load_on_enter:
+            await self.aload()
         return self
 
     async def __aexit__(self, *args, **kwargs):
+        if self.delete_on_exit:
+            await self.adelete()
         current_fakts.set(None)
 
     class Config:
         arbitrary_types_allowed = True
         underscore_attrs_are_private = True
+        json_encoders = {
+            FaktsGrant: lambda x: f"Fakts Grant {x.__class__.__name__}",
+        }

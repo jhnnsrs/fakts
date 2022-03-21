@@ -206,14 +206,26 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "janus"
+version = "1.0.0"
+description = "Mixed sync-async queue to interoperate between asyncio tasks and classic threads"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+typing-extensions = ">=3.7.4.3"
+
+[[package]]
 name = "koil"
-version = "0.1.83"
+version = "0.1.103"
 description = "Async for a sync world"
 category = "main"
 optional = false
 python-versions = ">=3.7,<4.0"
 
 [package.dependencies]
+janus = ">=1.0.0,<2.0.0"
 qtpy = ">1"
 
 [package.extras]
@@ -534,7 +546,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "946d055aa71a2c21d007e08971823a61377800e5edef5697534899e7c6fe3174"
+content-hash = "ae7f947a876d19e73d8410339ede19bdf947abf40bd648ffb5dbcdfe0a635803"
 
 [metadata.files]
 aiohttp = [
@@ -771,9 +783,13 @@ iniconfig = [
     {file = "iniconfig-1.1.1-py2.py3-none-any.whl", hash = "sha256:011e24c64b7f47f6ebd835bb12a743f2fbe9a26d4cecaa7f53bc4f35ee9da8b3"},
     {file = "iniconfig-1.1.1.tar.gz", hash = "sha256:bc3af051d7d14b2ee5ef9969666def0cd1a000e121eaea580d4a313df4b37f32"},
 ]
+janus = [
+    {file = "janus-1.0.0-py3-none-any.whl", hash = "sha256:2596ea5482711c1ee3ef2df6c290aaf370a13c55a007826e8f7c32d696d1d00a"},
+    {file = "janus-1.0.0.tar.gz", hash = "sha256:df976f2cdcfb034b147a2d51edfc34ff6bfb12d4e2643d3ad0e10de058cb1612"},
+]
 koil = [
-    {file = "koil-0.1.83-py3-none-any.whl", hash = "sha256:a7e61bf04fd68c234e4a026f18cedad7cb45276d7222d63e1080ff4dcde409f9"},
-    {file = "koil-0.1.83.tar.gz", hash = "sha256:22d591ee86d6dac6c256fe2ed754455b77eaf47900bb42c3862e67328978eb83"},
+    {file = "koil-0.1.103-py3-none-any.whl", hash = "sha256:ddf26034c5f0ea415e540d6f283517818180a88f1c5d4348bfdb622cdb82cdf7"},
+    {file = "koil-0.1.103.tar.gz", hash = "sha256:6124281c8fae60e1f1e5b4132b4b91c9d1a9be518b715dfd55315301274a464f"},
 ]
 multidict = [
     {file = "multidict-6.0.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:0b9e95a740109c6047602f4db4da9949e6c5945cefbad34a1299775ddc9a62e2"},

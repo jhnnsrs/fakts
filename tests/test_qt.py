@@ -1,10 +1,11 @@
 import asyncio
 from koil import Koil
 from PyQt5 import QtWidgets, QtCore
+from fakts.beacon.beacon import EndpointBeacon, FaktsEndpoint
+from fakts.beacon.retriever import FaktsRetriever
 from fakts.fakts import Fakts
-from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant
+from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant, SelectBeaconWidget
 from fakts.grants.qt.qtyamlgrant import QtSelectYaml, QtYamlGrant
-from fakts.qt import QtFakts
 from koil.qt import QtKoil, QtTask
 import os
 
@@ -15,7 +16,8 @@ class FaktualBeacon(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtSelectableBeaconGrant()])
+        self.fakts = Fakts(grants=[QtSelectableBeaconGrant()], force_refresh=True)
+
         self.load_fakts_task = QtTask(self.fakts.aload)
         self.load_fakts_task.errored.connect(
             lambda x: self.greet_label.setText(repr(x))
@@ -36,7 +38,7 @@ class FaktualBeacon(QtWidgets.QWidget):
         self.button_greet.clicked.connect(self.greet)
 
     def greet(self):
-        self.load_fakts_task.run(force_refresh=True)
+        self.load_fakts_task.run()
         self.greet_label.setText("Loading...")
 
 
@@ -44,7 +46,7 @@ class FaktualYaml(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtYamlGrant()])
+        self.fakts = Fakts(grants=[QtYamlGrant()], force_refresh=True)
         self.load_fakts_task = QtTask(self.fakts.aload)
         self.load_fakts_task.errored.connect(
             lambda x: self.greet_label.setText(repr(x))
@@ -65,25 +67,38 @@ class FaktualYaml(QtWidgets.QWidget):
         self.button_greet.clicked.connect(self.greet)
 
     def greet(self):
-        self.load_fakts_task.run(force_refresh=True)
+        self.load_fakts_task.run()
         self.greet_label.setText("Loading...")
 
 
-def test_no_interference(qtbot, monkeypatch):
+async def mock_aretrieve(self, *args, **kwargs):
+    return {
+        "hello": "world",
+    }
+
+
+def test_faktual_beacon(qtbot, monkeypatch):
     """Tests if just adding koil interferes with normal
     qtpy widgets.
 
     Args:
         qtbot (_type_): _description_
     """
-    widget = FaktualBeacon()
-    qtbot.addWidget(widget)
 
     monkeypatch.setattr(
-        QtSelectYaml,
-        "ask",
-        classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/selectable_yaml.yaml"),
+        SelectBeaconWidget,
+        "demand_selection_of_endpoint",
+        lambda self, f: f.resolve(FaktsEndpoint),
     )
+
+    monkeypatch.setattr(
+        FaktsRetriever,
+        "aretrieve",
+        mock_aretrieve,
+    )
+
+    widget = FaktualBeacon()
+    qtbot.addWidget(widget)
 
     # click in the Greet button and make sure it updates the appropriate label
     with qtbot.waitSignal(widget.load_fakts_task.returned) as b:
@@ -91,18 +106,16 @@ def test_no_interference(qtbot, monkeypatch):
         qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
         assert widget.greet_label.text() == "Loading..."
 
-    assert b.args[0] == "Hello, world!"
+    assert isinstance(b.args[0], dict), "Needs to be dict"
 
 
-def test_no_interference(qtbot, monkeypatch):
+def test_faktual_yaml(qtbot, monkeypatch):
     """Tests if just adding koil interferes with normal
     qtpy widgets.
 
     Args:
         qtbot (_type_): _description_
     """
-    widget = FaktualYaml()
-    qtbot.addWidget(widget)
 
     monkeypatch.setattr(
         QtSelectYaml,
@@ -110,9 +123,12 @@ def test_no_interference(qtbot, monkeypatch):
         classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/selectable_yaml.yaml"),
     )
 
+    widget = FaktualYaml()
+    qtbot.addWidget(widget)
+
     with qtbot.waitSignal(widget.load_fakts_task.returned) as b:
         # click in the Greet button and make sure it updates the appropriate label
         qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
 
         assert widget.greet_label.text() == "Loading..."
-    assert isinstance(b.args[0], dict)
+    assert isinstance(b.args[0], dict), "Needs to be dict"

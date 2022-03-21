@@ -7,7 +7,8 @@ import asyncio
 import uuid
 from aiohttp import web
 from urllib.parse import quote, urlencode, parse_qs
-from koil import koil
+from koil import unkoil
+from koil.composition import KoiledModel
 import json
 import logging
 
@@ -108,23 +109,10 @@ async def wait_for_get(
     return post_json
 
 
-class FaktsRetriever:
-    REDIRECT_HOST = "localhost"
-    REDIRECT_PORT = 6767
-    REDIRECT_PATH = "/"
-
-    def __init__(
-        self,
-        *args,
-        redirect_host=None,
-        redirect_port=None,
-        redirect_path=None,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self.redirect_host = redirect_host or self.REDIRECT_HOST
-        self.redirect_port = redirect_port or self.REDIRECT_PORT
-        self.redirect_path = redirect_path or self.REDIRECT_PATH
+class FaktsRetriever(KoiledModel):
+    redirect_host = "localhost"
+    redirect_port = 6767
+    redirect_path = "/"
 
     async def aretrieve(self, config: FaktsEndpoint, previous={}):
         post_data = await wait_for_get(
@@ -137,4 +125,10 @@ class FaktsRetriever:
         return post_data
 
     def retrieve(self, config, as_task=True, **kwargs):
-        return koil(self.aretrieve(config, **kwargs), as_task=as_task)
+        return unkoil(self.aretrieve(config, **kwargs), as_task=as_task)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass

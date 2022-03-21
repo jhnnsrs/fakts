@@ -11,14 +11,14 @@ class Faktual(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtYamlGrant()])
+        self.fakts = Fakts(grants=[QtYamlGrant()], force_refresh=True)
 
         self.load_fakts_task = QtTask(self.fakts.aload)
         self.load_fakts_task.errored.connect(
             lambda x: self.greet_label.setText(repr(x))
         )
         self.load_fakts_task.returned.connect(
-            lambda x: self.greet_label.setText(repr(x))
+            lambda x: self.greet_label.setText(repr("Loaded"))
         )
 
         self.button_greet = QtWidgets.QPushButton("Greet")
@@ -33,7 +33,7 @@ class Faktual(QtWidgets.QWidget):
         self.button_greet.clicked.connect(self.greet)
 
     def greet(self):
-        self.load_fakts_task.run(force_refresh=True)
+        self.load_fakts_task.run()
 
 
 if __name__ == "__main__":

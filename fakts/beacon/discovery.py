@@ -1,9 +1,12 @@
 from abc import abstractmethod
+from typing import Dict
+
+from pydantic import BaseModel, Field
 from fakts.beacon.beacon import FaktsEndpoint
 from socket import socket, AF_INET, SOCK_DGRAM
 import asyncio
 import json
-from koil import koil
+from koil import unkoil
 import logging
 
 
@@ -21,27 +24,13 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
         self._recvq.put_nowait((data, addr))
 
 
-class EndpointDiscovery:
-    BROADCAST_PORT = 45678
-    MAGIC_PHRASE = "beacon-fakts"
-    BIND = ""
+class EndpointDiscovery(BaseModel):
+    broadcast_port = 45678
+    magic_phrase = "beacon-fakts"
+    bind = ""
+    strict: bool = False
 
-    def __init__(
-        self,
-        *args,
-        broadcast_port=None,
-        bind=None,
-        magic_phrase=None,
-        strict=False,
-        on_new_endpoint=None,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        self.broadcast_port = broadcast_port or self.BROADCAST_PORT
-        self.magic_phrase = magic_phrase or self.MAGIC_PHRASE
-        self.bind = bind or self.BIND
-        self.strict = strict
-        self.discovered_endpoints = {}
+    discovered_endpoints: Dict[str, FaktsEndpoint] = Field(default_factory=dict)
 
     async def ascan_first(self, name_filter=None, **kwargs):
 
@@ -148,4 +137,4 @@ class EndpointDiscovery:
             return self.discovered_endpoints
 
     def scan(self, **kwargs):
-        return koil(self.ascan(**kwargs))
+        return unkoil(self.ascan(**kwargs))

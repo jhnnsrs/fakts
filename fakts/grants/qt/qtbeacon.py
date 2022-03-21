@@ -1,3 +1,4 @@
+from pydantic import Field
 from qtpy.QtCore import Signal
 from fakts.grants.beacon import BeaconGrant
 from fakts.beacon.beacon import FaktsEndpoint
@@ -45,7 +46,7 @@ class UserCancelledException(GrantException):
     pass
 
 
-class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
+class SelectBeaconWidget(QtWidgets.QWidget):
     new_endpoint = Signal(FaktsEndpoint)
 
     def __init__(self, *args, **kwargs) -> None:
@@ -101,7 +102,7 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
 
         event.accept()  # let the window close
 
-    def on_new_endpoint(self, config):
+    def on_new_endpoint(self, config: FaktsEndpoint):
         self.listWidget.clear()
 
         self.endpoints.append(config)
@@ -111,10 +112,14 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
 
         self.listWidget.itemClicked.connect(self.on_endpoint_clicked)
 
+
+class QtSelectableBeaconGrant(BeaconGrant):
+    widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget)
+
     async def emit_endpoints(self):
         try:
-            async for endpoint in self._discov.ascan_gen():
-                self.new_endpoint.emit(endpoint)
+            async for endpoint in self.discovery_protocol.ascan_gen():
+                self.widget.new_endpoint.emit(endpoint)
         except Exception as e:
             print(e)
 
@@ -123,13 +128,17 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
         emitting_task = loop.create_task(self.emit_endpoints())
         try:
 
-            await self.show_coro.acall()
+            await self.widget.show_coro.acall()
+            print("Called here")
             try:
-                endpoint = await self.select_endpoint.acall()
+                print("Running this here?")
+                endpoint = await self.widget.select_endpoint.acall()
+                print("Received Here")
+                konfik = await self.retriever_protocol.aretrieve(
+                    endpoint, previous=previous
+                )
 
-                konfik = await self._retriev.aretrieve(endpoint, previous=previous)
-
-                await self.hide_coro.acall()
+                await self.widget.hide_coro.acall()
 
             finally:
                 emitting_task.cancel()
@@ -142,3 +151,6 @@ class QtSelectableBeaconGrant(BeaconGrant, QtWidgets.QDialog):
             raise e
 
         return konfik
+
+    class Config:
+        arbitrary_types_allowed = True

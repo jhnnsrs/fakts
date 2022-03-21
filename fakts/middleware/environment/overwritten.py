@@ -24,10 +24,8 @@ class OverwrittenEnvMiddleware(FaktsMiddleware):
         FaktsGrant ([type]): [description]
     """
 
-    def __init__(self, prepend=None, delimiter="_") -> None:
-        super().__init__()
-        self.prepend = prepend
-        self.delimiter = delimiter
+    prepend: str = ""
+    delimiter: str = "_"
 
     async def aparse(self, previous={}, **kwargs):
 
