@@ -131,4 +131,5 @@ def test_faktual_yaml(qtbot, monkeypatch):
         qtbot.mouseClick(widget.button_greet, QtCore.Qt.LeftButton)
 
         assert widget.greet_label.text() == "Loading..."
+
     assert isinstance(b.args[0], dict), "Needs to be dict"
