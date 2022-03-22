@@ -30,8 +30,9 @@ current_fakts = contextvars.ContextVar("current_fakts")
 class Fakts(KoiledModel):
     grants: List[FaktsGrant] = Field(default_factory=list)
     middlewares: List[FaktsMiddleware] = Field(default_factory=list)
-    hard_fakts: Dict[str, Any] = Field(default_factory=dict)
+    hard_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
     assert_groups: Set[str] = Field(default_factory=set)
+    loaded_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
     subapp: str = ""
     fakts_path: str = "fakts.yaml"
     force_refresh: bool = False
@@ -44,7 +45,6 @@ class Fakts(KoiledModel):
     _loaded: bool = False
     _lock: asyncio.Lock = None
     _fakts_path: str = ""
-    loaded_fakts = {}
 
     @root_validator
     def validate_integrity(cls, values):
