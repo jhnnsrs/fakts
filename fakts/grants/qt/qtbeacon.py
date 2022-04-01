@@ -114,7 +114,7 @@ class SelectBeaconWidget(QtWidgets.QWidget):
 
 
 class QtSelectableBeaconGrant(BeaconGrant):
-    widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget)
+    widget: SelectBeaconWidget = Field(exclude=True)
 
     async def emit_endpoints(self):
         try:

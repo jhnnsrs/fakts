@@ -1,12 +1,11 @@
-import asyncio
 from koil import Koil
 from PyQt5 import QtWidgets, QtCore
 from fakts.beacon.beacon import EndpointBeacon, FaktsEndpoint
 from fakts.beacon.retriever import FaktsRetriever
 from fakts.fakts import Fakts
 from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant, SelectBeaconWidget
-from fakts.grants.qt.qtyamlgrant import QtSelectYaml, QtYamlGrant
-from koil.qt import QtKoil, QtTask
+from fakts.grants.qt.qtyamlgrant import QtSelectYaml, QtYamlGrant, WrappingWidget
+from koil.qt import QtKoil, QtRunner
 import os
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
@@ -15,10 +14,15 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 class FaktualBeacon(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtSelectableBeaconGrant()], force_refresh=True)
+        self.koil = QtKoil(parent=self)
+        self.koil.connect()
 
-        self.load_fakts_task = QtTask(self.fakts.aload)
+        self.fakts = Fakts(
+            grants=[QtSelectableBeaconGrant(widget=SelectBeaconWidget(parent=self))],
+            force_refresh=True,
+        )
+
+        self.load_fakts_task = QtRunner(self.fakts.aload)
         self.load_fakts_task.errored.connect(
             lambda x: self.greet_label.setText(repr(x))
         )
@@ -45,9 +49,13 @@ class FaktualBeacon(QtWidgets.QWidget):
 class FaktualYaml(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.koil = QtKoil()
-        self.fakts = Fakts(grants=[QtYamlGrant()], force_refresh=True)
-        self.load_fakts_task = QtTask(self.fakts.aload)
+        self.koil = QtKoil(parent=self)
+        self.koil.connect()
+
+        self.fakts = Fakts(
+            grants=[QtYamlGrant(widget=WrappingWidget(parent=self))], force_refresh=True
+        )
+        self.load_fakts_task = QtRunner(self.fakts.aload)
         self.load_fakts_task.errored.connect(
             lambda x: self.greet_label.setText(repr(x))
         )

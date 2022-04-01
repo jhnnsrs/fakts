@@ -36,7 +36,7 @@ class WrappingWidget(QtWidgets.QWidget):
 
 
 class QtYamlGrant(FaktsGrant):
-    widget: WrappingWidget = Field(default_factory=WrappingWidget)
+    widget: WrappingWidget = Field(exclude=True)
 
     async def aload(self, previous={}, **kwargs):
         filepath = await self.widget.get_file_coro.acall()
