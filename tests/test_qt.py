@@ -1,5 +1,6 @@
 from koil import Koil
 from PyQt5 import QtWidgets, QtCore
+import pytest
 from fakts.beacon.beacon import EndpointBeacon, FaktsEndpoint
 from fakts.beacon.retriever import FaktsRetriever
 from fakts.fakts import Fakts
@@ -85,6 +86,7 @@ async def mock_aretrieve(self, *args, **kwargs):
     }
 
 
+@pytest.mark.qt
 def test_faktual_beacon(qtbot, monkeypatch):
     """Tests if just adding koil interferes with normal
     qtpy widgets.
@@ -117,6 +119,7 @@ def test_faktual_beacon(qtbot, monkeypatch):
     assert isinstance(b.args[0], dict), "Needs to be dict"
 
 
+@pytest.mark.qt
 def test_faktual_yaml(qtbot, monkeypatch):
     """Tests if just adding koil interferes with normal
     qtpy widgets.

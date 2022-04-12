@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.2.1"
+version = "0.2.2"
 description = "asynchronous configuration protocol for dynamic client-server relations"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -12,7 +12,7 @@ python = "^3.7"
 pydantic = "^1.8.2"
 PyYAML = ">= 5.2"
 QtPy = "^2.0.1"
-koil = "^0.2.1"
+koil = "^0.2.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
@@ -22,9 +22,15 @@ black = "^21.12b0"
 pytest-cov = "^3.0.0"
 pytest-qt = "^4.0.2"
 PyQt5 = "^5.15.6"
+testcontainers = "^3.5.3"
 
 [tool.pytest.ini_options]
 qt_api="pyqt5"
+markers = [
+    "integration: marks tests that require a running server",
+    "qt: marks tests that require a running qt application",
+]
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
