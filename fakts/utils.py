@@ -1,5 +1,6 @@
 import collections.abc
 
+
 def update_nested(d, u):
     for k, v in u.items():
         if isinstance(v, collections.abc.Mapping):

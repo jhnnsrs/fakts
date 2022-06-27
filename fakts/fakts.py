@@ -1,35 +1,37 @@
 import asyncio
 import contextvars
-from typing import Any, Dict, List, Optional, Set, Type
+import logging
+import os
+import sys
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Type
 
-from pydantic import BaseModel, Field
+import yaml
+from fakts.fakt.base import Fakt
+from koil import koil
+from koil.composition import KoiledModel
+from koil.decorators import koilable
+from koil.helpers import unkoil
+from pydantic import BaseModel, Field, root_validator
+
 from fakts.errors import (
+    FaktsError,
     GroupsNotFound,
     NoGrantConfigured,
     NoGrantSucessfull,
 )
-from fakts.middleware.base import FaktsMiddleware
-from fakts.utils import update_nested
-from koil import koil
-import yaml
 from fakts.grants.base import FaktsGrant
-import os
-from fakts.grants.yaml import YamlGrant
+from fakts.grants.io.yaml import YamlGrant
+from fakts.grants.remote.device_code import DeviceCodeGrant
+from fakts.middleware.base import FaktsMiddleware
 from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
-import logging
-import sys
-from pydantic import root_validator
-from koil.composition import KoiledModel
-from koil.decorators import koilable
-from koil.helpers import unkoil
+from fakts.utils import update_nested
 
 logger = logging.getLogger(__name__)
 current_fakts = contextvars.ContextVar("current_fakts")
 
 
 class Fakts(KoiledModel):
-    grants: List[FaktsGrant] = Field(default_factory=list)
-    middlewares: List[FaktsMiddleware] = Field(default_factory=list)
+    grant: FaktsGrant = Field(default_factory=DeviceCodeGrant)
     hard_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
     assert_groups: Set[str] = Field(default_factory=set)
     loaded_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
@@ -37,7 +39,8 @@ class Fakts(KoiledModel):
     fakts_path: str = "fakts.yaml"
     force_refresh: bool = False
 
-    load_on_enter: bool = True
+    auto_load: bool = True
+    load_on_enter: bool = False
     """Should we load on connect?"""
     delete_on_exit: bool = False
     """Should we delete on connect?"""
@@ -62,14 +65,19 @@ class Fakts(KoiledModel):
         except:
             logger.info("Could not load fakts from file")
 
-        if not values["loaded_fakts"] and not values["grants"]:
+        if not values["loaded_fakts"] and not values["grant"]:
             raise ValueError(
-                f"No grants configured and we did not find fakts at path {values['fakts_path']}. Please make sure you configure fakts correctly."
+                f"No grant configured and we did not find fakts at path {values['fakts_path']}. Please make sure you configure fakts correctly."
             )
 
         return values
 
-    async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
+    async def aget(
+        self,
+        group_name: str,
+        bypass_middleware=False,
+        auto_load=False,
+    ):
         """Get Config
 
         Gets the currently active configuration for the group_name. This is a loop
@@ -89,70 +97,69 @@ class Fakts(KoiledModel):
         Returns:
             dict: The active fakts
         """
-
         assert (
-            self._loaded
-        ), "Fakts not loaded, please load first. (By entering the fakts context)"
+            self._lock is not None
+        ), "You need to enter the context first before calling this function"
+        async with self._lock:
+            print(self._loaded)
+            if not self._loaded:
+                if not self.auto_load and not auto_load:
+                    raise FaktsError(
+                        "Fakts not loaded, please load first. Or set auto_load to True"
+                    )
+                await self.aload()
 
+        return self._getsubgroup(group_name)
+
+    def _getsubgroup(self, group_name):
         config = {**self.loaded_fakts}
-
-        if not bypass_middleware:
-            for middleware in self.middlewares:
-                additional_config = await middleware.aparse(previous=config)
-                config = update_nested(config, additional_config)
 
         for subgroup in group_name.split("."):
             try:
                 config = config[subgroup]
             except KeyError as e:
                 logger.error(f"Could't find {subgroup} in {config}")
-                config = {}
+                return {}
 
         return config
 
+    def has_changed(self, fakt_dict: Dict[str, Any], group: str):
+        return (
+            not fakt_dict or self._getsubgroup(group) != fakt_dict
+        )  # TODO: Implement Hashing on config?
+
     async def arefresh(self):
-        await self.aload()
+        self._loaded = False
+        await self.aload(force_refresh=True)
 
     def get(self, *args, **kwargs):
         return unkoil(self.aget, *args, **kwargs)
 
     @property
     def healthy(self):
-        return (
-            self.assert_groups.issubset(set(self.loaded_fakts.keys()))
-            and self.loaded_fakts
-        )
+        if not self.loaded_fakts:
+            return False
+        if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
+            return False
+        return True
 
-    async def aload(self) -> Dict[str, Any]:
-        if not self.force_refresh:
+    @property
+    def initial_healty(self):
+        return (not self.force_refresh) and self.healthy
+
+    async def aload(self, force_refresh=False) -> Dict[str, Any]:
+        if not self.force_refresh and not force_refresh:
             if self.healthy:
                 self._loaded = True
                 return self.loaded_fakts
 
-        if len(self.grants) == 0:
-            raise NoGrantConfigured(
-                "Local fakts were insufficient and fakts has no grants configured. Please add a grant to your fakts instance or initialize your fakts instance with a Grant"
-            )
-
         grant_exceptions = {}
-        for grant in self.grants:
-            try:
-                additional_fakts = await grant.aload(previous=self.loaded_fakts)
-                self.loaded_fakts = update_nested(self.loaded_fakts, additional_fakts)
-            except Exception as e:
-                grant_exceptions[grant.__class__.__name__] = e
-
+        print("We are doing this")
+        self.loaded_fakts = await self.grant.aload()
+        print("We are reaching this?")
         if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
-
-            error_description = (
-                f"This might be due to following exceptions in grants {grant_exceptions}"
-                if grant_exceptions
-                else "All Grants were sucessful. But none retrieved these keys!"
-            )
-
             raise GroupsNotFound(
                 f"Could not find {self.assert_groups - set(self.loaded_fakts.keys())}. "
-                + error_description
             )
 
         if not self.loaded_fakts:
@@ -167,6 +174,7 @@ class Fakts(KoiledModel):
 
     async def adelete(self):
         self.loaded_fakts = {}
+        self._loaded = False
 
         if self.fakts_path:
             os.remove(self.fakts_path)
@@ -179,6 +187,7 @@ class Fakts(KoiledModel):
 
     async def __aenter__(self):
         current_fakts.set(self)
+        self._lock = asyncio.Lock()
         if self.load_on_enter:
             await self.aload()
         return self
@@ -194,3 +203,7 @@ class Fakts(KoiledModel):
         json_encoders = {
             FaktsGrant: lambda x: f"Fakts Grant {x.__class__.__name__}",
         }
+
+
+def get_current_fakts() -> Fakts:
+    return current_fakts.get()

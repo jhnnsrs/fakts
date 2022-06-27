@@ -1,2 +1,1 @@
-from .beacon import BeaconGrant
-from .yaml import YamlGrant
+from .io.yaml import YamlGrant

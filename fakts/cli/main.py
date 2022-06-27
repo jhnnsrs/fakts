@@ -2,7 +2,8 @@ import asyncio
 from typing import List
 
 from rich import get_console
-from fakts.beacon import EndpointBeacon, FaktsEndpoint
+from fakts.beacon import EndpointBeacon
+from fakts.discovery.endpoint import FaktsEndpoint
 from rich.prompt import Prompt
 import argparse
 import netifaces
@@ -10,8 +11,9 @@ import netifaces
 from fakts.beacon.beacon import Binding
 
 
-def retrieve_bindings():
+def retrieve_bindings() -> List[Binding]:
     potential_bindings: List[Binding] = []
+
     for interface in netifaces.interfaces():
         addrs = netifaces.ifaddresses(interface)
         if netifaces.AF_INET in addrs:
@@ -38,7 +40,7 @@ def main(name=None, url=None):
     if not url:
         url = Prompt.ask(
             "Which Setup Uri do you want to advertise?",
-            default="http://localhost:3000/setupapp",
+            default="http://localhost:8000/f/",
         )
 
     get_console().print("Which Interface should be used for broadcasting?")
@@ -55,7 +57,7 @@ def main(name=None, url=None):
     )
 
     with EndpointBeacon(
-        advertised_endpoints=[FaktsEndpoint(url=url, name=name)],
+        advertised_endpoints=[FaktsEndpoint(base_url=url, name=name)],
         binding=bindings[int(bind_index)],
     ) as beacon:
         beacon.run()
