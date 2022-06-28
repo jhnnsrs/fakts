@@ -1,20 +1,15 @@
-from ast import Pass
 from typing import List, Optional
 from pydantic import BaseModel
 from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, getaddrinfo
 import asyncio
 import json
+from fakts.discovery.endpoint import FaktsEndpoint
 from koil import unkoil, koilable, Koil
 from koil.composition import KoiledModel
 import logging
 
 
 logger = logging.getLogger(__name__)
-
-
-class FaktsEndpoint(BaseModel):
-    url: str = "http://localhost:3000/setupapp"
-    name: str = "default"
 
 
 class BeaconProtocol(asyncio.DatagramProtocol):
@@ -66,4 +61,4 @@ class EndpointBeacon(KoiledModel):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        Pass
+        pass

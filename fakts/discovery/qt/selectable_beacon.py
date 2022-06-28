@@ -1,24 +1,16 @@
 from pydantic import Field
 from qtpy.QtCore import Signal
-from fakts.grants.beacon import BeaconGrant
-from fakts.beacon.beacon import FaktsEndpoint
+from fakts.discovery.advertised import AdvertisedDiscovery
+from fakts.discovery.base import Discovery
+from fakts.discovery.endpoint import FaktsEndpoint
 from fakts.grants.base import GrantException
 from qtpy import QtWidgets
 import asyncio
 import logging
 from koil.qt import QtCoro, QtFuture
 
+
 logger = logging.getLogger(__name__)
-
-
-class RetrieveDialog(QtWidgets.QDialog):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.setWindowTitle("Check your Broswer")
-        self.button = QtWidgets.QPushButton("Cancel")
-        self.layout = QtWidgets.QHBoxLayout()
-        self.layout.addWidget(self.button)
-        self.setLayout(self.layout)
 
 
 class SelfScanWidget(QtWidgets.QWidget):
@@ -42,20 +34,14 @@ class SelfScanWidget(QtWidgets.QWidget):
         self.user_endpoint.emit(endpoint)
 
 
-class UserCancelledException(GrantException):
-    pass
-
-
-class SelectBeaconWidget(QtWidgets.QWidget):
+class SelectBeaconWidget(QtWidgets.QDialog):
     new_endpoint = Signal(FaktsEndpoint)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
-
-        self.retrieve_dialog = RetrieveDialog(parent=self)
-
-        self.show_coro = QtCoro(lambda f: self.show(), autoresolve=True)
+        print("Initialied")
+        self.show_coro = QtCoro(self.show_me)
         self.hide_coro = QtCoro(lambda f: self.hide(), autoresolve=True)
 
         self.select_endpoint = QtCoro(self.demand_selection_of_endpoint)
@@ -79,7 +65,14 @@ class SelectBeaconWidget(QtWidgets.QWidget):
         self.layout.addWidget(self.buttonBox)
         self.setLayout(self.layout)
 
+    def show_me(self, f: QtFuture):
+        print("Being Called")
+        self.show()
+        print("We are being shown")
+        f.resolve()
+
     def demand_selection_of_endpoint(self, future: QtFuture):
+        print("Demanding future?")
         self.select_endpoint_future = future
 
     def on_endpoint_clicked(self, item):
@@ -108,24 +101,23 @@ class SelectBeaconWidget(QtWidgets.QWidget):
         self.endpoints.append(config)
 
         for endpoint in self.endpoints:
-            self.listWidget.addItem(f"{endpoint.name} at {endpoint.url}")
+            self.listWidget.addItem(f"{endpoint.name} at {endpoint.base_url}")
 
         self.listWidget.itemClicked.connect(self.on_endpoint_clicked)
 
 
-class QtSelectableBeaconGrant(BeaconGrant):
-    widget: SelectBeaconWidget = Field(exclude=True)
+class QtSelectableDiscovery(AdvertisedDiscovery):
+    widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget, exclude=True)
 
     async def emit_endpoints(self):
         try:
-            async for endpoint in self.discovery_protocol.ascan_gen():
+            async for endpoint in self.ascan_gen():
                 self.widget.new_endpoint.emit(endpoint)
         except Exception as e:
             print(e)
 
-    async def aload(self, previous={}, **kwargs):
-        loop = asyncio.get_event_loop()
-        emitting_task = loop.create_task(self.emit_endpoints())
+    async def discover(self):
+        emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
 
             await self.widget.show_coro.acall()
@@ -133,12 +125,8 @@ class QtSelectableBeaconGrant(BeaconGrant):
             try:
                 print("Running this here?")
                 endpoint = await self.widget.select_endpoint.acall()
-                print("Received Here")
-                konfik = await self.retriever_protocol.aretrieve(
-                    endpoint, previous=previous
-                )
-
                 await self.widget.hide_coro.acall()
+                print("Returning here")
 
             finally:
                 emitting_task.cancel()
@@ -150,7 +138,7 @@ class QtSelectableBeaconGrant(BeaconGrant):
             logger.exception(e)
             raise e
 
-        return konfik
+        return endpoint
 
     class Config:
         arbitrary_types_allowed = True

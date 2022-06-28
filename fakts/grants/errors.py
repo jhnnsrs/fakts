@@ -1,0 +1,2 @@
+class GrantException(Exception):
+    pass
