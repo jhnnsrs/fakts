@@ -77,6 +77,7 @@ class Fakts(KoiledModel):
         group_name: str,
         bypass_middleware=False,
         auto_load=False,
+        validate: BaseModel = None,
     ):
         """Get Config
 
@@ -109,7 +110,15 @@ class Fakts(KoiledModel):
                     )
                 await self.aload()
 
-        return self._getsubgroup(group_name)
+        config = self._getsubgroup(group_name)
+        try:
+            if validate:
+                config = validate(config)
+        except Exception as e:
+            logger.error(f"Could not validate config: {e}")
+            raise e
+
+        return config
 
     def _getsubgroup(self, group_name):
         config = {**self.loaded_fakts}
