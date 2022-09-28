@@ -1,5 +1,4 @@
 from pydantic import Field
-from fakts.beacon.beacon import FaktsEndpoint
 from fakts.grants.base import FaktsGrant, GrantException
 from fakts.beacon import EndpointDiscovery, FaktsRetriever
 

@@ -1,10 +1,10 @@
 from typing import List, Optional
 from pydantic import BaseModel
-from socket import socket, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, getaddrinfo
+from socket import AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, socket
 import asyncio
 import json
 from fakts.discovery.endpoint import FaktsEndpoint
-from koil import unkoil, koilable, Koil
+from koil import Koil, unkoil
 from koil.composition import KoiledModel
 import logging
 

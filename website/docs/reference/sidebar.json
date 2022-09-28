@@ -1,0 +1,115 @@
+{
+  "items": [
+    {
+      "items": [
+        "reference/__init__/__init__"
+      ],
+      "label": "__init__",
+      "type": "category"
+    },
+    {
+      "items": [
+        "reference/beacon/__init__",
+        "reference/beacon/beacon"
+      ],
+      "label": "beacon",
+      "type": "category"
+    },
+    {
+      "items": [
+        {
+          "items": [
+            "reference/discovery/qt/__init__",
+            "reference/discovery/qt/selectable_beacon"
+          ],
+          "label": "discovery.qt",
+          "type": "category"
+        },
+        "reference/discovery/__init__",
+        "reference/discovery/advertised",
+        "reference/discovery/base",
+        "reference/discovery/endpoint",
+        "reference/discovery/static"
+      ],
+      "label": "discovery",
+      "type": "category"
+    },
+    {
+      "items": [
+        "reference/fakt/__init__",
+        "reference/fakt/base"
+      ],
+      "label": "fakt",
+      "type": "category"
+    },
+    {
+      "items": [
+        {
+          "items": [
+            "reference/grants/cli/__init__",
+            "reference/grants/cli/clibeacon"
+          ],
+          "label": "grants.cli",
+          "type": "category"
+        },
+        {
+          "items": [
+            "reference/grants/env/__init__",
+            "reference/grants/env/overwritten",
+            "reference/grants/env/vanilla"
+          ],
+          "label": "grants.env",
+          "type": "category"
+        },
+        {
+          "items": [
+            "reference/grants/io/__init__",
+            "reference/grants/io/yaml"
+          ],
+          "label": "grants.io",
+          "type": "category"
+        },
+        {
+          "items": [
+            "reference/grants/meta/__init__",
+            "reference/grants/meta/failsafe",
+            "reference/grants/meta/parallel"
+          ],
+          "label": "grants.meta",
+          "type": "category"
+        },
+        {
+          "items": [
+            "reference/grants/remote/__init__",
+            "reference/grants/remote/base",
+            "reference/grants/remote/claim",
+            "reference/grants/remote/device_code",
+            "reference/grants/remote/errors",
+            "reference/grants/remote/public_redirect_grant",
+            "reference/grants/remote/redirect_grant"
+          ],
+          "label": "grants.remote",
+          "type": "category"
+        },
+        "reference/grants/__init__",
+        "reference/grants/base",
+        "reference/grants/errors"
+      ],
+      "label": "grants",
+      "type": "category"
+    },
+    {
+      "items": [
+        "reference/middleware/__init__",
+        "reference/middleware/base"
+      ],
+      "label": "middleware",
+      "type": "category"
+    },
+    "reference/errors",
+    "reference/fakts",
+    "reference/utils"
+  ],
+  "label": "Reference",
+  "type": "category"
+}

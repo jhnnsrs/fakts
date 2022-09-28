@@ -1,9 +1,8 @@
-from .fakts import Fakts
-from .fakt import Fakt
-from .grants import YamlGrant
+from .fakts import Fakts, FaktsGrant
+
 
 __all__ = [
     "Fakts",
-    "Config",
-    "YamlGrant",
+    "Fakt",
+    "FaktsGrant",
 ]

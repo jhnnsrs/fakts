@@ -1,4 +1,3 @@
-import asyncio
 from typing import List
 
 from rich import get_console

@@ -1,10 +1,10 @@
 import asyncio
+from http import HTTPStatus
 from urllib.parse import urlencode
 import uuid
 import webbrowser
-from pydantic import Field
-import requests
 from fakts.grants.remote.base import RemoteGrant
+import aiohttp
 
 
 class DeviceCodeGrant(RemoteGrant):
@@ -40,21 +40,43 @@ class DeviceCodeGrant(RemoteGrant):
             print("Make sure to select the following scopes")
             print("\t" + "\n\t".join(self.scopes))
 
-        while True:
-            answer = requests.post(
-                f"{endpoint.base_url}challenge/", json={"code": code}
-            )
-            if answer.status_code == 200:
-                nana = answer.json()
-                if nana["status"] == "waiting":
-                    await asyncio.sleep(1)
-                    continue
+        async with aiohttp.ClientSession() as session:
+            while True:
+                async with session.post(
+                    f"{endpoint.base_url}challenge/", json={"code": code}
+                ) as response:
 
-                if nana["status"] == "pending":
-                    await asyncio.sleep(1)
-                    continue
+                    if response.status == HTTPStatus.OK:
+                        result = await response.json()
+                        if result["status"] == "waiting":
+                            await asyncio.sleep(1)
+                            continue
 
-                if nana["status"] == "granted":
-                    return nana["config"]
-            else:
-                raise Exception("Error! Could not retrieve code")
+                        if result["status"] == "pending":
+                            await asyncio.sleep(1)
+                            continue
+
+                        if result["status"] == "granted":
+                            return result["config"]
+
+                    else:
+                        raise Exception("Error! Could not retrieve code")
+
+        # while True:
+        #     answer = requests.post(
+        #         f"{endpoint.base_url}challenge/", json={"code": code}
+        #     )
+        #     if answer.status_code == 200:
+        #         nana = answer.json()
+        #         if nana["status"] == "waiting":
+        #             await asyncio.sleep(1)
+        #             continue
+
+        #         if nana["status"] == "pending":
+        #             await asyncio.sleep(1)
+        #             continue
+
+        #         if nana["status"] == "granted":
+        #             return nana["config"]
+        #     else:
+        #         raise Exception("Error! Could not retrieve code")

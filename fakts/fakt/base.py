@@ -1,6 +1,5 @@
 from typing import Type, TypeVar
 from pydantic import BaseSettings
-from pydantic.error_wrappers import ValidationError
 
 
 Class = TypeVar("Class")

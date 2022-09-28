@@ -2,18 +2,13 @@ import asyncio
 from urllib.parse import urlencode
 import uuid
 import webbrowser
-from pydantic import Field
-from fakts.beacon.beacon import FaktsEndpoint
-from fakts.grants.base import FaktsGrant, GrantException
-from fakts.beacon.beacon import FaktsEndpoint
+from fakts.grants.base import GrantException
 import webbrowser
 import asyncio
 import uuid
 from aiohttp import web
-from urllib.parse import quote, urlencode, parse_qs
+from urllib.parse import parse_qs, urlencode
 from fakts.grants.remote.base import RemoteGrant
-from koil import unkoil
-from koil.composition import KoiledModel
 import json
 import logging
 
@@ -35,7 +30,6 @@ def wrapped_redirect_future(future: asyncio.Future, state: str):
         result = parse_qs(request.query_string)
         qs_state = result["state"][0]
         config = json.loads(result["config"][0])
-        print(config)
 
         if qs_state != state:
             loop.call_soon_threadsafe(
@@ -100,8 +94,6 @@ class PublicRedirectGrant(RemoteGrant):
             timeout=self.timeout,
             return_when=asyncio.FIRST_COMPLETED,
         )
-
-        print(done, pending)
 
         for tf in done:
             if tf == token_future:

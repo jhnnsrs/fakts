@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.2.5"
+version = "0.2.8"
 description = "asynchronous configuration protocol for dynamic client-server relations"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -18,11 +18,13 @@ koil = "^0.2.6"
 pytest = "^6.2.5"
 pytest-aiohttp = "^0.3.0"
 tox = "^3.24.5"
-black = "^21.12b0"
 pytest-cov = "^3.0.0"
 pytest-qt = "^4.0.2"
 PyQt5 = "^5.15.6"
 testcontainers = "^3.5.3"
+black = "^22.8.0"
+autoflake = "^1.6.1"
+pydoc-markdown = "4.5.1"
 
 [tool.pytest.ini_options]
 qt_api="pyqt5"
@@ -30,6 +32,15 @@ markers = [
     "integration: marks tests that require a running server",
     "qt: marks tests that require a running qt application",
 ]
+
+
+[[tool.pydoc-markdown.loaders]]
+type = "python"
+search_path = [ "fakts" ]
+
+[tool.pydoc-markdown.renderer]
+type = "docusaurus"
+docs_base_path = "website/docs"
 
 
 [build-system]

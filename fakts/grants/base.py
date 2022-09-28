@@ -1,8 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from fakts.beacon.beacon import FaktsEndpoint
-from fakts.discovery.base import Discovery
-from fakts.discovery.static import StaticDiscovery
-from koil import koil
 from koil.helpers import unkoil
 
 

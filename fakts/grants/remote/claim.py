@@ -1,11 +1,5 @@
-import asyncio
 from typing import Optional
-from urllib.parse import urlencode
-import uuid
-import webbrowser
 import aiohttp
-from pydantic import Field
-import requests
 from fakts.grants.remote.base import RemoteGrant
 from fakts.grants.remote.errors import ClaimGrantException
 
@@ -19,7 +13,6 @@ class ClaimGrant(RemoteGrant):
     async def aload(self):
 
         endpoint = await self.discovery.discover()
-        print(f"Happening Here? {endpoint}")
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -32,7 +25,6 @@ class ClaimGrant(RemoteGrant):
                     "scopes": self.scopes,
                 },
             ) as resp:
-                print("Dong Something")
                 data = await resp.json()
 
                 if resp.status == 200:

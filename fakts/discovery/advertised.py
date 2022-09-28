@@ -2,15 +2,13 @@ from asyncio.log import logger
 from socket import socket
 from fakts.discovery.base import Discovery
 from fakts.discovery.endpoint import FaktsEndpoint
-from abc import abstractmethod
 from typing import Dict
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from socket import socket, AF_INET, SOCK_DGRAM
 import asyncio
 import json
 from koil import unkoil
-import logging
 
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):

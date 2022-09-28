@@ -7,7 +7,6 @@ from fakts.grants.io.qt.yaml import QtYamlGrant, WrappingWidget, QtSelectYaml
 from fakts.grants.remote.qt.selectable import QtSelectableDiscovery
 from fakts.grants.remote.qt.base import RemoteQtGrant
 from fakts.discovery.qt.selectable_beacon import SelectBeaconWidget
-from koil import Koil
 from koil.qt import QtKoil, QtRunner
 from PyQt5 import QtCore, QtWidgets
 

@@ -1,9 +1,7 @@
 from pydantic import Field
 from qtpy.QtCore import Signal
 from fakts.discovery.advertised import AdvertisedDiscovery
-from fakts.discovery.base import Discovery
 from fakts.discovery.endpoint import FaktsEndpoint
-from fakts.grants.base import GrantException
 from qtpy import QtWidgets
 import asyncio
 import logging
@@ -40,7 +38,6 @@ class SelectBeaconWidget(QtWidgets.QDialog):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
-        print("Initialied")
         self.show_coro = QtCoro(self.show_me)
         self.hide_coro = QtCoro(lambda f: self.hide(), autoresolve=True)
 
@@ -66,13 +63,10 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.setLayout(self.layout)
 
     def show_me(self, f: QtFuture):
-        print("Being Called")
         self.show()
-        print("We are being shown")
         f.resolve()
 
     def demand_selection_of_endpoint(self, future: QtFuture):
-        print("Demanding future?")
         self.select_endpoint_future = future
 
     def on_endpoint_clicked(self, item):
@@ -114,19 +108,17 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
             async for endpoint in self.ascan_gen():
                 self.widget.new_endpoint.emit(endpoint)
         except Exception as e:
-            print(e)
+            logger.exception(e)
+            raise e
 
     async def discover(self):
         emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
 
             await self.widget.show_coro.acall()
-            print("Called here")
             try:
-                print("Running this here?")
                 endpoint = await self.widget.select_endpoint.acall()
                 await self.widget.hide_coro.acall()
-                print("Returning here")
 
             finally:
                 emitting_task.cancel()

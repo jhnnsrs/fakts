@@ -1,9 +1,6 @@
 from typing import List
 from fakts.grants.base import FaktsGrant, GrantException
-import asyncio
-from functools import reduce
 import logging
-from fakts.utils import update_nested
 
 logger = logging.getLogger(__name__)
 
