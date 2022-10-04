@@ -1,7 +1,7 @@
 from typing import List
 
 from rich import get_console
-from fakts.beacon import EndpointBeacon
+from fakts.beacon.beacon import EndpointBeacon
 from fakts.discovery.endpoint import FaktsEndpoint
 from rich.prompt import Prompt
 import argparse

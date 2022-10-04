@@ -1,4 +1,3 @@
-from asyncio.log import logger
 from socket import socket
 from fakts.discovery.base import Discovery
 from fakts.discovery.endpoint import FaktsEndpoint
@@ -9,6 +8,9 @@ from socket import socket, AF_INET, SOCK_DGRAM
 import asyncio
 import json
 from koil import unkoil
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):
@@ -54,7 +56,6 @@ class AdvertisedDiscovery(Discovery):
                     try:
                         endpoint = json.loads(endpoint)
                         endpoint = FaktsEndpoint(**endpoint)
-                        await self.handle_new_potential_endpoint(endpoint)
                         if name_filter and endpoint.name != name_filter:
                             continue
                         return endpoint
