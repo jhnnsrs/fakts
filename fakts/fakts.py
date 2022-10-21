@@ -94,7 +94,6 @@ class Fakts(KoiledModel):
             self._lock is not None
         ), "You need to enter the context first before calling this function"
         async with self._lock:
-            print(self._loaded)
             if not self._loaded:
                 if not self.auto_load and not auto_load:
                     raise FaktsError(
@@ -155,9 +154,7 @@ class Fakts(KoiledModel):
                 return self.loaded_fakts
 
         grant_exceptions = {}
-        print("We are doing this")
         self.loaded_fakts = await self.grant.aload()
-        print("We are reaching this?")
         if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
             raise GroupsNotFound(
                 f"Could not find {self.assert_groups - set(self.loaded_fakts.keys())}. "

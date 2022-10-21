@@ -36,12 +36,6 @@ def main(name=None, url=None):
             "How do you want this beacon to be advertisted as?", default="Arkitekt"
         )
 
-    if not url:
-        url = Prompt.ask(
-            "Which Setup Uri do you want to advertise?",
-            default="http://localhost:8000/f/",
-        )
-
     get_console().print("Which Interface should be used for broadcasting?")
     bindings = retrieve_bindings()
     for i, binding in enumerate(bindings):
@@ -54,6 +48,12 @@ def main(name=None, url=None):
         default=1,
         choices=[str(i) for i in range(len(bindings))],
     )
+
+    if not url:
+        url = Prompt.ask(
+            "Which Setup Uri do you want to advertise?",
+            default=f"http://{bindings[int(bind_index)].bind_addr}:8000/f/",
+        )
 
     with EndpointBeacon(
         advertised_endpoints=[FaktsEndpoint(base_url=url, name=name)],
