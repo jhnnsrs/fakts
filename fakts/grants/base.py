@@ -8,7 +8,7 @@ class GrantException(Exception):
 
 
 class FaktsGrant(BaseModel):
-    async def aload(self, endpoint: FaktsEndpoint):
+    async def aload(self):
         raise NotImplementedError("Fakts need to implement this function")
 
     def load(self):

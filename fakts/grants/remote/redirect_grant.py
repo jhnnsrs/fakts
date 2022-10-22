@@ -48,7 +48,7 @@ class RedirectGrant(RemoteGrant):
     redirect_port = 6767
     redirect_path = "/"
 
-    async def aload(self, previous={}, **kwargs):
+    async def aload(self):
 
         endpoint = await self.discovery.discover()
 

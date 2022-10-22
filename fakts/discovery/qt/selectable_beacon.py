@@ -27,8 +27,7 @@ class SelfScanWidget(QtWidgets.QWidget):
 
     def on_add(self):
         host = self.lineEdit.text()
-        url = f"http://{host}/setupapp"
-        endpoint = FaktsEndpoint(url=url, name="Self Added")
+        endpoint = FaktsEndpoint(base_url=host, name="Self Added")
         self.user_endpoint.emit(endpoint)
 
 
@@ -51,6 +50,7 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.listWidget = QtWidgets.QListWidget()
 
         self.scanWidget = SelfScanWidget()
+        self.scanWidget.user_endpoint.connect(self.on_new_endpoint)
 
         QBtn = QtWidgets.QDialogButtonBox.Cancel
         self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
