@@ -12,57 +12,69 @@
 
 ## Inspiration
 
-Fakts tries to make the setup process between client - dynamic server relations as easy as possible.
+Fakts was designed to make configuration of apps compatible with concurrency pattern, it is designed to allow
+for asynchronous retrieval of configuration from various sources, may it be a config file, environmental variables
+or a remote server.
 
-## Client - Dynamic Server
+# Core Design
 
-In this relation the configuration of the server is unbeknownst to the client, that means which network
-address it can connect to retrieve its initial configuration. As both client and server need to trust
-each other this is a complex scenario to secure. Therefore fakts provided different grants to ensure different
-levels of security.
+Fakts uses Grants to obtain configuration asynchronously, a grant is a way of retrieving the configuration from a
+specific source. It can be a local config file (eg. yaml, toml, json), environemnt variables, a remote configuration (eg. from a fakts server), a database.
+The fakts class then wraps the grant to ensure both a sychronous and asychronous interface that is threadsafe.
 
-## Simple grant
+Grants are designed to be composable through MetaGrants so by desigining a specifc grant structure, one can
+highly customize the retrieval logic. Please check out the
 
-In the fakts grants, fakts simply advertises itself on the network through UDP broadcasts and sends standardized configuration
-to the client. In this scenario no specific configuration on a per app basis is possible, as every client that chooses to connect to the
-server will receive the same configuration.
+# Example:
 
-### Server
-
-```bash
-fakts serve fakts.yaml
+```python
+async with Fakts(grant=YamlGrant("config.yaml")) as fakts:
+    config = await fakts.aget("group_name")
 ```
 
-### Client
+or
 
-```bash
-fakts init
+```python
+with Fakts(grant=YamlGrant("config.yaml")) as fakts:
+    config = fakts.get("group_name")
 ```
 
-This flow however can be secured by a password that needs to be entered, once the client wants to retrieve configuration.
+Fakts should be used as a context manager, and will set the current fakts context variable to itself, letting
+you access the current fakts instance from anywhere in your code (async or sync) without specifically passing a referece.
+To understand how the async sync code access work, please check out the documentation for koil.
 
-### Server
+# Composability
 
-```bash
-fakts serve fakts.yaml --password="*******"
+You can compose grants through meta grants in order to load configuration from multiple sources (eg. a local, file
+that can be overwritten by a remote configuration, or some envionment variables).
+
+Example:
+
+```python
+async with Fakts(grant=FailsafeGrant(
+    grants=[
+        EnvGrant(),
+        YamlGrant("config.yaml")
+    ]
+)) as fakts:
+    config = await fakts.get("group_name")
 ```
 
-## Advanced grant
+In this example fakts will load the configuration from the environment variables first, and if that fails,
+it will load it from the yaml file.
 
-In an oauth2 redirect like manner, fakts can also be used to advocate an endpoint that the app can then connect to in order to receive
-specialised configuration through a redirect back to the client.
+## Special Use Case: Dynamic Server Relations
 
-### Beacon
+Fakts provides the remote grant protocol for retrieval of configuration in dynamic client-server relationships.
+With these grants you provide a software manifest for a configuration server (fakts-server), that then grants
+the configuration (either through user approval (similar to device code grant)). These grants are mainly used
+to setup or claim an oauth2 application on the backend securely that then can be used to identify the application in the
+future. These grants are at the moment highly specific to the arkitekt platform and subject to change.
 
-```bash
-fakts beacon "http://localhost:3000/beacon"
-```
+# Sister packages
 
-### Client
+These packages provide contrib modules to support auto
+configuration through a fakts instance
 
-```bash
-fakts init --client="napari"
-```
-
-In this scenario the client will open a webbrowser with the query parameters set to the init params (in addition to a state to combat redirect attacks, and a redirect_uri) and
-wait for a redirect to its redirect_uri on localhost with the configuration in the query params
+- herre: oauth2 client
+- rath: graphql client (typed through turms)

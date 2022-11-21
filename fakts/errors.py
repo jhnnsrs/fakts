@@ -1,18 +1,13 @@
 class FaktsError(Exception):
-    pass
+    """Base class for all Fakts errors"""
+
 
 
 class NoFaktsFound(FaktsError):
-    pass
+    """Raised when no fakts instance is found in the current context"""
 
 
-class NoGrantConfigured(FaktsError):
-    pass
 
+class GroupNotFound(FaktsError):
+    """Raised when a group is not found in the configuration"""
 
-class GroupsNotFound(FaktsError):
-    pass
-
-
-class NoGrantSucessfull(FaktsError):
-    pass

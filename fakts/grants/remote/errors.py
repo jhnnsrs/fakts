@@ -1,9 +1,9 @@
-from fakts.grants.errors import GrantException
+from fakts.grants.errors import GrantError
 
 
-class RemoteGrantException(GrantException):
+class RemoteGrantError(GrantError):
     pass
 
 
-class ClaimGrantException(RemoteGrantException):
+class ClaimError(RemoteGrantError):
     pass

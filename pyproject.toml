@@ -1,18 +1,23 @@
 [tool.poetry]
 name = "fakts"
-version = "0.2.11"
-description = "asynchronous configuration protocol for dynamic client-server relations"
+version = "0.3.0"
+description = "asynchronous configuration provider ( tailored to support dynamic client-server relations)"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
 readme = "README.md"
-packages = [{include = "fakts"}]
+packages = [{ include = "fakts" }]
 
 [tool.poetry.dependencies]
 python = "^3.7"
-pydantic = "^1.8.2"
+pydantic = ">1.8.2"
 PyYAML = ">= 5.2"
 QtPy = "^2.0.1"
-koil = "^0.2.6"
+koil = "^0.2.8"
+aiohttp = { version = "^3.8.2", optional = true }
+certifi = { version = ">2021", optional = true }
+
+[tool.poetry.extras]
+remote = ["aiohttp", "certifi"]
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
@@ -26,17 +31,25 @@ black = "^22.8.0"
 autoflake = "^1.6.1"
 pydoc-markdown = "4.5.1"
 
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^0.991"
+rich = "^12.6.0"
+pyperclip = "^1.8.2"
+netifaces = "^0.11.0"
+
 [tool.pytest.ini_options]
-qt_api="pyqt5"
+qt_api = "pyqt5"
 markers = [
     "integration: marks tests that require a running server",
     "qt: marks tests that require a running qt application",
+    "network: marks tests that require a network connection",
 ]
 
 
 [[tool.pydoc-markdown.loaders]]
 type = "python"
-search_path = [ "fakts" ]
+search_path = ["fakts"]
 
 [tool.pydoc-markdown.renderer]
 type = "docusaurus"

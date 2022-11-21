@@ -1,7 +1,7 @@
 from pydantic import Field
 from qtpy.QtCore import Signal
 from fakts.discovery.advertised import AdvertisedDiscovery
-from fakts.discovery.endpoint import FaktsEndpoint
+from fakts.discovery.base import FaktsEndpoint
 from qtpy import QtWidgets
 import asyncio
 import logging
@@ -16,14 +16,14 @@ class SelfScanWidget(QtWidgets.QWidget):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.layout = QtWidgets.QHBoxLayout()
+        self.scanlayout = QtWidgets.QHBoxLayout()
         self.lineEdit = QtWidgets.QLineEdit()
         self.addButton = QtWidgets.QPushButton("Scan")
 
-        self.layout.addWidget(self.lineEdit)
-        self.layout.addWidget(self.addButton)
+        self.scanlayout.addWidget(self.lineEdit)
+        self.scanlayout.addWidget(self.addButton)
         self.addButton.clicked.connect(self.on_add)
-        self.setLayout(self.layout)
+        self.setLayout(self.scanlayout)
 
     def on_add(self):
         host = self.lineEdit.text()
@@ -56,11 +56,11 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
         self.buttonBox.rejected.connect(self.on_reject)
 
-        self.layout = QtWidgets.QVBoxLayout()
-        self.layout.addWidget(self.listWidget)
-        self.layout.addWidget(self.scanWidget)
-        self.layout.addWidget(self.buttonBox)
-        self.setLayout(self.layout)
+        self.wlayout = QtWidgets.QVBoxLayout()
+        self.wlayout.addWidget(self.listWidget)
+        self.wlayout.addWidget(self.scanWidget)
+        self.wlayout.addWidget(self.buttonBox)
+        self.setLayout(self.wlayout)
 
     def show_me(self, f: QtFuture):
         self.show()
@@ -105,13 +105,13 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
 
     async def emit_endpoints(self):
         try:
-            async for endpoint in self.ascan_gen():
+            async for endpoint in self.astream():
                 self.widget.new_endpoint.emit(endpoint)
         except Exception as e:
             logger.exception(e)
             raise e
 
-    async def discover(self):
+    async def aget(self):
         emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
 
@@ -126,11 +126,18 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                     await emitting_task
                 except asyncio.CancelledError as e:
                     logger.info("Cancelled the Discovery task")
+
+            return endpoint
         except Exception as e:
             logger.exception(e)
-            raise e
+            emitting_task.cancel()
 
-        return endpoint
+            try:
+                await emitting_task
+            except asyncio.CancelledError:
+                logger.info("Cancelled the Discovery task")
+
+            raise e
 
     class Config:
         arbitrary_types_allowed = True

@@ -1,36 +1,19 @@
-from typing import List
-
 from rich import get_console
-from fakts.beacon.beacon import EndpointBeacon
-from fakts.discovery.endpoint import FaktsEndpoint
+from fakts.discovery.beacon import retrieve_bindings, EndpointBeacon
+from fakts.discovery.base import FaktsEndpoint
 from rich.prompt import Prompt
 import argparse
-import netifaces
-
-from fakts.beacon.beacon import Binding
 
 
-def retrieve_bindings() -> List[Binding]:
-    potential_bindings: List[Binding] = []
-
-    for interface in netifaces.interfaces():
-        addrs = netifaces.ifaddresses(interface)
-        if netifaces.AF_INET in addrs:
-            informations = addrs[netifaces.AF_INET]
-            for i in informations:
-
-                if "broadcast" in i:
-                    potential_bindings.append(
-                        Binding(
-                            interface=interface,
-                            bind_addr=i["addr"],
-                            broadcast_addr=i["broadcast"],
-                        )
-                    )
-    return potential_bindings
+def main(name: str = None, url: str = None):
+    """Advertises the given endpoint on the interface specified by the user
 
 
-def main(name=None, url=None):
+    Args:
+        name (str, optional): The name of the faktsendpoint. Defaults to None (user can specify it)
+        url (str, optional): The url of the faktsendpont. Defaults to None (user can specify it)
+    """
+
     if not name:
         name = Prompt.ask(
             "How do you want this beacon to be advertisted as?", default="Arkitekt"

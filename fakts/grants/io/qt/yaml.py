@@ -1,11 +1,12 @@
 from pydantic import Field
-from fakts.grants.base import GrantException, FaktsGrant
+from fakts.grants.base import FaktsGrant
+from fakts.grants.errors import GrantError
 import yaml
 from koil.qt import QtCoro, QtFuture
 from qtpy import QtWidgets
 
 
-class NoFileSelected(GrantException):
+class NoFileSelected(GrantError):
     pass
 
 
@@ -36,9 +37,12 @@ class WrappingWidget(QtWidgets.QWidget):
 
 
 class QtYamlGrant(FaktsGrant):
+    """A grant that allows the user to select a yaml file.
+    on the Ui. The yaml file is then loaded and returned as a dict."""
+
     widget: WrappingWidget = Field(exclude=True)
 
-    async def aload(self):
+    async def aload(self, **kwargs):
         filepath = await self.widget.get_file_coro.acall()
         with open(filepath, "r") as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
