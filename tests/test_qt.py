@@ -1,13 +1,17 @@
-from koil import Koil
-from PyQt5 import QtWidgets, QtCore
-import pytest
-from fakts.beacon.beacon import EndpointBeacon, FaktsEndpoint
-from fakts.beacon.retriever import FaktsRetriever
-from fakts.fakts import Fakts
-from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant, SelectBeaconWidget
-from fakts.grants.qt.qtyamlgrant import QtSelectYaml, QtYamlGrant, WrappingWidget
-from koil.qt import QtKoil, QtRunner
 import os
+
+import pytest
+from fakts.discovery.base import FaktsEndpoint
+from fakts.fakts import Fakts
+from fakts.grants.io.qt.yaml import QtYamlGrant, WrappingWidget, QtSelectYaml
+from fakts.grants.remote import RetrieveGrant
+from fakts.discovery.qt.selectable_beacon import (
+    SelectBeaconWidget,
+    QtSelectableDiscovery,
+)
+import uuid
+from koil.qt import QtKoil, QtRunner
+from PyQt5 import QtCore, QtWidgets
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,11 +20,15 @@ class FaktualBeacon(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil(parent=self)
-        self.koil.connect()
+        self.koil.enter()
 
         self.fakts = Fakts(
-            grants=[QtSelectableBeaconGrant(widget=SelectBeaconWidget(parent=self))],
-            force_refresh=True,
+            grant=RetrieveGrant(
+                discovery=QtSelectableDiscovery(widget=SelectBeaconWidget(parent=self)),
+                redirect_uri="http://localhost:5000",
+                version="v1",
+                identifier="faktual",
+            ),
         )
 
         self.load_fakts_task = QtRunner(self.fakts.aload)
@@ -51,10 +59,10 @@ class FaktualYaml(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.koil = QtKoil(parent=self)
-        self.koil.connect()
+        self.koil.enter()
 
         self.fakts = Fakts(
-            grants=[QtYamlGrant(widget=WrappingWidget(parent=self))], force_refresh=True
+            grant=QtYamlGrant(widget=WrappingWidget(parent=self)),
         )
         self.load_fakts_task = QtRunner(self.fakts.aload)
         self.load_fakts_task.errored.connect(
@@ -80,10 +88,18 @@ class FaktualYaml(QtWidgets.QWidget):
         self.greet_label.setText("Loading...")
 
 
-async def mock_aretrieve(self, *args, **kwargs):
+async def mock_aclaim(self, *args, **kwargs):
     return {
         "hello": "world",
     }
+
+
+async def mock_ademand(self, *args, **kwargs):
+    """Mock ademenad
+
+    Returns a fake token for testing purposes"""
+    print("RUn")
+    return uuid.uuid4().hex
 
 
 @pytest.mark.qt
@@ -98,13 +114,21 @@ def test_faktual_beacon(qtbot, monkeypatch):
     monkeypatch.setattr(
         SelectBeaconWidget,
         "demand_selection_of_endpoint",
-        lambda self, f: f.resolve(FaktsEndpoint),
+        lambda self, f: f.resolve(
+            FaktsEndpoint(base_url="http://localhost:5000", name="v1")
+        ),
     )
 
     monkeypatch.setattr(
-        FaktsRetriever,
-        "aretrieve",
-        mock_aretrieve,
+        RetrieveGrant,
+        "ademand",
+        mock_ademand,
+    )
+
+    monkeypatch.setattr(
+        RetrieveGrant,
+        "aclaim",
+        mock_aclaim,
     )
 
     widget = FaktualBeacon()
@@ -131,7 +155,7 @@ def test_faktual_yaml(qtbot, monkeypatch):
     monkeypatch.setattr(
         QtSelectYaml,
         "ask",
-        classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/selectable_yaml.yaml"),
+        classmethod(lambda *args, **kwargs: f"{TESTS_FOLDER}/test.yaml"),
     )
 
     widget = FaktualYaml()

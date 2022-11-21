@@ -1,6 +1,5 @@
 from typing import List
 from fakts.grants.base import FaktsGrant
-from fakts.beacon import EndpointDiscovery, FaktsRetriever
 import asyncio
 from functools import reduce
 
@@ -8,10 +7,17 @@ from fakts.utils import update_nested
 
 
 class ParallelGrant(FaktsGrant):
-    parellized_grants: List[FaktsGrant]
+    """A grant that loads multiple grants in parallel and merges the results"""
 
-    async def aload(self, previous={}, **kwargs):
+    grants: List[FaktsGrant]
+    omit_exceptions = False
+    " Omit exceptions if any of the grants fail to load "
 
-        config_futures = [grant.aload(**kwargs) for grant in self.parellized_grants]
-        configs = await asyncio.gather(config_futures)
-        return reduce(lambda x, y: update_nested(x, y), configs, previous)
+    async def aload(self, **kwargs):
+        config_futures = [grant.aload(**kwargs) for grant in self.grants]
+        configs = await asyncio.gather(
+            config_futures, return_exceptions=self.omit_exceptions
+        )
+        return reduce(
+            lambda x, y: update_nested(x, y) if isinstance(y, dict) else x, configs, {}
+        )

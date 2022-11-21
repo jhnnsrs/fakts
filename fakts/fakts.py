@@ -1,43 +1,86 @@
 import asyncio
 import contextvars
-from typing import Any, Dict, List, Optional, Set, Type
-
-from pydantic import BaseModel, Field
-from fakts.errors import (
-    GroupsNotFound,
-    NoGrantConfigured,
-    NoGrantSucessfull,
-)
-from fakts.middleware.base import FaktsMiddleware
-from fakts.utils import update_nested
-from koil import koil
-import yaml
-from fakts.grants.base import FaktsGrant
-import os
-from fakts.grants.yaml import YamlGrant
-from fakts.middleware.environment.overwritten import OverwrittenEnvMiddleware
 import logging
-import sys
-from pydantic import root_validator
+from typing import Any, Dict, Set
+
 from koil.composition import KoiledModel
-from koil.decorators import koilable
 from koil.helpers import unkoil
+from pydantic import Field
+
+from fakts.errors import FaktsError, GroupNotFound
+from fakts.grants.base import FaktsGrant
 
 logger = logging.getLogger(__name__)
-current_fakts = contextvars.ContextVar("current_fakts")
+current_fakts: contextvars.ContextVar["Fakts"] = contextvars.ContextVar("current_fakts")
 
 
 class Fakts(KoiledModel):
-    grants: List[FaktsGrant] = Field(default_factory=list)
-    middlewares: List[FaktsMiddleware] = Field(default_factory=list)
-    hard_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
-    assert_groups: Set[str] = Field(default_factory=set)
-    loaded_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
-    subapp: str = ""
-    fakts_path: str = "fakts.yaml"
-    force_refresh: bool = False
+    """Fakts provides a way to concurrently load and access configuration from different sources in async
+    and sync environments.
 
-    load_on_enter: bool = True
+    It is used to load configuration from a grant, and to access it in async and sync code.
+
+    A grant constitutes the way to load configuration. It can be a local config file (eg. yaml, toml, json),
+    environemnt variables, a remote configuration (eg. from a fakts server), a database, or any other source.
+    It will be loaded either on a call to `load`, or on  a call to `get` (if auto_load is set to true).
+
+
+    Example:
+        ```python
+        async with Fakts(grant=YamlGrant("config.yaml")) as fakts:
+            config = await fakts.aget("group_name")
+        ```
+
+        or
+
+        ```python
+        with Fakts(grant=YamlGrant("config.yaml")) as fakts:
+            config = await fakts.get("group_name")
+        ```
+
+    Fakts should be used as a context manager, and will set the current fakts context variable to itself, letting
+    you access the current fakts instance from anywhere in your code (async or sync). To understand how the async
+    sync code access work, please check out the documentation for koil.
+
+    You can compose grants through meta grants in order to load configuration from multiple sources (eg. a local, file
+    that can be overwritten by a remote configuration, or some envionment variables).
+
+    Example:
+        ```python
+        async with Fakts(grant=FailsafeGrant(
+            grants=[
+                EnvGrant(),
+                YamlGrant("config.yaml")
+            ]
+        )) as fakts:
+            config = await fakts.get("group_name")
+        ```
+        In this example fakts will load the configuration from the environment variables first, and if that fails,
+        it will load it from the yaml file.
+
+
+
+
+    """
+
+    grant: FaktsGrant
+    """The grant to load the configuration from"""
+
+    hard_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
+    """Hard fakts are fakts that are set by the user and cannot be overwritten by grants"""
+
+    loaded_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
+    """The currently loaded fakts. Please use `get` to access the fakts"""
+
+    assert_groups: Set[str] = Field(default_factory=set)
+    """Asserted groups are groups that are asserted to be present in the fakts. If they are not present, an error will be raised"""
+
+    allow_auto_load: bool = Field(
+        default=True, description="Should we autoload on get?"
+    )
+    """Should we autoload the grants on a call to get?"""
+
+    load_on_enter: bool = False
     """Should we load on connect?"""
     delete_on_exit: bool = False
     """Should we delete on connect?"""
@@ -46,146 +89,105 @@ class Fakts(KoiledModel):
     _lock: asyncio.Lock = None
     _fakts_path: str = ""
 
-    @root_validator
-    def validate_integrity(cls, values):
-
-        values["fakts_path"] = (
-            f'{values["subapp"]}.{values["fakts_path"]}'
-            if values["subapp"]
-            else values["fakts_path"]
-        )
-
-        try:
-            with open(values["fakts_path"], "r") as file:
-                config = yaml.load(file, Loader=yaml.FullLoader)
-                values["loaded_fakts"] = update_nested(values["hard_fakts"], config)
-        except:
-            logger.info("Could not load fakts from file")
-
-        if not values["loaded_fakts"] and not values["grants"]:
-            raise ValueError(
-                f"No grants configured and we did not find fakts at path {values['fakts_path']}. Please make sure you configure fakts correctly."
-            )
-
-        return values
-
-    async def aget(self, group_name: str, bypass_middleware=False, auto_load=True):
+    async def aget(
+        self,
+        group_name: str,
+        auto_load=True,
+        force_refresh=False,
+    ):
         """Get Config
 
-        Gets the currently active configuration for the group_name. This is a loop
-        save function, and will guard the current fakts state through an async lock.
+        Gets the currently active configuration for the group_name, by loading it from the grant if it is not already loaded.
 
         Steps:
             1. Acquire lock.
             2. If not yet loaded and auto_load is True, load (reloading should be done seperatily)
-            3. Pass through middleware (can be opt out by setting bypass_iddleware to True)
             4. Return groups fakts
 
         Args:
             group_name (str): The group name in the fakts
-            bypass_middleware (bool, optional): Bypasses the Middleware (e.g. no overwrites). Defaults to False.
             auto_load (bool, optional): Should we autoload the configuration through grants if nothing has been set? Defaults to True.
+            force_refresh (bool, optional): Should we force a refresh of the grants. Grants can decide their own refresh logic? Defaults to False.
 
         Returns:
             dict: The active fakts
         """
-
         assert (
-            self._loaded
-        ), "Fakts not loaded, please load first. (By entering the fakts context)"
+            self._lock is not None
+        ), "You need to enter the context first before calling this function"
+        async with self._lock:
+            if not self.loaded_fakts or force_refresh:
+                if self.allow_auto_load and auto_load:
+                    await self.aload(force_refresh=force_refresh)
+                else:
+                    raise FaktsError(
+                        "No loaded fakts and auto_load is False. Please load first."
+                    )
 
+        config = self._getsubgroup(group_name)
+        return config
+
+    def _getsubgroup(self, group_name: str) -> Dict[str, Any]:
+        """Get subgroup
+
+        Args:
+            group_name (str): The name of the group
+
+        Raises:
+            GroupNotFound: If the groups is not found in the loadedfakts
+
+        Returns:
+            Dict[str, Any]: The subgroups configuration as a dictioniary
+        """
         config = {**self.loaded_fakts}
-
-        if not bypass_middleware:
-            for middleware in self.middlewares:
-                additional_config = await middleware.aparse(previous=config)
-                config = update_nested(config, additional_config)
 
         for subgroup in group_name.split("."):
             try:
                 config = config[subgroup]
             except KeyError as e:
-                logger.error(f"Could't find {subgroup} in {config}")
-                config = {}
+                raise GroupNotFound(f"Could't find {subgroup} in fakts") from e
 
         return config
 
+    def has_changed(self, fakt_dict: Dict[str, Any], group: str):
+        return (
+            not fakt_dict or self._getsubgroup(group) != fakt_dict
+        )  # TODO: Implement Hashing on config?
+
     async def arefresh(self):
-        await self.aload()
+        """Causes a Refresh on the grants. Grants can decide their own refresh logic."""
+        self.loaded_fakts = None
+        await self.aload(force_refresh=True)
 
     def get(self, *args, **kwargs):
+        """Sync version of aget"""
         return unkoil(self.aget, *args, **kwargs)
 
-    @property
-    def healthy(self):
-        return (
-            self.assert_groups.issubset(set(self.loaded_fakts.keys()))
-            and self.loaded_fakts
-        )
+    async def aload(self, force_refresh=False) -> Dict[str, Any]:
+        """Loads the configuration from the grant and asserts the groups"""
 
-    async def aload(self) -> Dict[str, Any]:
-        if not self.force_refresh:
-            if self.healthy:
-                self._loaded = True
-                return self.loaded_fakts
-
-        if len(self.grants) == 0:
-            raise NoGrantConfigured(
-                "Local fakts were insufficient and fakts has no grants configured. Please add a grant to your fakts instance or initialize your fakts instance with a Grant"
-            )
-
-        grant_exceptions = {}
-        for grant in self.grants:
-            try:
-                additional_fakts = await grant.aload(previous=self.loaded_fakts)
-                self.loaded_fakts = update_nested(self.loaded_fakts, additional_fakts)
-            except Exception as e:
-                grant_exceptions[grant.__class__.__name__] = e
-
+        self.loaded_fakts = await self.grant.aload(force_refresh=force_refresh)
         if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
-
-            error_description = (
-                f"This might be due to following exceptions in grants {grant_exceptions}"
-                if grant_exceptions
-                else "All Grants were sucessful. But none retrieved these keys!"
+            raise GroupNotFound(
+                f"Expected Configuration for {self.assert_groups - set(self.loaded_fakts.keys())}. "
             )
-
-            raise GroupsNotFound(
-                f"Could not find {self.assert_groups - set(self.loaded_fakts.keys())}. "
-                + error_description
-            )
-
-        if not self.loaded_fakts:
-            raise NoGrantSucessfull(f"No Grants sucessfull {grant_exceptions}")
-
-        if self.fakts_path:
-            with open(self.fakts_path, "w") as file:
-                yaml.dump(self.loaded_fakts, file)
 
         self._loaded = True
         return self.loaded_fakts
 
-    async def adelete(self):
-        self.loaded_fakts = {}
-
-        if self.fakts_path:
-            os.remove(self.fakts_path)
-
     def load(self, **kwargs):
+        """Sync version of aload"""
         return unkoil(self.aload, **kwargs)
 
-    def delete(self, **kwargs):
-        return unkoil(self.adelete, **kwargs)
-
     async def __aenter__(self):
+
         current_fakts.set(self)
+        self._lock = asyncio.Lock()
         if self.load_on_enter:
             await self.aload()
         return self
 
     async def __aexit__(self, *args, **kwargs):
-        if self.delete_on_exit:
-            await self.adelete()
         current_fakts.set(None)
 
     class Config:
@@ -194,3 +196,7 @@ class Fakts(KoiledModel):
         json_encoders = {
             FaktsGrant: lambda x: f"Fakts Grant {x.__class__.__name__}",
         }
+
+
+def get_current_fakts() -> Fakts:
+    return current_fakts.get()

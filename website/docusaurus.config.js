@@ -7,7 +7,7 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Fakts',
-  tagline: 'asynchronous config managemend',
+  tagline: 'asynchronous config management',
   url: 'https://jhnnsrs.github.io/',
   baseUrl: '/fakts/',
   onBrokenLinks: 'throw',

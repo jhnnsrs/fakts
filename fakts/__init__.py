@@ -1,5 +1,14 @@
-from .fakts import Fakts
-from .config import Config
-from .grants import YamlGrant, BeaconGrant
+from .fakts import Fakts, FaktsGrant, get_current_fakts
+from .fakts import FaktsError
+from .grants import EnvGrant, GrantError
 
-__all__ = ["Fakts", "Config", "YamlGrant", "BeaconGrant"]
+
+__all__ = [
+    "Fakts",
+    "Fakt",
+    "FaktsGrant",
+    "EnvGrant",
+    "GrantError",
+    "get_current_fakts",
+    "FaktsError",
+]

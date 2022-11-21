@@ -30,7 +30,7 @@
         "--remove-all-unused-imports",
         "-r",
         "tests",
-        "mikro"
+        "fakts"
       ],
       "problemMatcher": []
     }
