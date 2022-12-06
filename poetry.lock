@@ -364,7 +364,7 @@ typing-extensions = ">=3.7.4.3"
 
 [[package]]
 name = "koil"
-version = "0.2.8"
+version = "0.2.10"
 description = "Async for a sync world"
 category = "main"
 optional = false
@@ -935,7 +935,7 @@ remote = ["aiohttp", "certifi"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "4c1fc16888132da3d478d1a3d3768750608e1a3c1ce44f28ba6a5bb94aaef092"
+content-hash = "8ee738662f502af0fc1fb1f8639e6c439598a938ce21588b75f1f56f9125d6de"
 
 [metadata.files]
 aiohttp = [
@@ -1281,8 +1281,8 @@ janus = [
     {file = "janus-1.0.0.tar.gz", hash = "sha256:df976f2cdcfb034b147a2d51edfc34ff6bfb12d4e2643d3ad0e10de058cb1612"},
 ]
 koil = [
-    {file = "koil-0.2.8-py3-none-any.whl", hash = "sha256:a1ef840dfe91c693df8d466f6a91675ffbf6e9384b670c0e9ba3ff2de74ac6e3"},
-    {file = "koil-0.2.8.tar.gz", hash = "sha256:050662bb601a3a4bb987c085c76154d26109020d3a80573fca1412e569ed0110"},
+    {file = "koil-0.2.10-py3-none-any.whl", hash = "sha256:80dee66f831eb03b5b63cbb3771e4dc18326eef9beedec0bb82efc7066453fce"},
+    {file = "koil-0.2.10.tar.gz", hash = "sha256:9c26338ac63032d7243b083f58a3ac804f6f34b19eaffe21585ab4c658af5d18"},
 ]
 multidict = [
     {file = "multidict-6.0.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:0b9e95a740109c6047602f4db4da9949e6c5945cefbad34a1299775ddc9a62e2"},
@@ -1524,6 +1524,10 @@ PyQt5-sip = [
     {file = "PyQt5_sip-12.11.0-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:4031547dfb679be309094bfa79254f5badc5ddbe66b9ad38e319d84a7d612443"},
     {file = "PyQt5_sip-12.11.0-cp310-cp310-win32.whl", hash = "sha256:ad21ca0ee8cae2a41b61fc04949dccfab6fe008749627d94e8c7078cb7a73af1"},
     {file = "PyQt5_sip-12.11.0-cp310-cp310-win_amd64.whl", hash = "sha256:3126c84568ab341c12e46ded2230f62a9a78752a70fdab13713f89a71cd44f73"},
+    {file = "PyQt5_sip-12.11.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:bd733667098cac70e89279d9c239106d543fb480def62a44e6366ccb8f68510b"},
+    {file = "PyQt5_sip-12.11.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.whl", hash = "sha256:ec1d8ce50be76c5c1d1c86c6dc0ccacc2446172dde98b663a17871f532f9bd44"},
+    {file = "PyQt5_sip-12.11.0-cp311-cp311-win32.whl", hash = "sha256:43dfe6dd409e713edeb67019b85419a7a0dc9923bfc451d6cf3778471c122532"},
+    {file = "PyQt5_sip-12.11.0-cp311-cp311-win_amd64.whl", hash = "sha256:afa4ffffc54e306669bf2b66ea37abbc56c5cdda4f3f474d20324e3634302b12"},
     {file = "PyQt5_sip-12.11.0-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:0f77655c62ec91d47c2c99143f248624d44dd2d8a12d016e7c020508ad418aca"},
     {file = "PyQt5_sip-12.11.0-cp37-cp37m-manylinux1_x86_64.whl", hash = "sha256:ec5e9ef78852e1f96f86d7e15c9215878422b83dde36d44f1539a3062942f19c"},
     {file = "PyQt5_sip-12.11.0-cp37-cp37m-win32.whl", hash = "sha256:d12b81c3a08abf7657a2ebc7d3649852a1f327eb2146ebadf45930486d32e920"},

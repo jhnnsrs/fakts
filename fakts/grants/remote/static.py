@@ -24,4 +24,4 @@ class StaticGrant(RemoteGrant):
     """ The token (secret) that uniquely identifies this application on the fakts server."""
 
     async def ademand(self, endpoint: FaktsEndpoint) -> str:
-        return self.token
+        return self.token.get_secret_value()
