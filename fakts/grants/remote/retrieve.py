@@ -23,6 +23,7 @@ class RetrieveGrant(RemoteGrant):
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=self.ssl_context)
         ) as session:
+            print(f"{endpoint.base_url}retrieve/")
             async with session.post(
                 f"{endpoint.base_url}retrieve/",
                 json={

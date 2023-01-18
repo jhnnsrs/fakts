@@ -87,9 +87,7 @@ class RemoteGrant(FaktsGrant):
         If this fails, it will raise an exception.
 
         """
-
         endpoint = await self.discovery.discover()
-
         token = await self.ademand(endpoint)
 
         return await self.aclaim(token, endpoint)

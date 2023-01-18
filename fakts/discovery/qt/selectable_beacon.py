@@ -2,12 +2,13 @@ from pydantic import Field
 from qtpy.QtCore import Signal
 from fakts.discovery.advertised import AdvertisedDiscovery
 from fakts.discovery.base import FaktsEndpoint
-from qtpy import QtWidgets
+from qtpy import QtWidgets, QtCore, QtGui
 import asyncio
 import logging
 from koil.qt import QtCoro, QtFuture
-
-
+import ssl
+import certifi
+import aiohttp
 logger = logging.getLogger(__name__)
 
 
@@ -31,14 +32,39 @@ class SelfScanWidget(QtWidgets.QWidget):
         self.user_endpoint.emit(endpoint)
 
 
+class FaktsEndpointWidget(QtWidgets.QWidget):
+
+    accept_clicked = QtCore.Signal(FaktsEndpoint)
+
+    def __init__(self, endpoint: FaktsEndpoint, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.endpoint = endpoint
+
+        self.user_label = QtWidgets.QLabel(endpoint.name)
+        self.user_label.setStyleSheet("font-size: 20px;")
+        self.endpoint_label = QtWidgets.QLabel(endpoint.base_url)
+        self.endpoint_label.setStyleSheet("font-size: 10px;")
+        self.user_label.mousePressEvent = self.on_clicked
+
+        self.hlayout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.hlayout)
+        self.hlayout.addWidget(self.user_label)
+        self.hlayout.addWidget(self.endpoint_label)
+
+    def on_clicked(self, event):
+        self.accept_clicked.emit(self.endpoint)
+
+
+
+
 class SelectBeaconWidget(QtWidgets.QDialog):
     new_endpoint = Signal(FaktsEndpoint)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
-        self.show_coro = QtCoro(self.show_me)
-        self.hide_coro = QtCoro(lambda f: self.hide(), autoresolve=True)
+        self.show_coro = QtCoro(self.show_me, autoresolve=True)
+        self.hide_coro = QtCoro(self.hide, autoresolve=True)
 
         self.select_endpoint = QtCoro(self.demand_selection_of_endpoint)
         self.select_endpoint_future = None
@@ -47,7 +73,7 @@ class SelectBeaconWidget(QtWidgets.QDialog):
 
         self.endpoints = []
 
-        self.listWidget = QtWidgets.QListWidget()
+        self.endpointLayout = QtWidgets.QVBoxLayout()
 
         self.scanWidget = SelfScanWidget()
         self.scanWidget.user_endpoint.connect(self.on_new_endpoint)
@@ -57,21 +83,25 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.buttonBox.rejected.connect(self.on_reject)
 
         self.wlayout = QtWidgets.QVBoxLayout()
-        self.wlayout.addWidget(self.listWidget)
+        self.wlayout.addLayout(self.endpointLayout)
         self.wlayout.addWidget(self.scanWidget)
         self.wlayout.addWidget(self.buttonBox)
         self.setLayout(self.wlayout)
 
-    def show_me(self, f: QtFuture):
+    def clearLayout(self, layout):
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+    def show_me(self):
         self.show()
-        f.resolve()
 
     def demand_selection_of_endpoint(self, future: QtFuture):
         self.select_endpoint_future = future
 
-    def on_endpoint_clicked(self, item):
-        index = self.listWidget.indexFromItem(item).row()
-        self.select_endpoint_future.resolve(self.endpoints[index])
+    def on_endpoint_clicked(self, item: FaktsEndpoint):
+        self.select_endpoint_future.resolve(item)
 
     def on_reject(self):
         if self.select_endpoint_future:
@@ -90,20 +120,32 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         event.accept()  # let the window close
 
     def on_new_endpoint(self, config: FaktsEndpoint):
-        self.listWidget.clear()
+        self.clearLayout(self.endpointLayout)
 
         self.endpoints.append(config)
 
         for endpoint in self.endpoints:
-            self.listWidget.addItem(f"{endpoint.name} at {endpoint.base_url}")
+            widget = FaktsEndpointWidget(endpoint)
+        
+            self.endpointLayout.addWidget(widget)
+            widget.accept_clicked.connect(self.on_endpoint_clicked)
 
-        self.listWidget.itemClicked.connect(self.on_endpoint_clicked)
 
 
 class QtSelectableDiscovery(AdvertisedDiscovery):
     widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget, exclude=True)
+    scan_localhost: bool = True
+
+
+
 
     async def emit_endpoints(self):
+
+        if self.scan_localhost:
+            localhost = "http://localhost:8000"
+            endpoint = await self.check_beacon(localhost)
+            self.widget.new_endpoint.emit(endpoint)
+
         try:
             async for endpoint in self.astream():
                 self.widget.new_endpoint.emit(endpoint)
@@ -111,13 +153,15 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
             logger.exception(e)
             raise e
 
-    async def aget(self):
+    async def discover(self, force_refresh=False, **kwargs):
+        print("Starting Discovery")
         emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
 
             await self.widget.show_coro.acall()
             try:
                 endpoint = await self.widget.select_endpoint.acall()
+                print("Endpoint selected", endpoint)
                 await self.widget.hide_coro.acall()
 
             finally:

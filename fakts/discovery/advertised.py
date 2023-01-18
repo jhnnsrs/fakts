@@ -13,6 +13,9 @@ import os
 import yaml
 import pydantic
 from pydantic import BaseModel
+import aiohttp
+import ssl
+import certifi
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +101,33 @@ class AdvertisedDiscovery(Discovery):
     discovered_endpoints: Dict[str, FaktsEndpoint] = Field(default_factory=dict)
     file = ".fakts.yaml"
 
+    ssl_context: ssl.SSLContext = Field(
+        default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
+        exclude=True,
+    )
+    """ An ssl context to use for the connection to the endpoint"""
+
+
+    async def check_beacon(self, url: str) -> FaktsEndpoint:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=self.ssl_context),
+        ) as session:
+            async with session.get(
+                f"{url}/.well-known/fakts",
+            ) as resp:
+                data = await resp.json()
+
+                if resp.status == 200:
+                    data = await resp.json()
+                    if not "name" in data:
+                        logger.error(f"Malformed answer: {data}")
+                        raise Exception("Malformed Answer")
+
+                    return FaktsEndpoint(**data)
+
+                else:
+                    raise Exception("Error! Coud not retrieve on the endpoint")
+
     async def discover(self, force_refresh=False, **kwargs):
         if os.path.exists(self.file):
             with open(self.file, "r") as f:
@@ -111,110 +141,24 @@ class AdvertisedDiscovery(Discovery):
             cache = AdvertisedConfig()
 
         if not cache.selected_endpoint or force_refresh:
-            endpoint = await self.aget()
+            async for i in self.astream():
+                endpoint = i
+                break
 
         with open(self.file, "w") as f:
             yaml.dump(cache.dict(), f)
 
-        return await self.aget()
-
-    async def aget(self, name_filter=None, **kwargs):
-
-        s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
-        s.bind((self.bind, self.broadcast_port))
-
-        loop = asyncio.get_event_loop()
-        read_queue = asyncio.Queue()
-        transport, pr = await loop.create_datagram_endpoint(
-            lambda: DiscoveryProtocol(read_queue), sock=s
-        )
-
-        while True:
-            data, addr = await read_queue.get()
-            try:
-                data = str(data, "utf8")
-                if data.startswith(self.magic_phrase):
-                    endpoint = data[len(self.magic_phrase) :]
-
-                    try:
-                        endpoint = json.loads(endpoint)
-                        endpoint = FaktsEndpoint(**endpoint)
-                        if name_filter and endpoint.name != name_filter:
-                            continue
-                        transport.close()
-                        return endpoint
-
-                    except json.JSONDecodeError as e:
-                        logger.error("Received Request but it was not valid json")
-                        if self.strict:
-                            raise e
-
-                    except Exception as e:
-                        logger.error(f"Received Request caused Exception {e}")
-                        if self.strict:
-                            raise e
-                else:
-                    logger.error(
-                        f"Received Non Magic Response {data}. Maybe somebody sends"
-                    )
-
-            except UnicodeEncodeError as e:
-                logger.info("Couldn't decode received message")
-                if self.strict:
-                    raise e
+        return endpoint
 
     async def astream(self, name_filter=None, **kwargs):
 
-        s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
-        s.bind((self.bind, self.broadcast_port))
+        binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
+        async for i in alisten(binding, strict=self.strict):
+            yield i
 
-        try:
-
-            loop = asyncio.get_event_loop()
-            read_queue = asyncio.Queue()
-            transport, pr = await loop.create_datagram_endpoint(
-                lambda: DiscoveryProtocol(read_queue), sock=s
-            )
-
-            while True:
-                data, addr = await read_queue.get()
-                try:
-                    data = str(data, "utf8")
-                    if data.startswith(self.magic_phrase):
-                        endpoint = data[len(self.magic_phrase) :]
-
-                        try:
-                            endpoint = json.loads(endpoint)
-                            endpoint = FaktsEndpoint(**endpoint)
-                            if name_filter and endpoint.name != name_filter:
-                                continue
-                            if endpoint.name not in self.discovered_endpoints:
-                                yield endpoint
-                                self.discovered_endpoints[endpoint.name] = endpoint
-
-                        except json.JSONDecodeError as e:
-                            logger.error("Received Request but it was not valid json")
-                            if self.strict:
-                                raise e
-
-                        except Exception as e:
-                            logger.error(f"Received Request caused Exception {e}")
-                            if self.strict:
-                                raise e
-                    else:
-                        logger.error(
-                            f"Received Non Magic Response {data}. Maybe somebody sends"
-                        )
-
-                except UnicodeEncodeError as e:
-                    logger.error("Couldn't decode received message")
-                    if self.strict:
-                        raise e
-
-        except asyncio.CancelledError as e:
-            s.close()
-            logger.info("Stopped checking")
-            raise e
-
+       
     def scan(self, **kwargs):
         return unkoil(self.ascan(**kwargs))
+
+    class Config:
+        arbitrary_types_allowed = True

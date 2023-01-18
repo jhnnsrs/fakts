@@ -1,9 +1,10 @@
 from pydantic import BaseModel
-
+from typing import Optional
 
 class FaktsEndpoint(BaseModel):
     base_url = "http://localhost:8000/f/"
     name: str = "Helper"
+    description: Optional[str] 
 
 
 class Discovery(BaseModel):

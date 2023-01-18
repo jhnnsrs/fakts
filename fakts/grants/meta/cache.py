@@ -28,6 +28,7 @@ class CacheGrant(FaktsGrant):
         default_factory=lambda: "",
         description="Validating against the hash of the config",
     )
+    skip_cache: bool = False
     expires_in: Optional[int]
 
     async def aload(self, force_refresh: bool = False):
@@ -53,7 +54,8 @@ class CacheGrant(FaktsGrant):
                 except pydantic.ValidationError as e:
                     logger.error(f"Could not load cache file: {e}. Ignoring it")
 
-        if cache is None or force_refresh:
+        if cache is None or force_refresh or self.skip_cache:
+            print("Loading from grant")
             data = await self.grant.aload(force_refresh=force_refresh)
             cache = CacheFile(
                 config=data, created=datetime.datetime.now(), hash=self.hash
