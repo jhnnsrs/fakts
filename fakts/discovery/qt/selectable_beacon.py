@@ -137,8 +137,6 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
     scan_localhost: bool = True
 
 
-
-
     async def emit_endpoints(self):
 
         if self.scan_localhost:

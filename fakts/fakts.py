@@ -190,6 +190,9 @@ class Fakts(KoiledModel):
     async def __aexit__(self, *args, **kwargs):
         current_fakts.set(None)
 
+    def _repr_html_inline_(self):
+        return f"<table><tr><td>grant</td><td>{self.grant.__class__.__name__}</td></tr></table>"
+
     class Config:
         arbitrary_types_allowed = True
         underscore_attrs_are_private = True
