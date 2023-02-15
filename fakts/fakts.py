@@ -124,11 +124,22 @@ class Fakts(KoiledModel):
                         "No loaded fakts and auto_load is False. Please load first."
                     )
 
-        config = self._getsubgroup(group_name)
+        try:
+            config = self._getsubgroup(group_name)
+        except GroupNotFound as e:
+            if self.allow_auto_load and auto_load:
+                await self.aload(force_refresh=True)
+                config = self._getsubgroup(group_name)
+            else:
+                raise e
+            
+
         return config
 
     def _getsubgroup(self, group_name: str) -> Dict[str, Any]:
         """Get subgroup
+
+        Protected function to get a subgroup from the loaded fakts
 
         Args:
             group_name (str): The name of the group
@@ -145,7 +156,7 @@ class Fakts(KoiledModel):
             try:
                 config = config[subgroup]
             except KeyError as e:
-                raise GroupNotFound(f"Could't find {subgroup} in fakts") from e
+                raise GroupNotFound(f"Could't find {subgroup} in fakts {config}") from e
 
         return config
 
