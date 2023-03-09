@@ -1,7 +1,7 @@
 from socket import socket
 from fakts.discovery.base import Discovery
-from fakts.discovery.base import FaktsEndpoint
-from typing import Dict, Optional
+from fakts.discovery.base import Beacon, FaktsEndpoint
+from typing import Dict, Optional, AsyncGenerator
 
 from pydantic import Field
 from socket import socket, AF_INET, SOCK_DGRAM
@@ -16,6 +16,8 @@ from pydantic import BaseModel
 import aiohttp
 import ssl
 import certifi
+from .utils import discover_url
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class ListenBinding(BaseModel):
     magic_phrase: str = "beacon-fakts"
 
 
-async def alisten(bind: ListenBinding, strict: bool = False):
+async def alisten(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[Beacon, None]:
 
     s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
     s.bind((bind.address, bind.port))
@@ -63,7 +65,7 @@ async def alisten(bind: ListenBinding, strict: bool = False):
 
                     try:
                         endpoint = json.loads(endpoint)
-                        endpoint = FaktsEndpoint(**endpoint)
+                        endpoint = Beacon(**endpoint)
                         yield endpoint
 
                     except json.JSONDecodeError as e:
@@ -93,42 +95,42 @@ async def alisten(bind: ListenBinding, strict: bool = False):
         logger.info("Stopped checking")
 
 
+async def alisten_pure(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[Beacon, None]:
+
+    already_detected = set()
+
+    async for x in alisten(bind, strict):
+        if x.url not in already_detected:
+            already_detected.add(x.url)
+            yield x
+
+
+
 class AdvertisedDiscovery(Discovery):
     broadcast_port = 45678
     magic_phrase = "beacon-fakts"
     bind = ""
     strict: bool = False
     discovered_endpoints: Dict[str, FaktsEndpoint] = Field(default_factory=dict)
-    file = ".fakts.yaml"
-
     ssl_context: ssl.SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
         exclude=True,
     )
     """ An ssl context to use for the connection to the endpoint"""
+    allow_appending_slash: bool = Field(
+        default=True,
+        description="If the url does not end with a slash, should we append one? ",
+    )
+    auto_protocols: List[str] = Field(
+        default_factory=lambda: [],
+        description="If no protocol is specified, we will try to connect to the following protocols",
+    )
+    timeout: int = Field(
+        default=3,
+        description="The timeout for the connection",
+    )
 
-
-    async def check_beacon(self, url: str) -> FaktsEndpoint:
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=self.ssl_context),
-        ) as session:
-            async with session.get(
-                f"{url}/.well-known/fakts",
-            ) as resp:
-                data = await resp.json()
-
-                if resp.status == 200:
-                    data = await resp.json()
-                    if not "name" in data:
-                        logger.error(f"Malformed answer: {data}")
-                        raise Exception("Malformed Answer")
-
-                    return FaktsEndpoint(**data)
-
-                else:
-                    raise Exception("Error! Coud not retrieve on the endpoint")
-
-    async def discover(self, force_refresh=False, **kwargs):
+    async def discover(self, force_refresh=False):
         if os.path.exists(self.file):
             with open(self.file, "r") as f:
                 x = yaml.load(f, Loader=yaml.FullLoader)
@@ -141,24 +143,16 @@ class AdvertisedDiscovery(Discovery):
             cache = AdvertisedConfig()
 
         if not cache.selected_endpoint or force_refresh:
-            async for i in self.astream():
-                endpoint = i
-                break
+            binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
+            async for beacon in alisten_pure(binding, strict=self.strict):
+                try:
+                    endpoint = await discover_url(beacon, self.ssl_context)
+                    return endpoint
+                except Exception as e:
+                    logger.error(f"Could not connect to beacon {beacon.url}: {e}")
+                    continue
 
-        with open(self.file, "w") as f:
-            yaml.dump(cache.dict(), f)
 
-        return endpoint
-
-    async def astream(self, name_filter=None, **kwargs):
-
-        binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
-        async for i in alisten(binding, strict=self.strict):
-            yield i
-
-       
-    def scan(self, **kwargs):
-        return unkoil(self.ascan(**kwargs))
 
     class Config:
         arbitrary_types_allowed = True

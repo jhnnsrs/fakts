@@ -4,7 +4,14 @@ from typing import Optional
 class FaktsEndpoint(BaseModel):
     base_url = "http://localhost:8000/f/"
     name: str = "Helper"
-    description: Optional[str] 
+    description: Optional[str]
+    retrieve_url: Optional[str]
+    claim_url: Optional[str]
+    version: Optional[str]
+
+
+class Beacon(BaseModel):
+    url: str
 
 
 class Discovery(BaseModel):

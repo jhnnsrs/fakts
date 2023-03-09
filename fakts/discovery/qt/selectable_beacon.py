@@ -1,19 +1,23 @@
+from fakts.discovery.errors import DiscoveryError
 from pydantic import Field
 from qtpy.QtCore import Signal
-from fakts.discovery.advertised import AdvertisedDiscovery
-from fakts.discovery.base import FaktsEndpoint
+from typing import List
+from fakts.discovery.advertised import AdvertisedDiscovery, alisten_pure, ListenBinding
+from fakts.discovery.base import FaktsEndpoint, Beacon
 from qtpy import QtWidgets, QtCore, QtGui
 import asyncio
 import logging
-from koil.qt import QtCoro, QtFuture
+from koil.qt import QtCoro, QtFuture, QtSignal
 import ssl
 import certifi
 import aiohttp
+from fakts.discovery.utils import discover_url
+from koil import unkoil
 logger = logging.getLogger(__name__)
 
 
 class SelfScanWidget(QtWidgets.QWidget):
-    user_endpoint = Signal(FaktsEndpoint)
+    user_beacon_added = Signal(Beacon)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -28,8 +32,8 @@ class SelfScanWidget(QtWidgets.QWidget):
 
     def on_add(self):
         host = self.lineEdit.text()
-        endpoint = FaktsEndpoint(base_url=host, name="Self Added")
-        self.user_endpoint.emit(endpoint)
+        beacon = Beacon(url=host)
+        self.user_beacon_added.emit(beacon)
 
 
 class FaktsEndpointWidget(QtWidgets.QWidget):
@@ -58,25 +62,30 @@ class FaktsEndpointWidget(QtWidgets.QWidget):
 
 
 class SelectBeaconWidget(QtWidgets.QDialog):
-    new_endpoint = Signal(FaktsEndpoint)
+    new_advertised_endpoint = Signal(FaktsEndpoint)
+    new_local_endpoint = Signal(FaktsEndpoint)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
         self.show_coro = QtCoro(self.show_me, autoresolve=True)
         self.hide_coro = QtCoro(self.hide, autoresolve=True)
-
+        self.show_error_coro = QtCoro(self.show_error, autoresolve=True)
+        self.clear_endpoints_coro = QtCoro(self.clear_endpoints, autoresolve=True)
         self.select_endpoint = QtCoro(self.demand_selection_of_endpoint)
+
+
         self.select_endpoint_future = None
 
-        self.new_endpoint.connect(self.on_new_endpoint)
+        self.new_advertised_endpoint.connect(self.on_new_endpoint)
+        self.new_local_endpoint.connect(self.on_new_endpoint)
 
         self.endpoints = []
 
         self.endpointLayout = QtWidgets.QVBoxLayout()
 
         self.scanWidget = SelfScanWidget()
-        self.scanWidget.user_endpoint.connect(self.on_new_endpoint)
+        self.beacon_user = QtSignal(self.scanWidget.user_beacon_added)
 
         QBtn = QtWidgets.QDialogButtonBox.Cancel
         self.buttonBox = QtWidgets.QDialogButtonBox(QBtn)
@@ -94,8 +103,16 @@ class SelectBeaconWidget(QtWidgets.QDialog):
             if child.widget():
                 child.widget().deleteLater()
 
+    def clear_endpoints(self):
+        self.clearLayout(self.endpointLayout)
+        self.endpoints = []
+
     def show_me(self):
         self.show()
+
+    def show_error(self, error):
+        self.show()
+        QtWidgets.QMessageBox.critical(self, "Error", str(error))
 
     def demand_selection_of_endpoint(self, future: QtFuture):
         self.select_endpoint_future = future
@@ -131,6 +148,42 @@ class SelectBeaconWidget(QtWidgets.QDialog):
             widget.accept_clicked.connect(self.on_endpoint_clicked)
 
 
+async def wait_first(*tasks):
+    """Return the result of first async task to complete with a non-null result"""
+    # Get first completed task(s)
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+    # Tasks MAY complete at same time e.g. in unit tests :)
+    # Coalesce the first result if present
+    for task in done:
+        exception = task.exception()
+        if exception is None:
+            result = task.result()
+            if result is not None:
+                break
+        else:
+            result = None
+        
+    # Gather remaining tasks without raising exceptions
+    gather = asyncio.gather(*pending, return_exceptions=True)
+
+    # Cancel remaining tasks if result is non-null otherwise await next pending tasks
+    if result:
+        gather.cancel()
+    elif pending:
+        result = await wait_first(*pending)
+    
+    # Await remaining tasks to ensure they are cancelled
+    try:
+        await gather
+    except asyncio.CancelledError:
+        pass
+    
+    # Return result or raise last exception if no result was returned
+    if exception and result is None:
+        raise exception
+    else:
+        return result
 
 class QtSelectableDiscovery(AdvertisedDiscovery):
     widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget, exclude=True)
@@ -140,29 +193,55 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
     async def emit_endpoints(self):
 
         if self.scan_localhost:
-            localhost = "http://localhost:8000"
-            endpoint = await self.check_beacon(localhost)
-            self.widget.new_endpoint.emit(endpoint)
+            try:
+                localhost_url = "localhost:8000"
+                endpoint = await discover_url(localhost_url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
+                self.widget.new_local_endpoint.emit(endpoint)
+            except Exception as e:
+                print(e)
+                logger.info(f"Could not connect to localhost: {e}")
 
         try:
-            async for endpoint in self.astream():
-                self.widget.new_endpoint.emit(endpoint)
+             binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
+             async for beacon in alisten_pure(binding, strict=self.strict):
+                try:
+                    if beacon.url == "localhost:8000" and self.scan_localhost:
+                        # we already did this one
+                        continue
+                    endpoint = await discover_url(beacon.url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
+                    self.widget.new_advertised_endpoint.emit(endpoint)
+                except Exception as e:
+                    print(e)
+                    logger.info(f"Could not connect to beacon: {beacon.url} {e}")
+
+
+                
         except Exception as e:
             logger.exception(e)
             raise e
+        
+
+    async def await_user_definition(self,):
+        async for beacon in self.widget.beacon_user.aiterate():
+            try:
+                return await discover_url(beacon.url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
+            except Exception as e:
+                await self.widget.show_error_coro.acall(e)
+                logger.error(f"Could not connect to beacon: {beacon.url} {e}")
+                continue
 
     async def discover(self, force_refresh=False, **kwargs):
-        print("Starting Discovery")
         emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
-
+            await self.widget.clear_endpoints_coro.acall()
             await self.widget.show_coro.acall()
+
             try:
-                endpoint = await self.widget.select_endpoint.acall()
-                print("Endpoint selected", endpoint)
+                endpoint = await wait_first(self.widget.select_endpoint.acall(), self.await_user_definition())
                 await self.widget.hide_coro.acall()
 
             finally:
+
                 emitting_task.cancel()
                 try:
                     await emitting_task

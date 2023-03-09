@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from socket import AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, socket
 import asyncio
 import json
-from fakts.discovery.base import FaktsEndpoint
+from fakts.discovery.base import FaktsEndpoint, Beacon
 from koil import Koil, unkoil
 from koil.composition import KoiledModel
 import logging
@@ -64,7 +64,7 @@ def retrieve_bindings() -> List[Binding]:
 
 async def advertise(
     binding: Binding,
-    endpoints: List[FaktsEndpoint],
+    endpoints: List[Beacon],
     interval: int = 1,
     iterations: int = 10,
 ) -> None:
@@ -94,8 +94,8 @@ async def advertise(
         transport, pr = await loop.create_datagram_endpoint(BeaconProtocol, sock=s)
 
         messages = [
-            bytes(binding.magic_phrase + json.dumps(config.dict()), "utf8")
-            for config in endpoints
+            bytes(binding.magic_phrase + json.dumps(beacon.dict()), "utf8")
+            for beacon in endpoints
         ]
         i = 1
         while i <= iterations or iterations == -1:
@@ -112,33 +112,3 @@ async def advertise(
         s.close()
         raise e
 
-
-class EndpointBeacon(KoiledModel):
-    """A beacon that advertises the given endpoints on the given binding
-
-    This follows the KoiL pattern and can be used as a context manager or as a task.
-    It will open a udp socket and send the endpoints as json to the broadcast address
-    on the given port. It will repeat this for the given number of iterations with the given
-    interval in between.
-
-    """
-
-    koil: Optional[Koil]
-    advertised_endpoints: List[FaktsEndpoint]
-    binding: Binding
-    interval: int = 5
-
-    def endpoint_to_message(self, config: FaktsEndpoint):
-        return bytes(self.binding.magic_phrase + json.dumps(config.dict()), "utf8")
-
-    async def arun(self):
-        return await advertise(self.binding, self.advertised_endpoints, self.interval)
-
-    def run(self):
-        return unkoil(self.arun)
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass

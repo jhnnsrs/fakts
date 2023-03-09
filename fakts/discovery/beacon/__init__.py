@@ -3,7 +3,6 @@ from .beacon import (
     advertise,
     BeaconProtocol,
     Binding,
-    EndpointBeacon,
 )
 
 
@@ -12,5 +11,4 @@ __all__ = [
     "advertise",
     "BeaconProtocol",
     "Binding",
-    "EndpointBeacon",
 ]

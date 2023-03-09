@@ -55,7 +55,7 @@ class CacheGrant(FaktsGrant):
                     logger.error(f"Could not load cache file: {e}. Ignoring it")
 
         if cache is None or force_refresh or self.skip_cache:
-            print("Loading from grant")
+            logger.info("Loading data from grant")
             data = await self.grant.aload(force_refresh=force_refresh)
             cache = CacheFile(
                 config=data, created=datetime.datetime.now(), hash=self.hash
