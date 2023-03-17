@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.3.13"
+version = "0.3.15"
 description = "asynchronous configuration provider ( tailored to support dynamic client-server relations)"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"

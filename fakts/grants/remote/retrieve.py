@@ -34,9 +34,7 @@ class RetrieveGrant(RemoteGrant):
             async with session.post(
                 retrieve_url,
                 json={
-                    "version": self.version,
-                    "identifier": self.identifier,
-                    "redirect_uri": self.redirect_uri,
+                    "manifest": self.manifest.dict(),
                 },
             ) as resp:
                 data = await resp.json()

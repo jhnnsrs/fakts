@@ -7,7 +7,7 @@ import ssl
 import certifi
 from pydantic import BaseModel
 import aiohttp
-from typing import Any, Dict
+from typing import Any, Dict, Optional, List
 from .errors import ClaimError
 import logging
 
@@ -37,6 +37,15 @@ class CacheFile(BaseModel):
     claims: Dict[EndpointUrl, FaktClaim]
 
 
+
+class Manifest(BaseModel):
+    version: str
+    identifier: str
+    scopes: List[str]
+    image: Optional[str] = None
+    """ Scopes that this app should request from the user """
+
+
 class RemoteGrant(FaktsGrant):
     """Abstract base class for remote grants
 
@@ -52,15 +61,7 @@ class RemoteGrant(FaktsGrant):
     retrieve the configuration from the fakts server.
 
     """
-
-    version: str = Field(
-        None,
-        description="The version of this app, if we are using a remote grant, this will be used to identify the app",
-    )
-    """ The version hint of this app. Will be used to uniquely identify this app on the endpoint"""
-
-    identifier: str = Field(None, description="The unique identifier of the app")
-    """ A world unique identifier of this app. This is used to identify the app on the fakts server."""
+    manifest: Manifest
 
     discovery: Discovery = Field(default_factory=StaticDiscovery)
     "The discovery method to use, if not specified, the static discovery will be used"

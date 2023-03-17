@@ -73,8 +73,6 @@ class DeviceCodeGrant(RemoteGrant):
 
     """
 
-    scopes: List[str] = Field(default_factory=lambda: ["openid"])
-    """ Scopes that this app should request from the user """
 
     timeout = 60
     """The timeout for the device code grant in seconds. If the timeout is reached, the grant will fail."""
@@ -105,9 +103,10 @@ class DeviceCodeGrant(RemoteGrant):
                 {
                     "device_code": code,
                     "grant": "device_code",
-                    "scope": " ".join(self.scopes),
-                    "version": self.version,
-                    "identifier": self.identifier,
+                    "version": self.manifest.version,
+                    "scope": " ".join(self.manifest.scopes),
+                    "identifier": self.manifest.identifier,
+                    "image": self.manifest.image,
                 }
             )
             webbrowser.open_new(endpoint.base_url + "configure/?" + querystring)

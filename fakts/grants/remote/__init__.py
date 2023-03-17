@@ -11,5 +11,6 @@ legitmitate registration of apps on a dynamic endpoint
 from .retrieve import RetrieveGrant
 from .static import StaticGrant
 from .device_code import DeviceCodeGrant
+from .base import RemoteGrant, Manifest
 
-__all__ = ["RetrieveGrant", "StaticGrant", "DeviceCodeGrant"]
+__all__ = ["RetrieveGrant", "StaticGrant", "DeviceCodeGrant", "RemoteGrant", "Manifest"]

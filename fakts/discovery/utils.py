@@ -9,12 +9,14 @@ logger = logging.getLogger(__name__)
 
 async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout = 4) -> FaktsEndpoint:
 
+    url = f"{url}.well-known/fakts"
+
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(ssl=ssl_context),
         headers={"User-Agent": "Fakts/0.1", "Accept": "application/json"},
     ) as session:
         async with session.get(
-            f"{url}.well-known/fakts",
+            url,
             timeout=timeout,
         ) as resp:
 
@@ -30,7 +32,7 @@ async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout = 4) ->
 
             else:
                 logger.error(f"Could not retrieve on the endpoint: {resp.status}")
-                raise DiscoveryError("Error! Coud not retrieve on the endpoint")
+                raise DiscoveryError(f"Error! We could not retrieve the endpoint. {url} ")
 
 
 

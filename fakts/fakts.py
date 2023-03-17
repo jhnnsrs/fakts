@@ -15,15 +15,21 @@ current_fakts: contextvars.ContextVar["Fakts"] = contextvars.ContextVar("current
 
 
 class Fakts(KoiledModel):
-    """Fakts provides a way to concurrently load and access configuration from different sources in async
-    and sync environments.
+    """Fakts is any asynchronous configuration loader.
 
-    It is used to load configuration from a grant, and to access it in async and sync code.
+    Fakts provides a way to concurrently load and access configuration from different 
+    sources in async and sync environments.
 
-    A grant constitutes the way to load configuration. It can be a local config file (eg. yaml, toml, json),
-    environemnt variables, a remote configuration (eg. from a fakts server), a database, or any other source.
-    It will be loaded either on a call to `load`, or on  a call to `get` (if auto_load is set to true).
+    It is used to load configuration from a grant, and to access it in async
+    and sync code.
 
+    A grant constitutes the way to load configuration. It can be a local config file
+    (eg. yaml, toml, json), environemnt variables, a remote configuration (eg. from
+    a fakts server) a database, or any other source.  It will be loaded either on
+    call to `load`,  or on  a call to `get` (if auto_load is set to true).
+
+    Additionaly you can compose grants with the help of meta grants in order to 
+    load configuration from multiple sources.
 
     Example:
         ```python
@@ -38,12 +44,11 @@ class Fakts(KoiledModel):
             config = await fakts.get("group_name")
         ```
 
-    Fakts should be used as a context manager, and will set the current fakts context variable to itself, letting
-    you access the current fakts instance from anywhere in your code (async or sync). To understand how the async
-    sync code access work, please check out the documentation for koil.
+    Fakts should be used as a context manager, and will set the current fakts context 
+    variable to itself, letting you access the current fakts instance from anywhere in 
+    your code (async or sync). To understand how the async sync code access work,
+    please check out the documentation for koil.
 
-    You can compose grants through meta grants in order to load configuration from multiple sources (eg. a local, file
-    that can be overwritten by a remote configuration, or some envionment variables).
 
     Example:
         ```python
@@ -55,10 +60,8 @@ class Fakts(KoiledModel):
         )) as fakts:
             config = await fakts.get("group_name")
         ```
-        In this example fakts will load the configuration from the environment variables first, and if that fails,
-        it will load it from the yaml file.
-
-
+        In this example fakts will load the configuration from the environment
+        variables first, and if that fails, it will load it from the yaml file.
 
 
     """
@@ -73,7 +76,8 @@ class Fakts(KoiledModel):
     """The currently loaded fakts. Please use `get` to access the fakts"""
 
     assert_groups: Set[str] = Field(default_factory=set)
-    """Asserted groups are groups that are asserted to be present in the fakts. If they are not present, an error will be raised"""
+    """Asserted groups are groups that are asserted to be present in the fakts. If 
+    they are not present, an error will be raised"""
 
     allow_auto_load: bool = Field(
         default=True, description="Should we autoload on get?"
@@ -97,17 +101,21 @@ class Fakts(KoiledModel):
     ):
         """Get Config
 
-        Gets the currently active configuration for the group_name, by loading it from the grant if it is not already loaded.
+        Gets the currently active configuration for the group_name, by loading it from
+        the grant if it is not already loaded.
 
         Steps:
-            1. Acquire lock.
-            2. If not yet loaded and auto_load is True, load (reloading should be done seperatily)
+            1. Acquire lock 
+            2. If not yet loaded and auto_load is True, load 
             4. Return groups fakts
 
         Args:
             group_name (str): The group name in the fakts
-            auto_load (bool, optional): Should we autoload the configuration through grants if nothing has been set? Defaults to True.
-            force_refresh (bool, optional): Should we force a refresh of the grants. Grants can decide their own refresh logic? Defaults to False.
+            auto_load (bool, optional): Should we autoload the configuration 
+                                        if nothing has been set? Defaults to True.
+            force_refresh (bool, optional): Should we force a refresh of the grants. 
+                                            Grants can decide their own refresh logic? 
+                                            Defaults to False.
 
         Returns:
             dict: The active fakts
@@ -187,7 +195,7 @@ class Fakts(KoiledModel):
         return self.loaded_fakts
 
     def load(self, **kwargs):
-        """Sync version of aload"""
+        """Sync version of aloads"""
         return unkoil(self.aload, **kwargs)
 
     async def __aenter__(self):
