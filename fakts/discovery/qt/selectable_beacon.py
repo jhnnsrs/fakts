@@ -198,21 +198,24 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                 endpoint = await discover_url(localhost_url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
                 self.widget.new_local_endpoint.emit(endpoint)
             except Exception as e:
-                print(e)
                 logger.info(f"Could not connect to localhost: {e}")
 
         try:
-             binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
-             async for beacon in alisten_pure(binding, strict=self.strict):
-                try:
-                    if beacon.url == "localhost:8000" and self.scan_localhost:
-                        # we already did this one
-                        continue
-                    endpoint = await discover_url(beacon.url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
-                    self.widget.new_advertised_endpoint.emit(endpoint)
-                except Exception as e:
-                    print(e)
-                    logger.info(f"Could not connect to beacon: {beacon.url} {e}")
+            try:
+                binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
+                async for beacon in alisten_pure(binding, strict=self.strict):
+                    try:
+                        if beacon.url == "localhost:8000" and self.scan_localhost:
+                            # we already did this one
+                            continue
+                        endpoint = await discover_url(beacon.url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
+                        self.widget.new_advertised_endpoint.emit(endpoint)
+                    except Exception as e:
+                        logger.info(f"Could not connect to beacon: {beacon.url} {e}")
+            except Exception as e:
+                logger.exception("Error in discovery")
+                return None
+
 
 
                 
@@ -237,7 +240,11 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
             await self.widget.show_coro.acall()
 
             try:
-                endpoint = await wait_first(self.widget.select_endpoint.acall(), self.await_user_definition())
+                select_endpoint_task = asyncio.create_task(self.widget.select_endpoint.acall())
+                user_definition_task = asyncio.create_task(self.await_user_definition())
+
+
+                endpoint = await wait_first(select_endpoint_task, user_definition_task)
                 await self.widget.hide_coro.acall()
 
             finally:

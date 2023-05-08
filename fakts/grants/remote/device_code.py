@@ -3,9 +3,10 @@ from http import HTTPStatus
 from urllib.parse import urlencode
 import uuid
 import webbrowser
-from fakts.grants.remote.base import RemoteGrant
+from fakts.grants.remote.base import RemoteGrant, Manifest, RemoteGrantError
 import aiohttp
 import time
+from fakts.grants.errors import GrantError
 from fakts.discovery.base import FaktsEndpoint
 from typing import List
 from pydantic import Field
@@ -24,18 +25,30 @@ try:
     from rich import print
     from rich.panel import Panel
 
-    def print_device_code_prompt(url, code, scopes):
+    def print_device_code_prompt(querystring, url, code, scopes):
         conditional_clipboard(code)
+        scopestring = "\n\t- ".join(scopes)
         print(
             Panel.fit(
                 f"""
-        Please visit this URL to authorize this device:
-        [bold green][link={url}]{url}[/link][/bold green]
-        and enter the code:
-        [bold blue]{code}[/bold blue]
-        to grant the following scopes:
-        [bold orange]{scopes}[/bold orange]
+    Please visit the following URL:
+    [bold green][link={querystring}]{querystring}[/link][/bold green]
+    or go to this URL:
+    [bold green][link={url}]{url}[/link][/bold green]
+    and enter the code:
+    [bold blue]{code}[/bold blue]
+    to grant the following scopes:
+    [bold orange_red1]\t- {scopestring}[/bold orange_red1]
         """,
+                title="Device Code Grant",
+                title_align="center",
+            )
+        )
+
+    def print_succesfull_login():
+        print(
+            Panel.fit(
+                f"You have successfully logged in!",
                 title="Device Code Grant",
                 title_align="center",
             )
@@ -43,14 +56,19 @@ try:
 
 except ImportError:
 
-    def print_device_code_prompt(url, code, scopes):
-        conditional_clipboard(code)
-        print("Please visit the following URL to complete the configuration:")
+    def print_device_code_prompt(querystring, url, code, scopes):
+        conditional_clipboard(querystring)
+        print("Please visit the following URL:")
+        print("\t" + querystring)
+        print("Or go to this URL:")
         print("\t" + url + "device")
         print("And enter the following code:")
         print("\t" + code)
         print("Make sure to select the following scopes")
-        print("\t" + "\n\t".join(scopes))
+        print("\t- " + "\n\t- ".join(scopes))
+
+    def print_succesfull_login():
+        print("You have successfully logged in!")
 
 
 class DeviceCodeGrant(RemoteGrant):
@@ -73,6 +91,7 @@ class DeviceCodeGrant(RemoteGrant):
 
     """
 
+    manifest: Manifest
 
     timeout = 60
     """The timeout for the device code grant in seconds. If the timeout is reached, the grant will fail."""
@@ -80,10 +99,29 @@ class DeviceCodeGrant(RemoteGrant):
     open_browser = True
     """If set to True, the URL will be opened in the default browser (if exists). Otherwise the user will be prompted to enter the code manually."""
 
-    def generate_code(self):
-        """Generates a random 6-digit alpha-numeric code"""
+    async def arequest_code(self, endpoint: FaktsEndpoint) -> str:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=self.ssl_context)
+        ) as session:
+            while True:
+                async with session.post(
+                    f"{endpoint.base_url}start/",
+                    json={"manifest": self.manifest.dict()},
+                ) as response:
+                    if response.status == HTTPStatus.OK:
+                        result = await response.json()
+                        if result["status"] == "granted":
+                            return result["code"]
 
-        return "".join([str(uuid.uuid4())[-1] for _ in range(6)])
+                        else:
+                            raise RemoteGrantError(
+                                f"Error! Could not retrieve code: {result.get('error', 'Unknown Error')}"
+                            )
+
+                    else:
+                        raise RemoteGrantError(
+                            f"Server Error! Could not retrieve code {await response.text()}"
+                        )
 
     async def ademand(self, endpoint: FaktsEndpoint) -> str:
         """Requests a new token from the fakts server.
@@ -96,23 +134,24 @@ class DeviceCodeGrant(RemoteGrant):
 
         """
 
-        code = self.generate_code()
+        code = await self.arequest_code(endpoint)
+        querystring = urlencode(
+            {
+                "device_code": code,
+                "grant": "device_code",
+            }
+        )
 
         if self.open_browser:
-            querystring = urlencode(
-                {
-                    "device_code": code,
-                    "grant": "device_code",
-                    "version": self.manifest.version,
-                    "scope": " ".join(self.manifest.scopes),
-                    "identifier": self.manifest.identifier,
-                    "image": self.manifest.image,
-                }
-            )
             webbrowser.open_new(endpoint.base_url + "configure/?" + querystring)
 
         else:
-            print_device_code_prompt(endpoint.base_url + "device", code, self.scopes)
+            print_device_code_prompt(
+                endpoint.base_url + "configure/?" + querystring,
+                endpoint.base_url + "device",
+                code,
+                self.manifest.scopes,
+            )
 
         start_time = time.time()
 
@@ -123,7 +162,6 @@ class DeviceCodeGrant(RemoteGrant):
                 async with session.post(
                     f"{endpoint.base_url}challenge/", json={"code": code}
                 ) as response:
-
                     if response.status == HTTPStatus.OK:
                         result = await response.json()
                         if result["status"] == "waiting":
@@ -144,6 +182,9 @@ class DeviceCodeGrant(RemoteGrant):
                             continue
 
                         if result["status"] == "granted":
+                            if not self.open_browser:
+                                print_succesfull_login()
+
                             return result["token"]
 
                     else:

@@ -3,6 +3,7 @@ from fakts.discovery.base import Discovery
 from fakts.discovery.static import StaticDiscovery
 from fakts.discovery.base import FaktsEndpoint
 from fakts.grants.base import FaktsGrant
+from fakts.grants.errors import GrantError
 import ssl
 import certifi
 from pydantic import BaseModel
@@ -37,13 +38,19 @@ class CacheFile(BaseModel):
     claims: Dict[EndpointUrl, FaktClaim]
 
 
-
 class Manifest(BaseModel):
     version: str
     identifier: str
     scopes: List[str]
-    image: Optional[str] = None
+    logo: Optional[str]
     """ Scopes that this app should request from the user """
+
+    class Config:
+        extra = "forbid"
+
+
+class RemoteGrantError(GrantError):
+    """Base class for all remotegrant errors"""
 
 
 class RemoteGrant(FaktsGrant):
@@ -61,7 +68,6 @@ class RemoteGrant(FaktsGrant):
     retrieve the configuration from the fakts server.
 
     """
-    manifest: Manifest
 
     discovery: Discovery = Field(default_factory=StaticDiscovery)
     "The discovery method to use, if not specified, the static discovery will be used"

@@ -1,11 +1,12 @@
 import aiohttp
 from typing import Optional
-from fakts.grants.remote.base import RemoteGrant
+from fakts.grants.remote.base import RemoteGrant, Manifest
 from fakts.discovery.base import FaktsEndpoint
 from pydantic import Field
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class RetrieveException(Exception):
     pass
@@ -20,12 +21,20 @@ class RetrieveGrant(RemoteGrant):
     on the fakts server.
 
     """
-    retrieve_url: Optional[str] = Field(None, description="The url to use for retrieving the token (overwrited the endpoint url)")
+
+    manifest: Manifest
+    retrieve_url: Optional[str] = Field(
+        None,
+        description="The url to use for retrieving the token (overwrited the endpoint url)",
+    )
     redirect_uri: str
 
     async def ademand(self, endpoint: FaktsEndpoint) -> str:
-
-        retrieve_url = self.retrieve_url or endpoint.retrieve_url or f"{endpoint.base_url}retrieve/"
+        retrieve_url = (
+            self.retrieve_url
+            or endpoint.retrieve_url
+            or f"{endpoint.base_url}retrieve/"
+        )
 
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=self.ssl_context)

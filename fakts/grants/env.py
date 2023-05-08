@@ -32,7 +32,6 @@ class EnvGrant(FaktsGrant):
     delimiter: str = "__"
 
     async def aload(self, **kwargs):
-
         try:
             data = {}
 
