@@ -27,7 +27,6 @@ class RetrieveGrant(RemoteGrant):
         None,
         description="The url to use for retrieving the token (overwrited the endpoint url)",
     )
-    redirect_uri: str
 
     async def ademand(self, endpoint: FaktsEndpoint) -> str:
         retrieve_url = (
