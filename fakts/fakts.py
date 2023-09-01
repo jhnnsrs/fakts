@@ -17,7 +17,7 @@ current_fakts: contextvars.ContextVar["Fakts"] = contextvars.ContextVar("current
 class Fakts(KoiledModel):
     """Fakts is any asynchronous configuration loader.
 
-    Fakts provides a way to concurrently load and access configuration from different 
+    Fakts provides a way to concurrently load and access configuration from different
     sources in async and sync environments.
 
     It is used to load configuration from a grant, and to access it in async
@@ -28,7 +28,7 @@ class Fakts(KoiledModel):
     a fakts server) a database, or any other source.  It will be loaded either on
     call to `load`,  or on  a call to `get` (if auto_load is set to true).
 
-    Additionaly you can compose grants with the help of meta grants in order to 
+    Additionaly you can compose grants with the help of meta grants in order to
     load configuration from multiple sources.
 
     Example:
@@ -44,8 +44,8 @@ class Fakts(KoiledModel):
             config = await fakts.get("group_name")
         ```
 
-    Fakts should be used as a context manager, and will set the current fakts context 
-    variable to itself, letting you access the current fakts instance from anywhere in 
+    Fakts should be used as a context manager, and will set the current fakts context
+    variable to itself, letting you access the current fakts instance from anywhere in
     your code (async or sync). To understand how the async sync code access work,
     please check out the documentation for koil.
 
@@ -105,16 +105,16 @@ class Fakts(KoiledModel):
         the grant if it is not already loaded.
 
         Steps:
-            1. Acquire lock 
-            2. If not yet loaded and auto_load is True, load 
+            1. Acquire lock
+            2. If not yet loaded and auto_load is True, load
             4. Return groups fakts
 
         Args:
             group_name (str): The group name in the fakts
-            auto_load (bool, optional): Should we autoload the configuration 
+            auto_load (bool, optional): Should we autoload the configuration
                                         if nothing has been set? Defaults to True.
-            force_refresh (bool, optional): Should we force a refresh of the grants. 
-                                            Grants can decide their own refresh logic? 
+            force_refresh (bool, optional): Should we force a refresh of the grants.
+                                            Grants can decide their own refresh logic?
                                             Defaults to False.
 
         Returns:
@@ -140,7 +140,6 @@ class Fakts(KoiledModel):
                 config = self._getsubgroup(group_name)
             else:
                 raise e
-            
 
         return config
 
@@ -199,7 +198,6 @@ class Fakts(KoiledModel):
         return unkoil(self.aload, **kwargs)
 
     async def __aenter__(self):
-
         current_fakts.set(self)
         self._lock = asyncio.Lock()
         if self.load_on_enter:

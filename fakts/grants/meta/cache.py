@@ -32,7 +32,6 @@ class CacheGrant(FaktsGrant):
     expires_in: Optional[int]
 
     async def aload(self, force_refresh: bool = False):
-
         cache = None
 
         if os.path.exists(self.cache_file):
@@ -61,7 +60,7 @@ class CacheGrant(FaktsGrant):
                 config=data, created=datetime.datetime.now(), hash=self.hash
             )
 
-        with open(self.cache_file, "w") as f:
+        with open(self.cache_file, "w+") as f:
             json.dump(json.loads(cache.json()), f)
 
         return cache.config
