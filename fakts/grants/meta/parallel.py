@@ -4,6 +4,7 @@ import asyncio
 from functools import reduce
 
 from fakts.utils import update_nested
+from fakts.types import FaktsRequest
 
 
 class ParallelGrant(FaktsGrant):
@@ -13,8 +14,8 @@ class ParallelGrant(FaktsGrant):
     omit_exceptions = False
     " Omit exceptions if any of the grants fail to load "
 
-    async def aload(self, **kwargs):
-        config_futures = [grant.aload(**kwargs) for grant in self.grants]
+    async def aload(self, request: FaktsRequest):
+        config_futures = [grant.aload(request) for grant in self.grants]
         configs = await asyncio.gather(
             config_futures, return_exceptions=self.omit_exceptions
         )

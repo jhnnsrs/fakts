@@ -5,6 +5,7 @@ import pydantic
 import datetime
 import logging
 import json
+from fakts.types import FaktsRequest
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +29,15 @@ class CacheGrant(FaktsGrant):
         default_factory=lambda: "",
         description="Validating against the hash of the config",
     )
-    skip_cache: bool = False
     expires_in: Optional[int]
 
-    async def aload(self, force_refresh: bool = False):
+    async def aload(self, request: FaktsRequest):
         cache = None
 
-        if os.path.exists(self.cache_file):
+        if (
+            os.path.exists(self.cache_file)
+            and request.context.get("allow_cache", True) is True
+        ):
             with open(self.cache_file, "r") as f:
                 x = json.load(f)
                 try:
@@ -53,9 +56,9 @@ class CacheGrant(FaktsGrant):
                 except pydantic.ValidationError as e:
                     logger.error(f"Could not load cache file: {e}. Ignoring it")
 
-        if cache is None or force_refresh or self.skip_cache:
+        if cache is None:
             logger.info("Loading data from grant")
-            data = await self.grant.aload(force_refresh=force_refresh)
+            data = await self.grant.aload(request)
             cache = CacheFile(
                 config=data, created=datetime.datetime.now(), hash=self.hash
             )

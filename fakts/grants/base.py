@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from fakts.types import FaktsRequest
 
 
 class FaktsGrant(BaseModel):
@@ -15,5 +16,5 @@ class FaktsGrant(BaseModel):
 
     """
 
-    async def aload(self, force_refresh=False):
+    async def aload(self, request: FaktsRequest):
         raise NotImplementedError("Fakts need to implement this function")

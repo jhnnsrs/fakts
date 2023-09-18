@@ -1,6 +1,6 @@
 from socket import socket
-from fakts.discovery.base import Discovery
-from fakts.discovery.base import Beacon, FaktsEndpoint
+from fakts.grants.remote.discovery.base import Discovery
+from fakts.grants.remote.discovery.base import Beacon, FaktsEndpoint
 from typing import Dict, Optional, AsyncGenerator
 
 from pydantic import Field
@@ -43,13 +43,13 @@ class ListenBinding(BaseModel):
     magic_phrase: str = "beacon-fakts"
 
 
-async def alisten(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[Beacon, None]:
-
+async def alisten(
+    bind: ListenBinding, strict: bool = False
+) -> AsyncGenerator[Beacon, None]:
     s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
     s.bind((bind.address, bind.port))
 
     try:
-
         loop = asyncio.get_event_loop()
         read_queue = asyncio.Queue()
         transport, pr = await loop.create_datagram_endpoint(
@@ -69,7 +69,6 @@ async def alisten(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[B
                         yield endpoint
 
                     except json.JSONDecodeError as e:
-
                         logger.error("Received Request but it was not valid json")
                         if strict:
                             raise e
@@ -95,15 +94,15 @@ async def alisten(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[B
         logger.info("Stopped checking")
 
 
-async def alisten_pure(bind: ListenBinding, strict: bool = False) -> AsyncGenerator[Beacon, None]:
-
+async def alisten_pure(
+    bind: ListenBinding, strict: bool = False
+) -> AsyncGenerator[Beacon, None]:
     already_detected = set()
 
     async for x in alisten(bind, strict):
         if x.url not in already_detected:
             already_detected.add(x.url)
             yield x
-
 
 
 class AdvertisedDiscovery(Discovery):
@@ -130,29 +129,19 @@ class AdvertisedDiscovery(Discovery):
         description="The timeout for the connection",
     )
 
-    async def discover(self, force_refresh=False):
-        if os.path.exists(self.file):
-            with open(self.file, "r") as f:
-                x = yaml.load(f, Loader=yaml.FullLoader)
-                try:
-                    cache = AdvertisedConfig(**x)
-                except pydantic.ValidationError as e:
-                    logger.error(f"Could not load cache file: {e}. Ignoring it")
-                    cache = AdvertisedConfig()
-        else:
-            cache = AdvertisedConfig()
-
-        if not cache.selected_endpoint or force_refresh:
-            binding = ListenBinding(address=self.bind, port=self.broadcast_port, magic_phrase=self.magic_phrase)
-            async for beacon in alisten_pure(binding, strict=self.strict):
-                try:
-                    endpoint = await discover_url(beacon, self.ssl_context)
-                    return endpoint
-                except Exception as e:
-                    logger.error(f"Could not connect to beacon {beacon.url}: {e}")
-                    continue
-
-
+    async def discover(self, request):
+        binding = ListenBinding(
+            address=self.bind,
+            port=self.broadcast_port,
+            magic_phrase=self.magic_phrase,
+        )
+        async for beacon in alisten_pure(binding, strict=self.strict):
+            try:
+                endpoint = await discover_url(beacon, self.ssl_context)
+                return endpoint
+            except Exception as e:
+                logger.error(f"Could not connect to beacon {beacon.url}: {e}")
+                continue
 
     class Config:
         arbitrary_types_allowed = True

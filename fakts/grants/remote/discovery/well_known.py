@@ -1,6 +1,6 @@
-from fakts.discovery.base import Discovery
-from fakts.discovery.base import FaktsEndpoint
-from fakts.discovery.errors import DiscoveryError
+from fakts.grants.remote.discovery.base import Discovery
+from fakts.grants.remote.discovery.base import FaktsEndpoint
+from fakts.grants.remote.discovery.errors import DiscoveryError
 import ssl
 import certifi
 from pydantic import Field
@@ -32,8 +32,14 @@ class WellKnownDiscovery(Discovery):
         description="The timeout for the connection",
     )
 
-    async def discover(self):
-        return await discover_url(self.url, self.ssl_context, auto_protocols=self.auto_protocols, allow_appending_slash=self.allow_appending_slash, timeout=self.timeout)
+    async def discover(self, request):
+        return await discover_url(
+            self.url,
+            self.ssl_context,
+            auto_protocols=self.auto_protocols,
+            allow_appending_slash=self.allow_appending_slash,
+            timeout=self.timeout,
+        )
 
     class Config:
         extra = "forbid"

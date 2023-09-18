@@ -1,13 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
-
-class FaktsEndpoint(BaseModel):
-    base_url = "http://localhost:8000/f/"
-    name: str = "Helper"
-    description: Optional[str]
-    retrieve_url: Optional[str]
-    claim_url: Optional[str]
-    version: Optional[str]
+from fakts.grants.remote.types import FaktsEndpoint
+from fakts.types import FaktsRequest
 
 
 class Beacon(BaseModel):
@@ -25,5 +19,5 @@ class Discovery(BaseModel):
     user input.
     """
 
-    async def discover(self, force_refresh=False) -> FaktsEndpoint:
+    async def discover(self, request: FaktsRequest) -> FaktsEndpoint:
         raise NotImplementedError("Discovery needs to implement this function")

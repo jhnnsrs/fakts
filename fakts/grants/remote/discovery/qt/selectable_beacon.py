@@ -1,9 +1,15 @@
-from fakts.discovery.errors import DiscoveryError
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import QWidget
+from fakts.grants.remote.discovery.errors import DiscoveryError
 from pydantic import Field
 from qtpy.QtCore import Signal
-from typing import List
-from fakts.discovery.advertised import AdvertisedDiscovery, alisten_pure, ListenBinding
-from fakts.discovery.base import FaktsEndpoint, Beacon
+from typing import List, Optional
+from fakts.grants.remote.discovery.advertised import (
+    AdvertisedDiscovery,
+    alisten_pure,
+    ListenBinding,
+)
+from fakts.grants.remote.discovery.base import FaktsEndpoint, Beacon
 from qtpy import QtWidgets, QtCore, QtGui
 import asyncio
 import logging
@@ -11,8 +17,9 @@ from koil.qt import QtCoro, QtFuture, QtSignal
 import ssl
 import certifi
 import aiohttp
-from fakts.discovery.utils import discover_url
+from fakts.grants.remote.discovery.utils import discover_url
 from koil import unkoil
+from fakts.types import FaktsRequest
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +70,14 @@ class SelectBeaconWidget(QtWidgets.QDialog):
     new_advertised_endpoint = Signal(FaktsEndpoint)
     new_local_endpoint = Signal(FaktsEndpoint)
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, settings=None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
         self.hide_coro = QtCoro(self.hide, autoresolve=True)
         self.show_error_coro = QtCoro(self.show_error, autoresolve=True)
         self.clear_endpoints_coro = QtCoro(self.clear_endpoints, autoresolve=True)
         self.select_endpoint = QtCoro(self.demand_selection_of_endpoint)
+        self.settings = settings
 
         self.select_endpoint_future = None
 
@@ -163,7 +171,7 @@ async def wait_first(*tasks):
 
 
 class QtSelectableDiscovery(AdvertisedDiscovery):
-    widget: SelectBeaconWidget = Field(default_factory=SelectBeaconWidget, exclude=True)
+    widget: SelectBeaconWidget
     scan_localhost: bool = True
 
     async def emit_endpoints(self):
@@ -214,6 +222,8 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
     async def await_user_definition(
         self,
     ):
+        """On top of waiting for a user definition. If the users already set a defined url"""
+
         async for beacon in self.widget.beacon_user.aiterate():
             try:
                 return await discover_url(
@@ -228,7 +238,9 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                 logger.error(f"Could not connect to beacon: {beacon.url} {e}")
                 continue
 
-    async def discover(self, force_refresh=False, **kwargs):
+    async def discover(self, request: FaktsRequest):
+        print("Discovering endpoint in qt selector", request)
+
         emitting_task = asyncio.create_task(self.emit_endpoints())
         try:
             await self.widget.clear_endpoints_coro.acall()
@@ -239,7 +251,10 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                 )
                 user_definition_task = asyncio.create_task(self.await_user_definition())
 
-                endpoint = await wait_first(select_endpoint_task, user_definition_task)
+                endpoint: FaktsEndpoint = await wait_first(
+                    select_endpoint_task, user_definition_task
+                )
+
                 await self.widget.hide_coro.acall()
 
             finally:

@@ -1,15 +1,17 @@
 import asyncio
 from http import HTTPStatus
 from urllib.parse import urlencode
-import uuid
 import webbrowser
-from fakts.grants.remote.base import RemoteGrant, Manifest, RemoteGrantError
 import aiohttp
 import time
-from fakts.grants.errors import GrantError
-from fakts.discovery.base import FaktsEndpoint
-from typing import List
-from pydantic import Field
+
+from fakts.types import FaktsRequest
+from .errors import DemandError
+from pydantic import BaseModel, Field
+from fakts.grants.remote import FaktsEndpoint
+from .types import Token
+import ssl
+import certifi
 
 
 def conditional_clipboard(text):
@@ -71,7 +73,15 @@ except ImportError:
         print("You have successfully logged in!")
 
 
-class DeviceCodeGrant(RemoteGrant):
+class DeviceCodeError(DemandError):
+    pass
+
+
+class DeviceCodeTimeoutError(DeviceCodeError):
+    pass
+
+
+class DeviceCodeDemander(BaseModel):
     """Device Code Grant
 
     The device code grant is a remote grant that is able to newly establish an application
@@ -91,7 +101,13 @@ class DeviceCodeGrant(RemoteGrant):
 
     """
 
-    manifest: Manifest
+    ssl_context: ssl.SSLContext = Field(
+        default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
+        exclude=True,
+    )
+    """ An ssl context to use for the connection to the endpoint"""
+
+    manifest: BaseModel
 
     timeout = 60
     """The timeout for the device code grant in seconds. If the timeout is reached, the grant will fail."""
@@ -114,16 +130,16 @@ class DeviceCodeGrant(RemoteGrant):
                             return result["code"]
 
                         else:
-                            raise RemoteGrantError(
+                            raise DeviceCodeError(
                                 f"Error! Could not retrieve code: {result.get('error', 'Unknown Error')}"
                             )
 
                     else:
-                        raise RemoteGrantError(
+                        raise DeviceCodeError(
                             f"Server Error! Could not retrieve code {await response.text()}"
                         )
 
-    async def ademand(self, endpoint: FaktsEndpoint) -> str:
+    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> Token:
         """Requests a new token from the fakts server.
 
         This method will request a new token from the fakts server. If the token is not yet granted, the method will
@@ -166,7 +182,7 @@ class DeviceCodeGrant(RemoteGrant):
                         result = await response.json()
                         if result["status"] == "waiting":
                             if time.time() - start_time > self.timeout:
-                                raise TimeoutError(
+                                raise DeviceCodeTimeoutError(
                                     "Timeout for device code grant reached."
                                 )
 
@@ -175,7 +191,7 @@ class DeviceCodeGrant(RemoteGrant):
 
                         if result["status"] == "pending":
                             if time.time() - start_time > self.timeout:
-                                raise TimeoutError(
+                                raise DeviceCodeTimeoutError(
                                     "Timeout for device code grant reached."
                                 )
                             await asyncio.sleep(1)
@@ -188,6 +204,9 @@ class DeviceCodeGrant(RemoteGrant):
                             return result["token"]
 
                     else:
-                        raise Exception(
+                        raise DeviceCodeError(
                             f"Error! Could not retrieve code {await response.text()}"
                         )
+
+    class Config:
+        arbitrary_types_allowed = True

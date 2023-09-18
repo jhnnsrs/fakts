@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from socket import AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, socket
 import asyncio
 import json
-from fakts.discovery.base import FaktsEndpoint, Beacon
+from fakts.grants.remote.discovery.base import FaktsEndpoint, Beacon
 from koil import Koil, unkoil
 from koil.composition import KoiledModel
 import logging
@@ -50,7 +50,6 @@ def retrieve_bindings() -> List[Binding]:
         if netifaces.AF_INET in addrs:
             informations = addrs[netifaces.AF_INET]
             for i in informations:
-
                 if "broadcast" in i:
                     potential_bindings.append(
                         Binding(
@@ -111,4 +110,3 @@ async def advertise(
         transport.close()
         s.close()
         raise e
-

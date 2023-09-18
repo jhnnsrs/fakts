@@ -4,6 +4,7 @@ from fakts.grants.errors import GrantError
 import yaml
 from koil.qt import QtCoro, QtFuture
 from qtpy import QtWidgets
+from fakts.types import FaktsRequest
 
 
 class NoFileSelected(GrantError):
@@ -42,7 +43,7 @@ class QtYamlGrant(FaktsGrant):
 
     widget: WrappingWidget = Field(exclude=True)
 
-    async def aload(self, **kwargs):
+    async def aload(self, request: FaktsRequest):
         filepath = await self.widget.get_file_coro.acall()
         with open(filepath, "r") as file:
             config = yaml.load(file, Loader=yaml.FullLoader)

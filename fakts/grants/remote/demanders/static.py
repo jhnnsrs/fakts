@@ -1,12 +1,13 @@
-from fakts.grants.remote.base import RemoteGrant
-from fakts.discovery.base import FaktsEndpoint
 from pydantic import SecretStr
+from fakts.grants.remote import FaktsEndpoint
+from .types import Token
+from pydantic import BaseModel
 
 
-class StaticGrant(RemoteGrant):
+class StaticDemander(BaseModel):
     """Static Grant
 
-    A static grant is a remote grant that has a static token. This token can
+    A static demander is a remote grant that has a static token. This token can
     for example have been retrieved from a configuration file beforehand and uniquely
     identifies the application on the fakts server. When using the static grant make
     sure that the token is not shared with other applications. As they can then mimik
@@ -23,5 +24,5 @@ class StaticGrant(RemoteGrant):
     token: SecretStr
     """ The token (secret) that uniquely identifies this application on the fakts server."""
 
-    async def ademand(self, endpoint: FaktsEndpoint) -> str:
+    async def ademand(self, endpoint: FaktsEndpoint, request) -> Token:
         return self.token.get_secret_value()

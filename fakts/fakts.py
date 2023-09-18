@@ -6,9 +6,10 @@ from typing import Any, Dict, Set
 from koil.composition import KoiledModel
 from koil.helpers import unkoil
 from pydantic import Field
-
+from typing import Optional
 from fakts.errors import FaktsError, GroupNotFound
 from fakts.grants.base import FaktsGrant
+from .types import FaktsRequest
 
 logger = logging.getLogger(__name__)
 current_fakts: contextvars.ContextVar["Fakts"] = contextvars.ContextVar("current_fakts")
@@ -75,10 +76,6 @@ class Fakts(KoiledModel):
     loaded_fakts: Dict[str, Any] = Field(default_factory=dict, exclude=True)
     """The currently loaded fakts. Please use `get` to access the fakts"""
 
-    assert_groups: Set[str] = Field(default_factory=set)
-    """Asserted groups are groups that are asserted to be present in the fakts. If 
-    they are not present, an error will be raised"""
-
     allow_auto_load: bool = Field(
         default=True, description="Should we autoload on get?"
     )
@@ -95,9 +92,8 @@ class Fakts(KoiledModel):
 
     async def aget(
         self,
-        group_name: str,
-        auto_load=True,
-        force_refresh=False,
+        group_name: Optional[str] = None,
+        **kwargs,
     ):
         """Get Config
 
@@ -124,26 +120,17 @@ class Fakts(KoiledModel):
             self._lock is not None
         ), "You need to enter the context first before calling this function"
         async with self._lock:
-            if not self.loaded_fakts or force_refresh:
-                if self.allow_auto_load and auto_load:
-                    await self.aload(force_refresh=force_refresh)
-                else:
-                    raise FaktsError(
-                        "No loaded fakts and auto_load is False. Please load first."
-                    )
+            if not self.loaded_fakts:
+                await self.aload(FaktsRequest(context=kwargs))
 
         try:
             config = self._getsubgroup(group_name)
         except GroupNotFound as e:
-            if self.allow_auto_load and auto_load:
-                await self.aload(force_refresh=True)
-                config = self._getsubgroup(group_name)
-            else:
-                raise e
+            raise e
 
         return config
 
-    def _getsubgroup(self, group_name: str) -> Dict[str, Any]:
+    def _getsubgroup(self, group_name: Optional[str] = None) -> Dict[str, Any]:
         """Get subgroup
 
         Protected function to get a subgroup from the loaded fakts
@@ -159,6 +146,9 @@ class Fakts(KoiledModel):
         """
         config = {**self.loaded_fakts}
 
+        if group_name is None:
+            return config
+
         for subgroup in group_name.split("."):
             try:
                 config = config[subgroup]
@@ -172,24 +162,19 @@ class Fakts(KoiledModel):
             not fakt_dict or self._getsubgroup(group) != fakt_dict
         )  # TODO: Implement Hashing on config?
 
-    async def arefresh(self):
+    async def arefresh(self, **kwargs):
         """Causes a Refresh on the grants. Grants can decide their own refresh logic."""
         self.loaded_fakts = None
-        await self.aload(force_refresh=True)
+        await self.aload(FaktsRequest(context=kwargs, is_refresh=True))
 
     def get(self, *args, **kwargs):
         """Sync version of aget"""
         return unkoil(self.aget, *args, **kwargs)
 
-    async def aload(self, force_refresh=False) -> Dict[str, Any]:
+    async def aload(self, request: FaktsRequest) -> Dict[str, Any]:
         """Loads the configuration from the grant and asserts the groups"""
-
-        self.loaded_fakts = await self.grant.aload(force_refresh=force_refresh)
-        if not self.assert_groups.issubset(set(self.loaded_fakts.keys())):
-            raise GroupNotFound(
-                f"Expected Configuration for {self.assert_groups - set(self.loaded_fakts.keys())}. "
-            )
-
+        print(request)
+        self.loaded_fakts = await self.grant.aload(request)
         self._loaded = True
         return self.loaded_fakts
 

@@ -1,19 +1,23 @@
 import aiohttp
 from typing import Optional
-from fakts.grants.remote.base import RemoteGrant, Manifest
-from fakts.discovery.base import FaktsEndpoint
 from pydantic import Field
+from .types import Token
+from .errors import DemandError
+from pydantic import BaseModel, Field
 import logging
+from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
+import ssl
+import certifi
 
 logger = logging.getLogger(__name__)
 
 
-class RetrieveException(Exception):
+class RetrieveError(DemandError):
     pass
 
 
-class RetrieveGrant(RemoteGrant):
-    """Retrieve Grant
+class RetrieveDemander(BaseModel):
+    """Retrieve Demander
 
     A retrieve grant is a remote grant can be used to retrieve a token and a configuration from a fakts server, by claiming to be an already
     registed public application on the fakts server. Public applications are applications that are not able to keep a secret, and therefore
@@ -22,13 +26,19 @@ class RetrieveGrant(RemoteGrant):
 
     """
 
-    manifest: Manifest
+    ssl_context: ssl.SSLContext = Field(
+        default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
+        exclude=True,
+    )
+    """ An ssl context to use for the connection to the endpoint"""
+
+    manifest: BaseModel
     retrieve_url: Optional[str] = Field(
         None,
         description="The url to use for retrieving the token (overwrited the endpoint url)",
     )
 
-    async def ademand(self, endpoint: FaktsEndpoint) -> str:
+    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> Token:
         retrieve_url = (
             self.retrieve_url
             or endpoint.retrieve_url
@@ -50,14 +60,17 @@ class RetrieveGrant(RemoteGrant):
                 if resp.status == 200:
                     data = await resp.json()
                     if not "status" in data:
-                        raise RetrieveException("Malformed Answer")
+                        raise RetrieveError("Malformed Answer")
 
                     status = data["status"]
                     if status == "error":
-                        raise RetrieveException(data["message"])
+                        raise RetrieveError(data["message"])
                     if status == "granted":
                         return data["token"]
 
-                    raise RetrieveException(f"Unexpected status: {status}")
+                    raise RetrieveError(f"Unexpected status: {status}")
                 else:
                     raise Exception("Error! Coud not claim this app on this endpoint")
+
+    class Config:
+        arbitrary_types_allowed = True

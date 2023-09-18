@@ -2,6 +2,7 @@ from typing import List
 from fakts.grants.base import FaktsGrant
 from fakts.grants.errors import GrantError
 import logging
+from fakts.types import FaktsRequest
 
 logger = logging.getLogger(__name__)
 
@@ -11,10 +12,10 @@ class FailsafeGrant(FaktsGrant):
 
     grants: List[FaktsGrant]
 
-    async def aload(self, **kwargs):
+    async def aload(self, request: FaktsRequest):
         for grant in self.grants:
             try:
-                config = await grant.aload(**kwargs)
+                config = await grant.aload(request)
                 return config
             except GrantError as e:
                 logger.exception(f"Failed to load {grant}", exc_info=True)
