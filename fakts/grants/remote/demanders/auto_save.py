@@ -1,14 +1,9 @@
-from typing import Any, Dict, List, Optional, Type, runtime_checkable, Protocol
-from pydantic import BaseModel, Field, SecretStr
+from typing import Optional, runtime_checkable, Protocol
+from pydantic import BaseModel, Field
 
-import ssl
-import certifi
-import aiohttp
 import logging
 import asyncio
 from fakts.grants.remote.types import FaktsEndpoint
-from herre.fetcher.types import UserFetcher
-from fakts.grants.remote.types import Discovery
 from fakts.types import FaktsRequest
 from .types import Token
 from fakts.grants.remote.types import Demander

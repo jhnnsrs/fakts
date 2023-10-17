@@ -7,7 +7,7 @@ beacon = EndpointBeacon(advertised_endpoints= [FaktsEndpoint(url="http://p-tnage
 
 async def main():
 
-    task = await beacon.run()
+    await beacon.run()
 
 
 asyncio.run(main())

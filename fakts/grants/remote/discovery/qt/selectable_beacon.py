@@ -1,24 +1,16 @@
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import QWidget
-from fakts.grants.remote.discovery.errors import DiscoveryError
-from pydantic import Field
 from qtpy.QtCore import Signal
-from typing import List, Optional
 from fakts.grants.remote.discovery.advertised import (
     AdvertisedDiscovery,
     alisten_pure,
     ListenBinding,
 )
 from fakts.grants.remote.discovery.base import FaktsEndpoint, Beacon
-from qtpy import QtWidgets, QtCore, QtGui
+from qtpy import QtWidgets, QtCore
 import asyncio
 import logging
 from koil.qt import QtCoro, QtFuture, QtSignal
-import ssl
-import certifi
-import aiohttp
 from fakts.grants.remote.discovery.utils import discover_url
-from koil import unkoil
 from fakts.types import FaktsRequest
 
 logger = logging.getLogger(__name__)
@@ -211,7 +203,7 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                         self.widget.new_advertised_endpoint.emit(endpoint)
                     except Exception as e:
                         logger.info(f"Could not connect to beacon: {beacon.url} {e}")
-            except Exception as e:
+            except Exception:
                 logger.exception("Error in discovery")
                 return None
 
@@ -261,7 +253,7 @@ class QtSelectableDiscovery(AdvertisedDiscovery):
                 emitting_task.cancel()
                 try:
                     await emitting_task
-                except asyncio.CancelledError as e:
+                except asyncio.CancelledError:
                     logger.info("Cancelled the Discovery task")
 
             return endpoint

@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 from fakts.grants.remote.types import FaktsEndpoint
 from fakts.types import FaktsRequest
 

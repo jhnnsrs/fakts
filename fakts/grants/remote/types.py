@@ -1,4 +1,4 @@
-from typing import Protocol, runtime_checkable, Dict, Any, Optional
+from typing import Protocol, runtime_checkable, Optional
 from pydantic import BaseModel
 from fakts.types import FaktsRequest
 

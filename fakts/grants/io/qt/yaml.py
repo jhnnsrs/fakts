@@ -12,7 +12,7 @@ class NoFileSelected(GrantError):
 
 
 class QtSelectYaml(QtWidgets.QFileDialog):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.setFileMode(QtWidgets.QFileDialog.ExistingFile)
         self.setNameFilter("YAML files (*.yaml)")

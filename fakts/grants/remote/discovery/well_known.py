@@ -1,13 +1,9 @@
 from fakts.grants.remote.discovery.base import Discovery
-from fakts.grants.remote.discovery.base import FaktsEndpoint
-from fakts.grants.remote.discovery.errors import DiscoveryError
 import ssl
 import certifi
 from pydantic import Field
-import aiohttp
 import logging
 from typing import List
-import asyncio
 from .utils import discover_url
 
 logger = logging.getLogger(__name__)

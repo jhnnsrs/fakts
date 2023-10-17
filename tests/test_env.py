@@ -12,7 +12,7 @@ def test_env_grant():
 
         assert (
             fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+        ), "No Konfik for group test found"
 
 
 def test_env_grant_with_prepend():
@@ -23,7 +23,7 @@ def test_env_grant_with_prepend():
 
         assert (
             fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+        ), "No Konfik for group test found"
 
 
 def test_env_grant_with_delimiter():
@@ -34,4 +34,4 @@ def test_env_grant_with_delimiter():
 
         assert (
             fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+        ), "No Konfik for group test found"

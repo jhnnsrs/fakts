@@ -1,10 +1,7 @@
-import json
-from typing import runtime_checkable, Protocol
 from herre.grants.stored_login import (
-    UserStore,
     StoredUser,
 )
-from qtpy import QtWidgets, QtCore
+from qtpy import QtWidgets
 from fakts.grants.remote.types import FaktsEndpoint
 from koil.qt import qt_to_async
 
@@ -15,7 +12,7 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.setWindowTitle(f"Connected to {stored.name}")
 
         self.qlabel = QtWidgets.QLabel(
-            f"Do you want to save this endpoint as the default endpoint?"
+            "Do you want to save this endpoint as the default endpoint?"
         )
 
         vlayout = QtWidgets.QVBoxLayout()

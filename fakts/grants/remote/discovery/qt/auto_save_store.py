@@ -1,14 +1,12 @@
-from fakts import Fakts
 import logging
 from qtpy import QtCore
 
 from fakts.grants.remote.types import FaktsEndpoint
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Optional
+from typing import Optional
 
-import json
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class AutoSaveEndpointStore(BaseModel):

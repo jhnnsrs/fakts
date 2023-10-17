@@ -1,26 +1,20 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Optional
 import pydantic
-import datetime
 import logging
 import json
-from .claim import ClaimDemander, ClaimError
-from .types import Token
-from fakts import Fakts
 import logging
-from qtpy import QtCore
 
 from fakts.grants.remote.types import FaktsEndpoint
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Optional
+from typing import Optional
 
 import json
-from pydantic import BaseModel, Field
-from .types import Token
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
-from fakts.grants.remote.types import Demander, FaktsEndpoint
+from fakts.grants.remote.types import FaktsEndpoint
 
 
 class AutoSaveCacheStore(BaseModel):
@@ -34,7 +28,7 @@ class AutoSaveCacheStore(BaseModel):
             return None
 
         with open(self.cache_file, "r") as f:
-            x = json.load(f)
+            x = json.load(f.read())
             try:
                 cache = FaktsEndpoint(**x)
                 return cache
@@ -47,8 +41,8 @@ class AutoSaveCacheStore(BaseModel):
             os.path.remove(self.cache_file)
             return
 
-        with open(self.cache_file, "w+") as f:
-            json.dump(json.loads(endpoint.json()), f)
+        with open(self.cache_file, "w") as f:
+            f.write(endpoint.json())
 
     async def aput_default_endpoint(self, endpoint: Optional[FaktsEndpoint]) -> None:
         self.write_to_cache(endpoint)

@@ -5,7 +5,6 @@ import asyncio
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.panel import Panel
-import os
 import sys
 
 console = Console()
@@ -70,7 +69,7 @@ def beacon(url, all, iterations, interval):
     console.print(md)
     try:
         bindings = retrieve_bindings()
-    except ImportError as e:
+    except ImportError:
         error = Panel(
             """netifaces is required to use the advertised discovery. please install it seperately or install fakts with the 'beacon' extras: pip install "fakts\[beacon]" """,
             title="Fakts Beacon",
@@ -108,7 +107,7 @@ def beacon(url, all, iterations, interval):
             choices=[str(i) for i in range(len(bindings))],
         )
 
-        with console.status("Advertising beacon") as status:
+        with console.status("Advertising beacon"):
             asyncio.run(
                 advertise(
                     bindings[int(bind_index)],
@@ -119,7 +118,7 @@ def beacon(url, all, iterations, interval):
             )
 
     else:
-        with console.status("Advertising beacons") as status:
+        with console.status("Advertising beacons"):
             asyncio.run(
                 adversite_all(bindings, url, interval=interval, iterations=iterations)
             )

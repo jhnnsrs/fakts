@@ -17,7 +17,7 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
 class FaktualBeacon(QtWidgets.QWidget):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.koil = QtKoil(parent=self)
         self.koil.enter()
@@ -56,7 +56,7 @@ class FaktualBeacon(QtWidgets.QWidget):
 
 
 class FaktualYaml(QtWidgets.QWidget):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.koil = QtKoil(parent=self)
         self.koil.enter()

@@ -7,13 +7,8 @@ from pydantic import Field
 from socket import socket, AF_INET, SOCK_DGRAM
 import asyncio
 import json
-from koil import unkoil
 import logging
-import os
-import yaml
-import pydantic
 from pydantic import BaseModel
-import aiohttp
 import ssl
 import certifi
 from .utils import discover_url

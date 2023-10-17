@@ -1,11 +1,9 @@
-from typing import List, Optional
+from typing import List
 from pydantic import BaseModel
 from socket import AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, socket
 import asyncio
 import json
-from fakts.grants.remote.discovery.base import FaktsEndpoint, Beacon
-from koil import Koil, unkoil
-from koil.composition import KoiledModel
+from fakts.grants.remote.discovery.base import Beacon
 import logging
 
 

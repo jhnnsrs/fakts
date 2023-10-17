@@ -59,7 +59,7 @@ class RetrieveDemander(BaseModel):
 
                 if resp.status == 200:
                     data = await resp.json()
-                    if not "status" in data:
+                    if "status" not in data:
                         raise RetrieveError("Malformed Answer")
 
                     status = data["status"]

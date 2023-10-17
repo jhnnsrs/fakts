@@ -1,13 +1,13 @@
 import asyncio
 import contextvars
 import logging
-from typing import Any, Dict, Set
+from typing import Any, Dict
 
 from koil.composition import KoiledModel
 from koil.helpers import unkoil
 from pydantic import Field
 from typing import Optional
-from fakts.errors import FaktsError, GroupNotFound
+from fakts.errors import GroupNotFound
 from fakts.grants.base import FaktsGrant
 from .types import FaktsRequest
 

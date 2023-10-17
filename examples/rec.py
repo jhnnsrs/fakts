@@ -10,7 +10,7 @@ discov = EndpointDiscovery(on_new_endpoint=w)
 
 async def main():
 
-    task = await discov.scan()
+    await discov.scan()
 
 
 asyncio.run(main())

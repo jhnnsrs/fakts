@@ -1,12 +1,5 @@
-import json
-from typing import runtime_checkable, Protocol
-from herre.grants.stored_login import (
-    UserStore,
-    StoredUser,
-)
-from qtpy import QtWidgets, QtCore
+from qtpy import QtWidgets
 from koil.qt import qt_to_async
-import token
 from fakts.grants.remote.demanders.types import Token
 from fakts.grants.remote.types import FaktsEndpoint
 
@@ -17,7 +10,7 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.setWindowTitle(f"Connected to {endpoint.name}")
 
         self.qlabel = QtWidgets.QLabel(
-            f"Do you want to auto save this configuration for this endpoint?"
+            "Do you want to auto save this configuration for this endpoint?"
         )
 
         vlayout = QtWidgets.QVBoxLayout()

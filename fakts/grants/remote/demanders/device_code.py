@@ -50,7 +50,7 @@ try:
     def print_succesfull_login():
         print(
             Panel.fit(
-                f"You have successfully logged in!",
+                "You have successfully logged in!",
                 title="Device Code Grant",
                 title_align="center",
             )
@@ -161,13 +161,12 @@ class DeviceCodeDemander(BaseModel):
         if self.open_browser:
             webbrowser.open_new(endpoint.base_url + "configure/?" + querystring)
 
-        else:
-            print_device_code_prompt(
-                endpoint.base_url + "configure/?" + querystring,
-                endpoint.base_url + "device",
-                code,
-                self.manifest.scopes,
-            )
+        print_device_code_prompt(
+            endpoint.base_url + "configure/?" + querystring,
+            endpoint.base_url + "device",
+            code,
+            self.manifest.scopes,
+        )
 
         start_time = time.time()
 

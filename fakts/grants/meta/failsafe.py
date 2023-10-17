@@ -17,7 +17,7 @@ class FailsafeGrant(FaktsGrant):
             try:
                 config = await grant.aload(request)
                 return config
-            except GrantError as e:
+            except GrantError:
                 logger.exception(f"Failed to load {grant}", exc_info=True)
                 continue
 

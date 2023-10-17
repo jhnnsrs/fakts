@@ -1,14 +1,13 @@
-from fakts import Fakts
 import logging
 from qtpy import QtCore
 
 from fakts.grants.remote.types import FaktsEndpoint
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Optional
+from typing import Dict, Optional
 
 import json
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from fakts.grants.remote.demanders.types import Token
 
 
@@ -32,7 +31,7 @@ class AutoSaveTokenStore(BaseModel):
         else:
             try:
                 storage = EndpointDefaults(**json.loads(un_storage))
-            except Exception as e:
+            except Exception:
                 storage = EndpointDefaults()
 
         if token is None:

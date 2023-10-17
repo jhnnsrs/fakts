@@ -1,5 +1,5 @@
 from .fakts import Fakts, FaktsGrant, get_current_fakts
-from .fakts import FaktsError
+from .errors import FaktsError
 from .grants import EnvGrant, GrantError
 
 

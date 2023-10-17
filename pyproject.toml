@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fakts"
-version = "0.3.40"
+version = "0.3.44"
 description = "asynchronous configuration provider ( tailored to support dynamic client-server relations)"
 authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
 license = "CC BY-NC 3.0"
@@ -45,6 +45,9 @@ markers = [
     "qt: marks tests that require a running qt application",
     "network: marks tests that require a network connection",
 ]
+
+[tool.ruff]
+extend-select = ["ANN001","ANN204", "F401"]
 
 
 [[tool.pydoc-markdown.loaders]]

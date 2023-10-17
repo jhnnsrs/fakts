@@ -3,9 +3,8 @@ from fakts.grants.base import FaktsGrant
 from fakts.grants.errors import GrantError
 import ssl
 import certifi
-from pydantic import BaseModel
 import aiohttp
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict
 from .errors import ClaimError
 import logging
 from .types import Demander, Discovery, FaktsEndpoint
@@ -75,7 +74,7 @@ class RemoteGrant(FaktsGrant):
 
                 if resp.status == 200:
                     data = await resp.json()
-                    if not "status" in data:
+                    if "status" not in data:
                         raise ClaimError("Malformed Answer")
 
                     status = data["status"]
