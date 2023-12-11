@@ -110,7 +110,7 @@ class AutoSaveDiscovery(BaseModel):
     discovery: Discovery
     """The grant to use for the login flow."""
 
-    async def discover(self, request: FaktsRequest) -> FaktsEndpoint:
+    async def adiscover(self, request: FaktsRequest) -> FaktsEndpoint:
         """Fetches the token
 
         This function will only delegate to the grant if the user has not

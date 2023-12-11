@@ -45,22 +45,20 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
         self._recvq.put_nowait((data, addr))
 
 
-
-
 class ListenBinding(BaseModel):
     """A binding to listen on for beacons"""
+
     address: str = ""
     port: int = 45678
     magic_phrase: str = "beacon-fakts"
 
 
 class Beacon(BaseModel):
-    """A beacon that is received when listening on 
+    """A beacon that is received when listening on
     a broadcast port"""
 
     url: str
     """The url of the endpoint"""
-
 
 
 async def alisten(
@@ -90,10 +88,6 @@ async def alisten(
     e
         Any exception that is raised by the socket
     """
-
-
-
-
 
     s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
     s.bind((bind.address, bind.port))
@@ -152,7 +146,7 @@ async def alisten_pure(
     It will yield the beacons as it receives, but will only yield
     each beacon once.
 
-    
+
     Parameters
     ----------
     bind : ListenBinding
@@ -172,7 +166,6 @@ async def alisten_pure(
         Any exception that is raised by the socket
     """
 
-
     already_detected = set()
 
     async for x in alisten(bind, strict):
@@ -180,9 +173,7 @@ async def alisten_pure(
             already_detected.add(x.url)
             yield x
 
-    return 
-
-
+    return
 
 
 class FirstAdvertisedDiscovery(BaseModel):
@@ -191,7 +182,6 @@ class FirstAdvertisedDiscovery(BaseModel):
     This discovery will listen on a broadcast port for beacons.
     It will then try to connect to the endpoint and return it.
     """
-
 
     broadcast_port = 45678
     """The port the broadcast on"""
@@ -254,4 +244,5 @@ class FirstAdvertisedDiscovery(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         arbitrary_types_allowed = True

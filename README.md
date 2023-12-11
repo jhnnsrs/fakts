@@ -70,7 +70,7 @@ async with Fakts(grant=FailsafeGrant(
 In this example fakts will load the configuration from the environment variables first, and if that fails,
 it will load it from the yaml file.
 
-## Special Use Case: Fakts Remote Protocol
+## Fakts Remote Protocol
 
 Fakts provides the remote grant protocol for retrieval of configuration in dynamic client-server relationships.
 With these grants you provide a software manifest for a configuration server (fakts-server), that then grants

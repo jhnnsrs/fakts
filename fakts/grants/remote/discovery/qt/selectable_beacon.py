@@ -1,8 +1,4 @@
-from fakts.grants.remote.discovery.advertised import (
-    alisten_pure,
-    ListenBinding,
-    Beacon
-)
+from fakts.grants.remote.discovery.advertised import alisten_pure, ListenBinding, Beacon
 from qtpy import QtWidgets, QtCore, QtGui
 import asyncio
 import logging
@@ -19,22 +15,22 @@ import certifi
 from fakts.grants.remote.types import FaktsEndpoint
 
 
-
 logger = logging.getLogger(__name__)
 
 
 class SelfScanWidget(QtWidgets.QWidget):
     """A widget that allows the user to scan for beacons
-    
-    It has a line edit and a button. When the button is clicked,
-    the line edit is scanned for a url, and if it is a valid url,
-    a beacon is emitted with the url.
-from .utils import discover_url
 
-    No validation is done on the url, so it is up to the user to
-    enter a valid url.
-    
+        It has a line edit and a button. When the button is clicked,
+        the line edit is scanned for a url, and if it is a valid url,
+        a beacon is emitted with the url.
+    from .utils import discover_url
+
+        No validation is done on the url, so it is up to the user to
+        enter a valid url.
+
     """
+
     user_beacon_added = QtCore.Signal(Beacon)
 
     def __init__(self, *args, **kwargs) -> None:
@@ -50,7 +46,7 @@ from .utils import discover_url
         self.setLayout(self.scanlayout)
 
     def on_add(self) -> None:
-        """ Called when the button is clicked"""
+        """Called when the button is clicked"""
         host = self.lineEdit.text()
         beacon = Beacon(url=host)
         self.user_beacon_added.emit(beacon)
@@ -63,18 +59,19 @@ class FaktsEndpointButton(QtWidgets.QPushButton):
     a signal with the endpoint
     """
 
-
     accept_clicked = QtCore.Signal(FaktsEndpoint)
 
-    def __init__(self, endpoint: FaktsEndpoint, parent: Optional[QtWidgets.QWidget] =None) -> None:
+    def __init__(
+        self, endpoint: FaktsEndpoint, parent: Optional[QtWidgets.QWidget] = None
+    ) -> None:
         """Constructor for FaktsEndpointButton"""
         super(FaktsEndpointButton, self).__init__(parent)
         self.endpoint = endpoint
         self.hovered = False
         self.is_pressed = False
         self.clicked.connect(self.on_clicked)
-        self.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))  #type: ignore  # Default cursor
-        self._initUI()
+        self.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))  # type: ignore  # Default cursor
+        self.initUI()
 
     def initUI(self) -> None:
         """Initialize UI elements"""
@@ -84,9 +81,7 @@ class FaktsEndpointButton(QtWidgets.QPushButton):
         self.setToolTip("Connect to " + self.endpoint.name)
 
     def paintEvent(self, event: Any) -> None:
-        """ Paint the button with the given style, title and subtitle
-        
-        """
+        """Paint the button with the given style, title and subtitle"""
         # Call the superclass paint event to keep the button look normal
         super(FaktsEndpointButton, self).paintEvent(event)
 
@@ -103,7 +98,7 @@ class FaktsEndpointButton(QtWidgets.QPushButton):
         painter.setFont(title_font)
         painter.drawText(
             QtCore.QRect(10, 10, self.width(), title_pos_y),
-            QtCore.Qt.AlignLeft,  #type: ignore
+            QtCore.Qt.AlignLeft,  # type: ignore
             self.endpoint.name,
         )
 
@@ -112,39 +107,39 @@ class FaktsEndpointButton(QtWidgets.QPushButton):
         painter.setFont(subtitle_font)
         painter.drawText(
             QtCore.QRect(10, title_pos_y + 10, self.width(), subtitle_pos_y),
-            QtCore.Qt.AlignLeft,  #type: ignore
+            QtCore.Qt.AlignLeft,  # type: ignore
             "@" + self.endpoint.base_url,
         )
 
     def enterEvent(self, event: Any) -> None:
-        """ Sets the cursor to pointing hand when hovering over the button"""
+        """Sets the cursor to pointing hand when hovering over the button"""
         self.hovered = True
 
         self.update()  # Trigger a repaint
         self.setCursor(
-            QtGui.QCursor(QtCore.Qt.PointingHandCursor) #type: ignore
+            QtGui.QCursor(QtCore.Qt.PointingHandCursor)  # type: ignore
         )  # Change cursor to pointer
 
     def leaveEvent(self, event: Any) -> None:
-        """ Sets the cursor to arrow when not hovering over the button"""
+        """Sets the cursor to arrow when not hovering over the button"""
         self.hovered = False
-        self.setCursor(QtGui.QCursor(QtCore.Qt.ArrowCursor))  #type: ignore  # Change cursor to arrow
+        self.setCursor(QtGui.QCursor(QtCore.Qt.ArrowCursor))  # type: ignore  # Change cursor to arrow
         self.update()  # Trigger a repaint
 
     def mousePressEvent(self, event: Any) -> None:
-        """ Sets the button to pressed when clicked"""
+        """Sets the button to pressed when clicked"""
         self.is_pressed = True
         self.update()  # Trigger a repaint
         super(FaktsEndpointButton, self).mousePressEvent(event)
 
     def mouseReleaseEvent(self, event: Any) -> None:
-        """ Sets the button to not pressed when released"""
+        """Sets the button to not pressed when released"""
         self.is_pressed = False
         self.update()  # Trigger a repaint
         super(FaktsEndpointButton, self).mouseReleaseEvent(event)
 
     def on_clicked(self) -> None:
-        """ Called when the button is clicked"""
+        """Called when the button is clicked"""
         self.accept_clicked.emit(self.endpoint)
 
 
@@ -155,11 +150,12 @@ class SelectBeaconWidget(QtWidgets.QDialog):
     When a button is clicked, a signal is emitted with the beacon
     """
 
-
     new_advertised_endpoint = QtCore.Signal(FaktsEndpoint)
     new_local_endpoint = QtCore.Signal(FaktsEndpoint)
 
-    def __init__(self, *args, settings: Optional[QtCore.QSettings] = None, **kwargs) -> None:
+    def __init__(
+        self, *args, settings: Optional[QtCore.QSettings] = None, **kwargs
+    ) -> None:
         """Constructor for SelectBeaconWidget"""
         super().__init__(*args, **kwargs)
         self.setWindowTitle("Search Endpoints...")
@@ -202,19 +198,19 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.wlayout.addWidget(self.buttonBox)
         self.setLayout(self.wlayout)
 
-    def clearLayout(self, layout: QtWidgets.QVBoxLayout)-> None:
+    def clearLayout(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Clear the layout"""
         while layout.count():
             child = layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
-    def clear_endpoints(self)-> None:
+    def clear_endpoints(self) -> None:
         """Clear the endpoints"""
         self.clearLayout(self.endpointLayout)
         self.endpoints = []
 
-    def show_me(self)-> None:
+    def show_me(self) -> None:
         """A function that shows the widget"""
         self.show()
 
@@ -229,26 +225,26 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.show()
         QtWidgets.QMessageBox.critical(self, "Error", str(error))
 
-    def demand_selection_of_endpoint(self, future: QtFuture)-> None:
-        """Is called when the user should select an endpoint. I.e. when the demander 
+    def demand_selection_of_endpoint(self, future: QtFuture) -> None:
+        """Is called when the user should select an endpoint. I.e. when the demander
         is called programmatically"""
         self.select_endpoint_future = future
         self.show()
 
     def on_endpoint_clicked(self, item: FaktsEndpoint) -> None:
-        """ Called when an endpoint button is clicked
+        """Called when an endpoint button is clicked
 
         Will resolve the future with the endpoint
-        
-        
-        
+
+
+
         """
         if self.select_endpoint_future:
             self.select_endpoint_future.resolve(item)
 
     def on_reject(self) -> None:
-        """ Called when the user rejects the dialog
-        
+        """Called when the user rejects the dialog
+
         Will reject the future"""
         if self.select_endpoint_future:
             self.select_endpoint_future.reject(
@@ -257,7 +253,7 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         self.reject()
 
     def closeEvent(self, event: Any) -> None:
-        """ Called when the window is closed. Will automatically reject the future"""
+        """Called when the window is closed. Will automatically reject the future"""
         if self.select_endpoint_future:
             self.select_endpoint_future.reject(
                 Exception("User cancelled the this Grant without selecting a Beacon")
@@ -266,11 +262,11 @@ class SelectBeaconWidget(QtWidgets.QDialog):
         event.accept()  # let the window close
 
     def on_new_endpoint(self, config: FaktsEndpoint) -> None:
-        """ A callback that is called when a new endpoint is discovered
-        
+        """A callback that is called when a new endpoint is discovered
+
         Creates a button for the endpoint and adds it to the layout
 
-        
+
         """
         self.clearLayout(self.endpointLayout)
 
@@ -305,7 +301,6 @@ class QtSelectableDiscovery(BaseModel):
     from a list of network discovered endpoints, as well as endpoints
     that the user manually enters.
     """
-
 
     broadcast_port = 45678
     """The port the broadcast on"""
@@ -387,14 +382,14 @@ class QtSelectableDiscovery(BaseModel):
     async def await_user_definition(
         self,
     ) -> Optional[FaktsEndpoint]:
-        """ Await the user to define a beacon. This will cause the widget to listen for
+        """Await the user to define a beacon. This will cause the widget to listen for
         user input.
-        
+
         Returns
         -------
         FaktsEndpoint
             The endpoint that the user defined
-        
+
         """
 
         async for beacon in self.widget.beacon_user.aiterate():
@@ -468,4 +463,5 @@ class QtSelectableDiscovery(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         arbitrary_types_allowed = True

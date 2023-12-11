@@ -6,21 +6,22 @@ from typing import List
 from .utils import discover_url
 from fakts.types import FaktsRequest
 from fakts.grants.remote import FaktsEndpoint
+
 logger = logging.getLogger(__name__)
 
 
 class WellKnownDiscovery(BaseModel):
     """A discovery that uses the well-known endpoint
-    
+
     A well-known endpoint is a special endpoint that is used to discover
     the actual endpoint. This is useful for example in scenarious where the
-    fakts server might change its location, and the client needs to find it, 
+    fakts server might change its location, and the client needs to find it,
     easily.
 
     This discovery mechanism also provides ways to configure the discovery
     process, such as the timeout, the ssl context, and the protocols to try
     if no protocol is specified in the url.
-    
+
     """
 
     url: str
@@ -65,7 +66,6 @@ class WellKnownDiscovery(BaseModel):
             A valid endpoint
         """
 
-
         return await discover_url(
             self.url,
             self.ssl_context,
@@ -76,5 +76,6 @@ class WellKnownDiscovery(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         extra = "forbid"
         arbitrary_types_allowed = True

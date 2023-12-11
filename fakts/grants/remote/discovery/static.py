@@ -31,4 +31,5 @@ class StaticDiscovery(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         extra = "forbid"

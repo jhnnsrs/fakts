@@ -91,7 +91,9 @@ class Claimer(Protocol):
     user input.
     """
 
-    async def aclaim(self, token: str, endpoint: FaktsEndpoint, request: FaktsRequest) -> Dict[str, FaktValue]:
+    async def aclaim(
+        self, token: str, endpoint: FaktsEndpoint, request: FaktsRequest
+    ) -> Dict[str, FaktValue]:
         """Discovers an endpoint.
 
         This method should return an endpoint that can be used to retrieve
