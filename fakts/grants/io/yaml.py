@@ -1,5 +1,5 @@
 import yaml
-from fakts.types import FaktsRequest, FaktValue
+from fakts.models import FaktsRequest, FaktValue
 from typing import Dict
 from pydantic import BaseModel
 

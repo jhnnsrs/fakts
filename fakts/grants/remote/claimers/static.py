@@ -1,6 +1,6 @@
 from pydantic import Field
 from typing import Any, Dict
-from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest, FaktValue
+from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest, FaktValue
 from pydantic import BaseModel
 
 

@@ -3,7 +3,7 @@ import asyncio
 from functools import reduce
 
 from fakts.utils import update_nested
-from fakts.types import FaktsRequest, FaktValue, FaktsGrant
+from fakts.models import FaktsRequest, FaktValue, FaktsGrant
 from pydantic import BaseModel
 
 

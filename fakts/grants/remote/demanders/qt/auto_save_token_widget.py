@@ -1,6 +1,6 @@
 from qtpy import QtWidgets
 from koil.qt import qt_to_async
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 
 
 class ShouldWeSaveDialog(QtWidgets.QDialog):

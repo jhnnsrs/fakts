@@ -1,4 +1,4 @@
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 import aiohttp
 import logging
 import ssl

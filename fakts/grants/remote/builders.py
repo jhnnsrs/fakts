@@ -3,7 +3,7 @@ from fakts.grants.remote import RemoteGrant
 from fakts.grants.remote.claimers.static import StaticClaimer
 from fakts.grants.remote.discovery.static import StaticDiscovery
 from fakts.grants.remote.demanders.static import StaticDemander
-from fakts.grants.remote.types import FaktsEndpoint, FaktValue
+from fakts.grants.remote.models import FaktsEndpoint, FaktValue
 from typing import Dict
 
 

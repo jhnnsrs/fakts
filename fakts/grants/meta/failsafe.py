@@ -1,7 +1,7 @@
 from typing import List, Dict
 from fakts.grants.errors import GrantError
 import logging
-from fakts.types import FaktsRequest, FaktsGrant, FaktValue
+from fakts.models import FaktsRequest, FaktsGrant, FaktValue
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

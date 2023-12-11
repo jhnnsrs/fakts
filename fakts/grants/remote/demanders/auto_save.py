@@ -3,10 +3,10 @@ from pydantic import BaseModel, Field
 
 import logging
 import asyncio
-from fakts.grants.remote.types import FaktsEndpoint
-from fakts.types import FaktsRequest
+from fakts.grants.remote.models import FaktsEndpoint
+from fakts.models import FaktsRequest
 
-from fakts.grants.remote.types import Demander
+from fakts.grants.remote.models import Demander
 
 logger = logging.getLogger(__name__)
 

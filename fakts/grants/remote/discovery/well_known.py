@@ -4,7 +4,7 @@ from pydantic import Field, BaseModel
 import logging
 from typing import List
 from .utils import discover_url
-from fakts.types import FaktsRequest
+from fakts.models import FaktsRequest
 from fakts.grants.remote import FaktsEndpoint
 
 logger = logging.getLogger(__name__)

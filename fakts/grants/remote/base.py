@@ -1,8 +1,8 @@
 from fakts.grants.errors import GrantError
 from typing import Dict
 import logging
-from .types import Demander, Discovery, Claimer
-from fakts.types import FaktsRequest, FaktValue
+from .models import Demander, Discovery, Claimer
+from fakts.models import FaktsRequest, FaktValue
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

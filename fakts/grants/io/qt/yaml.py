@@ -3,7 +3,7 @@ from fakts.grants.errors import GrantError
 import yaml
 from koil.qt import QtCoro, QtFuture
 from qtpy import QtWidgets
-from fakts.types import FaktsRequest, FaktValue
+from fakts.models import FaktsRequest, FaktValue
 from typing import Dict, Protocol, runtime_checkable, Optional, Type
 from pydantic import BaseModel
 

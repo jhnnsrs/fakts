@@ -9,7 +9,7 @@ from pydantic import Field
 from typing import Optional
 from fakts.errors import GroupNotFound, NoFaktsFound
 
-from .types import FaktsRequest, FaktValue, FaktsGrant
+from .models import FaktsRequest, FaktValue, FaktsGrant
 
 logger = logging.getLogger(__name__)
 current_fakts: contextvars.ContextVar[Optional["Fakts"]] = contextvars.ContextVar(

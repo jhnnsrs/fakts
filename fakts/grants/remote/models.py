@@ -1,6 +1,6 @@
 from typing import Protocol, runtime_checkable, Optional, Dict
 from pydantic import BaseModel
-from fakts.types import FaktsRequest, FaktValue
+from fakts.models import FaktsRequest, FaktValue
 
 
 class FaktsEndpoint(BaseModel):

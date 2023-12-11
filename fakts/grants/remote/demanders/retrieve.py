@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 import logging
 from fakts.grants.remote.errors import DemandError
-from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
+from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest
 import ssl
 import certifi
 
