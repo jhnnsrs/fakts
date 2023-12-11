@@ -12,7 +12,9 @@ from fakts.errors import GroupNotFound, NoFaktsFound
 from .types import FaktsRequest, FaktValue, FaktsGrant
 
 logger = logging.getLogger(__name__)
-current_fakts: contextvars.ContextVar[Optional["Fakts"]] = contextvars.ContextVar("current_fakts", default=None)
+current_fakts: contextvars.ContextVar[Optional["Fakts"]] = contextvars.ContextVar(
+    "current_fakts", default=None
+)
 
 
 class Fakts(KoiledModel):
@@ -271,13 +273,17 @@ class Fakts(KoiledModel):
         processed at a time.
         """
 
-        current_fakts.set(self) #TODO: We should set tokens, but depending on async/sync this is shit
+        current_fakts.set(
+            self
+        )  # TODO: We should set tokens, but depending on async/sync this is shit
         self._lock = asyncio.Lock()
         return self
 
     async def __aexit__(self, *args, **kwargs) -> None:
         """Exit the context manager and clean up"""
-        current_fakts.set(None) #TODO: And here we should reset, but can't because of koil unsafe thread
+        current_fakts.set(
+            None
+        )  # TODO: And here we should reset, but can't because of koil unsafe thread
 
     def _repr_html_inline_(self) -> str:
         """(Internal) HTML representation for jupyter"""

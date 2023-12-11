@@ -4,6 +4,7 @@ import logging
 from fakts.types import FaktsRequest, FaktValue
 from typing import Dict, Any, List
 from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 
 

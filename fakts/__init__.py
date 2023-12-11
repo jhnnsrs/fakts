@@ -17,7 +17,6 @@ safe and secure configuration management.
 """
 
 
-
 from .fakts import Fakts, FaktsGrant, get_current_fakts
 from .errors import FaktsError
 from .grants import EnvGrant, GrantError

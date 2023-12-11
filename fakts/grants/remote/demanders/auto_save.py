@@ -16,7 +16,6 @@ class TokenStore(Protocol):
     """A token store is a protocol that is used to store
     tokens for endpoints."""
 
-
     async def aget_default_token_for_endpoint(
         self, endpoint: FaktsEndpoint
     ) -> Optional[str]:
@@ -39,7 +38,7 @@ class TokenStore(Protocol):
         self, endpoint: FaktsEndpoint, token: Optional[str]
     ) -> None:
         """A function that puts the default token for an endpoint
-        
+
         Parameters
         ----------
         endpoint : FaktsEndpoint
@@ -56,13 +55,11 @@ class AutoSaveDecider(Protocol):
 
     This could be for example a widget that asks the user if he wants to save
     the token or not.
-    
-    
-    
+
+
+
     """
 
-
-    
     async def ashould_we_save(self, endpoint: FaktsEndpoint, token: str) -> bool:
         """A function that decides if we should save the token or not
 
@@ -82,10 +79,7 @@ class AutoSaveDecider(Protocol):
 
 
 class StaticDecider(BaseModel):
-    """A decider that always returns the same value
-
-    """
-
+    """A decider that always returns the same value"""
 
     allow_save: bool = True
     """The value to return"""
@@ -122,9 +116,7 @@ class AutoSaveDemander(BaseModel):
     demander: Demander
     """The demander to use to fetch the token if we don't have it"""
 
-    async def ademand(
-        self, endpoint: FaktsEndpoint, request: FaktsRequest
-    ) -> str:
+    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> str:
         """Fetch the token for the endpoint
 
         This method will first try to fetch the token from the store.
@@ -186,5 +178,6 @@ class AutoSaveDemander(BaseModel):
 
     class Config:
         """Config for the model"""
+
         underscore_attrs_are_private = True
         arbitrary_types_allowed = True

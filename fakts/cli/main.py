@@ -1,4 +1,9 @@
-from fakts.cli.advertise import advertise, retrieve_bindings, AdvertiseBinding, AdvertiseBeacon
+from fakts.cli.advertise import (
+    advertise,
+    retrieve_bindings,
+    AdvertiseBinding,
+    AdvertiseBeacon,
+)
 import rich_click as click
 import asyncio
 from rich.console import Console
@@ -20,7 +25,10 @@ welcome = "The fakts beacon lets you advertise a fakts endpoint on your local ne
 
 
 async def adversite_all(
-    bindings: List[AdvertiseBinding], beacons: List[AdvertiseBeacon], interval: int = 1, iterations: int = 10
+    bindings: List[AdvertiseBinding],
+    beacons: List[AdvertiseBeacon],
+    interval: int = 1,
+    iterations: int = 10,
 ) -> None:
     """Advertise on all bindings
 
@@ -41,9 +49,7 @@ async def adversite_all(
 
     await asyncio.gather(
         *[
-            advertise(
-                binding, beacons, interval=interval, iterations=iterations
-            )
+            advertise(binding, beacons, interval=interval, iterations=iterations)
             for binding in bindings
         ]
     )
@@ -134,7 +140,12 @@ def beacon(url: str, all: bool, iterations: int, interval: int) -> None:
     else:
         with console.status("Advertising beacons"):
             asyncio.run(
-                adversite_all(bindings,  [AdvertiseBeacon(url=url)], interval=interval, iterations=iterations)
+                adversite_all(
+                    bindings,
+                    [AdvertiseBeacon(url=url)],
+                    interval=interval,
+                    iterations=iterations,
+                )
             )
 
 

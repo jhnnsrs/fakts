@@ -11,9 +11,11 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+
 class EndpointDefaults(BaseModel):
-    """ A serialization helper for the 
-    default token store """
+    """A serialization helper for the
+    default token store"""
+
     default_token: Dict[str, str] = {}
 
 
@@ -39,7 +41,6 @@ class QTSettingTokenStore(BaseModel):
         token : str
             The token to put, or None to delete the token
         """
-
 
         un_storage = self.settings.value(self.save_key, None)
         if not un_storage:
@@ -90,4 +91,5 @@ class QTSettingTokenStore(BaseModel):
 
     class Config:
         """Pydantic config"""
+
         arbitrary_types_allowed = True

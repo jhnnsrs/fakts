@@ -4,7 +4,8 @@ from koil.qt import qt_to_async
 
 
 class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
-    """ A dialog that asks the user if we should save the ednpoint or not"""
+    """A dialog that asks the user if we should save the ednpoint or not"""
+
     def __init__(self, stored: FaktsEndpoint, *args, **kwargs) -> None:
         """Constructor for ShouldWeSaveDialog"""
         super().__init__(*args, **kwargs)
@@ -28,7 +29,6 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.yes_button.clicked.connect(self._on_yes)
         self.no_button.clicked.connect(self._on_no)
 
-
         self.stored = stored
 
         hlayout.addWidget(self.yes_button)
@@ -41,10 +41,9 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.reject()
 
 
-
 class AutoSaveEndpointWidget(QtWidgets.QWidget):
-    """ A simple widget that asks the user if we should save the endoint or not
-    """
+    """A simple widget that asks the user if we should save the endoint or not"""
+
     def __init__(self, *args, **kwargs) -> None:
         """Constructor for AutoSaveEndpointWidget"""
         super().__init__(*args, **kwargs)

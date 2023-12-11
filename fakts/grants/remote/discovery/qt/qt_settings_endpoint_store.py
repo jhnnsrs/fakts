@@ -5,8 +5,8 @@ from fakts.grants.remote.types import FaktsEndpoint
 from typing import Optional
 
 from pydantic import BaseModel
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 
 class QtSettingsEndpointStore(BaseModel):
@@ -28,12 +28,12 @@ class QtSettingsEndpointStore(BaseModel):
 
     async def aget_default_endpoint(self) -> Optional[FaktsEndpoint]:
         """A function that gets the default endpoint
-        
+
         Returns
         -------
         Optional[FaktsEndpoint]
             The stored endpoint, or None if there is no endpoint
-        
+
         """
 
         un_storage = self.settings.value(self.save_key, None)
@@ -49,4 +49,5 @@ class QtSettingsEndpointStore(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         arbitrary_types_allowed = True

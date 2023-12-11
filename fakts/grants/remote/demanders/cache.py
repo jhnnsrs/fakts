@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class EndpointDefaults(BaseModel):
-    """ A serialization helper for the
-    default token store """
+    """A serialization helper for the
+    default token store"""
+
     default_token: Dict[str, str] = {}
 
 
@@ -21,9 +22,9 @@ class CacheTokenStore(BaseModel):
 
     This token store is used to store tokens in a cache file.
     It is used by the AutoSaveDemander to cache tokens.
-    
-    
-    
+
+
+
     """
 
     cache_file: str = ".fakts_cache.json"
@@ -94,4 +95,5 @@ class CacheTokenStore(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         arbitrary_types_allowed = True

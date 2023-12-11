@@ -4,9 +4,7 @@ from fakts.grants.remote.types import FaktsEndpoint
 
 
 class ShouldWeSaveDialog(QtWidgets.QDialog):
-    """ A dialog that asks the user if we should save the token or not"""
-
-
+    """A dialog that asks the user if we should save the token or not"""
 
     def __init__(self, endpoint: FaktsEndpoint, token: str, *args, **kwargs) -> None:
         """Constructor for ShouldWeSaveDialog"""
@@ -42,8 +40,7 @@ class ShouldWeSaveDialog(QtWidgets.QDialog):
 
 
 class AutoSaveTokenWidget(QtWidgets.QWidget):
-    """ A simple widget that asks the user if we should save the token or not
-    """
+    """A simple widget that asks the user if we should save the token or not"""
 
     def __init__(self, *args, **kwargs) -> None:
         """Constructor for AutoSaveTokenWidget"""

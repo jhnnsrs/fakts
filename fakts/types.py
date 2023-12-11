@@ -2,7 +2,6 @@ from pydantic import BaseModel
 from typing import Dict, Any, Union, Protocol, runtime_checkable
 
 
-
 NestedFaktValue = Union[str, int, float, bool, None, Dict[str, Any]]
 FaktValue = Union[str, int, float, bool, None, Dict[str, NestedFaktValue]]
 
@@ -16,10 +15,8 @@ class FaktsGrant(Protocol):
     from a file, from a remote endpoint, from a database, etc.
     """
 
-
-
     async def aload(self, request: "FaktsRequest") -> Dict[str, FaktValue]:
-        """ Loads the configuration from the grant
+        """Loads the configuration from the grant
 
         Depending on the grant, this function may load the configuration
         from a file, from a remote endpoint, from a database, etc, the
@@ -34,9 +31,9 @@ class FaktsGrant(Protocol):
         grants, and should only be used to forward conditional information
         like "skip cache" or "force refresh". Which are mainly handled
         by meta grants.
-        
 
-        
+
+
         Parameters
         ----------
         request : FaktsRequest
@@ -53,8 +50,8 @@ class FaktsGrant(Protocol):
         GrantError
             If the grant failed to load the configuration.+
 
-        
-        
+
+
         """
         ...
 

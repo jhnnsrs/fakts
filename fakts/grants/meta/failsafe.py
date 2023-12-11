@@ -3,6 +3,7 @@ from fakts.grants.errors import GrantError
 import logging
 from fakts.types import FaktsRequest, FaktsGrant, FaktValue
 from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,12 +14,11 @@ class FailsafeGrant(BaseModel):
     and will return the values from the first grant that succeeds.
     """
 
-
     grants: List[FaktsGrant]
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
-        """Loads the configuration from the grant 
-        
+        """Loads the configuration from the grant
+
         It will try to load the grants in order, and will return the values from the first grant that succeeds.
 
 
@@ -31,8 +31,8 @@ class FailsafeGrant(BaseModel):
         -------
         dict
             The configuration loaded from the grant.
-        
-        
+
+
         """
         for grant in self.grants:
             try:
@@ -43,8 +43,8 @@ class FailsafeGrant(BaseModel):
                 continue
 
         raise GrantError("Failed to load any grants")
-    
 
     class Config:
-        """A pydantic config class """
+        """A pydantic config class"""
+
         arbitrary_types_allowed = True

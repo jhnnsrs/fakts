@@ -7,7 +7,6 @@ from fakts.grants.remote.types import FaktsEndpoint, FaktValue
 from typing import Dict
 
 
-
 def build_remote_testing(value: Dict[str, FaktValue]) -> RemoteGrant:
     """Builds a remote grant for testing purposes
 
@@ -25,9 +24,9 @@ def build_remote_testing(value: Dict[str, FaktValue]) -> RemoteGrant:
 
     """
     return RemoteGrant(
-        discovery=StaticDiscovery(endpoint=FaktsEndpoint(base_url="https://example.com")),
+        discovery=StaticDiscovery(
+            endpoint=FaktsEndpoint(base_url="https://example.com")
+        ),
         claimer=StaticClaimer(value=value),
-        demander=StaticDemander(token="token"), # type: ignore
+        demander=StaticDemander(token="token"),  # type: ignore
     )
-
-

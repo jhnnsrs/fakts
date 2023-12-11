@@ -1,4 +1,3 @@
-
 import os
 from typing import Any, Dict, Optional
 import pydantic
@@ -35,7 +34,7 @@ class CacheGrant(pydantic.BaseModel):
     FaktsRequest context parameters:
         - allow_cache: bool - whether to allow the grant to use the cache
 
-    
+
     Attributes
     ----------
     grant : FaktsGrant
@@ -61,13 +60,12 @@ class CacheGrant(pydantic.BaseModel):
     )
     """The hash to validate the cache against (if this value differes from the one in the cache, the grant will be reloaded)"""
 
-
     expires_in: Optional[int]
     """When should the cache expire"""
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
-        """Loads the configuration from the grant 
-        
+        """Loads the configuration from the grant
+
         It will try to load the configuration from the cache file.
         If the cache is expired, or the hash value is different from
         the one in the cache, it will load the grant again.
@@ -76,15 +74,15 @@ class CacheGrant(pydantic.BaseModel):
         ----------
         request : FaktsRequest
             The request object that may contain additional information needed for loading the configuration.
-        
+
         Returns
         -------
         dict
             The configuration loaded from the grant.
-        
-        
+
+
         """
-        
+
         cache = None
 
         if (
@@ -106,8 +104,6 @@ class CacheGrant(pydantic.BaseModel):
                         ):
                             cache = None
 
-                   
-
                 except pydantic.ValidationError as e:
                     logger.error(f"Could not load cache file: {e}. Ignoring it")
 
@@ -122,8 +118,8 @@ class CacheGrant(pydantic.BaseModel):
             json.dump(json.loads(cache.json()), f)
 
         return cache.config
-    
 
     class Config:
-        """A pydantic config class """
+        """A pydantic config class"""
+
         arbitrary_types_allowed = True

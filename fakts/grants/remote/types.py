@@ -17,9 +17,9 @@ class FaktsEndpoint(BaseModel):
     """ A human readable name for the endpoint"""
     description: Optional[str] = None
     """ A human readable description for the endpoint"""
-    retrieve_url: Optional[str]  = None
-    claim_url: Optional[str]  = None
-    version: Optional[str]  = None
+    retrieve_url: Optional[str] = None
+    claim_url: Optional[str] = None
+    version: Optional[str] = None
 
 
 @runtime_checkable

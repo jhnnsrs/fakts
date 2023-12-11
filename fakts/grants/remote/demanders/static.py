@@ -27,7 +27,7 @@ class StaticDemander(BaseModel):
         """Demand a token from the endpoint
 
         Retrieve the token that was provided to the demander
-        
+
         Parameters
         ----------
         endpoint : FaktsEndpoint

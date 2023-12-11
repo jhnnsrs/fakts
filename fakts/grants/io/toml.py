@@ -2,7 +2,7 @@ try:
     import tomllib as toml
 except ImportError:
     try:
-        import toml # type: ignore
+        import toml  # type: ignore
     except ImportError:
         raise ImportError(
             "You need to install the `toml` package to use the toml grant."
@@ -14,6 +14,7 @@ from fakts.grants.base import FaktsGrant
 from fakts.types import FaktsRequest
 from fakts.types import FaktValue
 from typing import Dict
+
 
 class TomlGrant(FaktsGrant):
     """
@@ -29,6 +30,7 @@ class TomlGrant(FaktsGrant):
     aload(request: FaktsRequest)
         Asynchronously loads the TOML file and returns the configuration.
     """
+
     filepath: str
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -50,5 +52,6 @@ class TomlGrant(FaktsGrant):
         return config
 
     class Config:
-        """A pydantic config class """
+        """A pydantic config class"""
+
         arbitrary_types_allowed = True

@@ -7,8 +7,10 @@ from fakts.types import FaktsRequest, FaktValue
 from typing import Dict, Protocol, runtime_checkable, Optional, Type
 from pydantic import BaseModel
 
+
 class NoFileSelected(GrantError):
     """Raised when no file was selected."""
+
     pass
 
 
@@ -21,15 +23,17 @@ class QtSelectYaml(QtWidgets.QFileDialog):
     ask(parent=None)
         Opens the file dialog and returns the selected file path.
     """
+
     def __init__(self, *args, **kwargs) -> None:
-        """A File Dialog that selects YAML files.
-        """
+        """A File Dialog that selects YAML files."""
         super().__init__(*args, **kwargs)
         self.setFileMode(QtWidgets.QFileDialog.ExistingFile)
         self.setNameFilter("YAML files (*.yaml)")
 
     @classmethod
-    def ask(cls: Type["QtSelectYaml"], parent: Optional[QtWidgets.QWidget] =None) -> str:
+    def ask(
+        cls: Type["QtSelectYaml"], parent: Optional[QtWidgets.QWidget] = None
+    ) -> str:
         """
         Opens the file dialog and returns the selected file path.
 
@@ -63,9 +67,9 @@ class WrappingWidget(QtWidgets.QWidget):
     open_file(future: QtFuture)
         Opens the file dialog and resolves or rejects the future based on the selected file path.
     """
+
     def __init__(self, *args, **kwargs) -> None:
-        """A Widget that wraps the file selection process.
-        """
+        """A Widget that wraps the file selection process."""
         super().__init__(*args, **kwargs)
         self.get_file_coro = QtCoro(self.open_file)
 
@@ -95,18 +99,16 @@ class WrappingWidget(QtWidgets.QWidget):
             The file path of the selected file.
         """
         return await self.get_file_coro.acall()
-    
-    
+
 
 @runtime_checkable
 class FileWidget(Protocol):
-    """A Protocol that represents a widget 
-    
+    """A Protocol that represents a widget
+
     that wraps the file selection process.
     It can be used to create a custom widget that wraps the file selection process.
 
     """
-
 
     async def aask(self) -> str:
         """Opens the file dialog and returns the selected file path.
@@ -122,7 +124,6 @@ class FileWidget(Protocol):
             The file path of the selected file.
         """
         ...
-
 
 
 class QtYamlGrant(BaseModel):
@@ -143,7 +144,7 @@ class QtYamlGrant(BaseModel):
     widget: FileWidget = Field(exclude=True)
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
-        """ Loads the YAML file and returns the configuration.
+        """Loads the YAML file and returns the configuration.
 
         Parameters
         ----------
@@ -157,10 +158,11 @@ class QtYamlGrant(BaseModel):
         """
         filepath = await self.widget.aask()
         with open(filepath, "r") as file:
-            config = yaml.load(file, Loader=yaml.FullLoader) # type: ignore #TODO: Check why this is not working
+            config = yaml.load(file, Loader=yaml.FullLoader)  # type: ignore #TODO: Check why this is not working
 
         return config
 
     class Config:
         """Pydantic Config class for QtYamlGrant."""
+
         arbitrary_types_allowed = True

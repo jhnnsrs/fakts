@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 async def check_wellknown(
-    url: str, ssl_context: ssl.SSLContext, timeout: int =4
+    url: str, ssl_context: ssl.SSLContext, timeout: int = 4
 ) -> FaktsEndpoint:
     """Check the well-known endpoint
-    
+
     This function will check the well-known endpoint and return the endpoint
     if it is valid. If it is not valid, it will raise an exception.
 
@@ -65,7 +65,7 @@ async def discover_url(
     ssl_context: ssl.SSLContext,
     auto_protocols: Optional[List[str]] = None,
     allow_appending_slash: bool = False,
-    timeout: int =4,
+    timeout: int = 4,
 ) -> FaktsEndpoint:
     """Discover the endpoint from the url
 
@@ -95,7 +95,6 @@ async def discover_url(
     ------
     DiscoveryError
     """
-
 
     if "://" not in url:
         logger.info(f"No protocol specified on {url}")

@@ -43,10 +43,8 @@ class RemoteGrant(BaseModel):
     claimer: Claimer
     """The claimer mechanism to use for claiming the token FROM the endpoint"""
 
-   
-
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
-        """Load the configuration 
+        """Load the configuration
 
         This function will first discover the endpoint, then demand a token from it,
         and then claim the configuration from it.
@@ -60,17 +58,16 @@ class RemoteGrant(BaseModel):
         -------
         Dict[str, FaktValue]
             The configuration that was claimed from the endpoint
-        
-        
-        
+
+
+
         """
         endpoint = await self.discovery.adiscover(request)
         token = await self.demander.ademand(endpoint, request)
 
         return await self.claimer.aclaim(token, endpoint, request)
 
-    
     class Config:
-        """A pydantic config class for the RemoteGrant
-        """
+        """A pydantic config class for the RemoteGrant"""
+
         arbitrary_types_allowed = True

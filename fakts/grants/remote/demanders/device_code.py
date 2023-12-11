@@ -19,16 +19,19 @@ from .utils import print_device_code_prompt, print_succesfull_login
 
 class DeviceCodeError(DemandError):
     """A base class for all device code errors"""
+
     pass
 
 
 class DeviceCodeTimeoutError(DeviceCodeError):
     """An error that is raised when the timeout for the device code grant is reached"""
+
     pass
 
 
 class ClientKind(str, Enum):
     """The kind of client that you want to request"""
+
     DEVELOPMENT = "development"
     """Tries to set up a development client (client belongs to user)"""
     WEBSITE = "website"
@@ -79,24 +82,27 @@ class DeviceCodeDemander(BaseModel):
     open_browser = True
     """If set to True, the URL will be opened in the default browser (if exists). Otherwise the user will be prompted to enter the code manually."""
 
-
     @root_validator(allow_reuse=True)
     @classmethod
     def check_requested_matches_redirect_uris(cls: Type["DeviceCodeDemander"], values: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore
         """Validates and checks that either a schema_dsl or schema_glob is provided, or that allow_introspection is set to True"""
-        if not values.get("redirect_uris", []) and values.get("requested_client_kind", ClientKind.DEVELOPMENT) == ClientKind.WEBSITE:
-            raise ValueError("You must provide a redirect uri if you want to request a website client")
-
+        if (
+            not values.get("redirect_uris", [])
+            and values.get("requested_client_kind", ClientKind.DEVELOPMENT)
+            == ClientKind.WEBSITE
+        ):
+            raise ValueError(
+                "You must provide a redirect uri if you want to request a website client"
+            )
 
         return values
-
 
     async def arequest_code(self, endpoint: FaktsEndpoint) -> str:
         """Requests a new code from the fakts server.
 
         This method will request a new code from the fakts server. This code will be used to
         authenticate the user. The user will be prompted to visit a URL and enter the code.
-        
+
         Parameters
         ----------
         endpoint : FaktsEndpoint
@@ -107,7 +113,6 @@ class DeviceCodeDemander(BaseModel):
         str
             The devide-code that was requested
         """
-
 
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=self.ssl_context)
@@ -138,8 +143,8 @@ class DeviceCodeDemander(BaseModel):
                         )
 
     async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> str:
-        """ Requests a token from the fakts server
-        
+        """Requests a token from the fakts server
+
         This method will request a token from the fakts server, using the device code grant.
         In the process, this grant will ask the fakts server to create a unique
         device code, it will then ask the user to visit a URL and enter the code.
@@ -162,7 +167,7 @@ class DeviceCodeDemander(BaseModel):
         -------
         str
 
-        
+
         """
 
         code = await self.arequest_code(endpoint)
@@ -179,7 +184,7 @@ class DeviceCodeDemander(BaseModel):
         print_device_code_prompt(
             endpoint.base_url + "configure/?" + querystring,
             endpoint.base_url + "device",
-            code
+            code,
         )
 
         start_time = time.time()
@@ -223,4 +228,5 @@ class DeviceCodeDemander(BaseModel):
 
     class Config:
         """Pydantic Config"""
+
         arbitrary_types_allowed = True

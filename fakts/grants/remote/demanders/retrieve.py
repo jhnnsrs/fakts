@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class RetrieveError(DemandError):
     """A base class for all retrieve errors"""
+
     pass
 
 
@@ -34,7 +35,6 @@ class RetrieveDemander(BaseModel):
     manifest: BaseModel
     """ The manifest of the application that is requesting the token"""
 
-
     retrieve_url: Optional[str] = Field(
         None,
         description="The url to use for retrieving the token (overwrited the endpoint url)",
@@ -56,8 +56,6 @@ class RetrieveDemander(BaseModel):
         str
             The token that was retrieved
         """
-
-
 
         retrieve_url = (
             self.retrieve_url
@@ -90,9 +88,11 @@ class RetrieveDemander(BaseModel):
 
                     raise RetrieveError(f"Unexpected status: {status}")
                 else:
-                    raise RetrieveError("Error! Coud not claim this app on this endpoint")
+                    raise RetrieveError(
+                        "Error! Coud not claim this app on this endpoint"
+                    )
 
     class Config:
-        """Pydantic Config
-        """
+        """Pydantic Config"""
+
         arbitrary_types_allowed = True

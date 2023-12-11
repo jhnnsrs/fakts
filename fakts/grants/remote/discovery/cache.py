@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from fakts.grants.remote.types import FaktsEndpoint
 
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -16,9 +15,9 @@ class AutoSaveCacheStore(BaseModel):
 
     This is a simple implementation that stores the endpoint in a file.
     And will be used if no other implementation is found.
-    
 
-    
+
+
     """
 
     cache_file: str = ".endpoint_cache.json"
@@ -38,7 +37,7 @@ class AutoSaveCacheStore(BaseModel):
 
     def _write_to_cache(self, endpoint: Optional[FaktsEndpoint]) -> None:
         if endpoint is None:
-            os.path.remove(self.cache_file) # type: ignore
+            os.path.remove(self.cache_file)  # type: ignore
             return
 
         with open(self.cache_file, "w") as f:
@@ -74,4 +73,5 @@ class AutoSaveCacheStore(BaseModel):
 
     class Config:
         """Pydantic config"""
+
         arbitrary_types_allowed = True

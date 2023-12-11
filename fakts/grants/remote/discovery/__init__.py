@@ -9,7 +9,6 @@ to discover the endpoint to connect to.
 """
 
 
-
 from .static import StaticDiscovery
 from .well_known import WellKnownDiscovery
 from .advertised import FirstAdvertisedDiscovery

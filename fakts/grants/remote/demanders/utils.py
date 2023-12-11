@@ -1,4 +1,3 @@
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ def could_copy_to_clipboard(text: str) -> bool:
     bool
         Could the text be copied to the clipboard?
     """
-    
+
     try:
         import pyperclip
 
@@ -35,9 +34,9 @@ try:
     from rich import print
     from rich.panel import Panel
 
-    def print_device_code_prompt(querystring: str, url: str, code: str)->None:
+    def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
         """Prints the device code prompt
-        
+
         This function prints the device code prompt using rich.
         It also copies the code to the clipboard if possible.
 
@@ -52,7 +51,7 @@ try:
         scopes : List[str]
             The scopes to grant
         """
-        
+
         could_copy_to_clipboard(code)
         print(
             Panel.fit(
@@ -84,9 +83,9 @@ try:
 
 except ImportError:
 
-    def print_device_code_prompt(querystring: str, url: str, code: str) ->None:
+    def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
         """Prints the device code prompt
-        
+
         This function prints the device code prompt using rich.
         It also copies the code to the clipboard if possible.
 

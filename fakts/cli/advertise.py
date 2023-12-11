@@ -15,32 +15,30 @@ class BeaconProtocol(asyncio.DatagramProtocol):
     This protocol is used to send beacons to a broadcast address.
     It is used by the advertise function.
 
-    
+
     """
-
-
 
     pass
 
 
 class AdvertiseBeacon(BaseModel):
     """A beacon that is sent when advertising"""
+
     url: str
 
 
-
-
 class AdvertiseBinding(BaseModel):
-    """ A binding for the advertise function
-    
+    """A binding for the advertise function
+
     This binding specifies the interface to use, the broadcast address
     and the address to bind to. It also specifies the port to use and
     a magic phrase that is used to identify the beacon.
 
     It is retrieved by the retrieve_bindings function, and
     used by the advertise function.
-    
+
     """
+
     interface: str
     broadcast_addr: str
     bind_addr: str
@@ -123,9 +121,9 @@ async def advertise(
         i = 1
         while i <= iterations or iterations == -1:
             for message in messages:
-                transport.sendto( # type: ignore
+                transport.sendto(  # type: ignore
                     message, (binding.broadcast_addr, binding.broadcast_port)
-                ) 
+                )
                 logger.debug(f"Send Message {message!r}")
 
             await asyncio.sleep(interval)
