@@ -39,6 +39,8 @@ pytest-cov = "^4.0.0"
 ruff = "^0.0.282"
 mypy = "^1.7.1"
 pydoc-markdown = "^4.8.2"
+types-toml = "^0.10.8.7"
+types-pyyaml = "^6.0.12.12"
 
 [tool.pytest.ini_options]
 qt_api = "pyqt5"
