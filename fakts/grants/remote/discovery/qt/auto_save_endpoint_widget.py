@@ -1,13 +1,12 @@
-from herre.grants.stored_login import (
-    StoredUser,
-)
 from qtpy import QtWidgets
 from fakts.grants.remote.types import FaktsEndpoint
 from koil.qt import qt_to_async
 
 
 class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
-    def __init__(self, stored: FaktsEndpoint = None, *args, **kwargs) -> None:
+    """ A dialog that asks the user if we should save the ednpoint or not"""
+    def __init__(self, stored: FaktsEndpoint, *args, **kwargs) -> None:
+        """Constructor for ShouldWeSaveDialog"""
         super().__init__(*args, **kwargs)
         self.setWindowTitle(f"Connected to {stored.name}")
 
@@ -26,32 +25,37 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.yes_button = QtWidgets.QPushButton("Yes")
         self.no_button = QtWidgets.QPushButton("No")
 
-        self.yes_button.clicked.connect(self.on_yes)
-        self.no_button.clicked.connect(self.on_no)
+        self.yes_button.clicked.connect(self._on_yes)
+        self.no_button.clicked.connect(self._on_no)
+
 
         self.stored = stored
 
         hlayout.addWidget(self.yes_button)
         hlayout.addWidget(self.no_button)
 
-    def on_yes(self):
+    def _on_yes(self) -> None:
         self.accept()
 
-    def on_no(self):
+    def _on_no(self) -> None:
         self.reject()
 
 
+
 class AutoSaveEndpointWidget(QtWidgets.QWidget):
+    """ A simple widget that asks the user if we should save the endoint or not
+    """
     def __init__(self, *args, **kwargs) -> None:
+        """Constructor for AutoSaveEndpointWidget"""
         super().__init__(*args, **kwargs)
 
-        self.ashould_we = qt_to_async(self.should_we, autoresolve=True)
+        self.ashould_we = qt_to_async(self._should_we, autoresolve=True)
 
-    def should_we(self, stored: StoredUser) -> bool:
+    def _should_we(self, stored: FaktsEndpoint) -> bool:
         dialog = ShouldWeSaveThisAsDefault(stored, parent=self)
         dialog.exec_()
         return dialog.result() == QtWidgets.QDialog.Accepted
 
-    async def ashould_we_save(self, store: StoredUser) -> bool:
+    async def ashould_we_save(self, store: FaktsEndpoint) -> bool:
         """Should ask the user if we should save the user"""
         return await self.ashould_we(store)

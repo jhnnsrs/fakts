@@ -1,8 +1,0 @@
-test:
-  host: localhost
-  port: 8080
-  s3:
-    host: localhost
-    port: 9000
-    secure: false
-  secure: false

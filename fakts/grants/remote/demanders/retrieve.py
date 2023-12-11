@@ -1,10 +1,8 @@
 import aiohttp
 from typing import Optional
-from pydantic import Field
-from .types import Token
-from .errors import DemandError
 from pydantic import BaseModel, Field
 import logging
+from fakts.grants.remote.errors import DemandError
 from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
 import ssl
 import certifi
@@ -13,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class RetrieveError(DemandError):
+    """A base class for all retrieve errors"""
     pass
 
 
@@ -33,12 +32,33 @@ class RetrieveDemander(BaseModel):
     """ An ssl context to use for the connection to the endpoint"""
 
     manifest: BaseModel
+    """ The manifest of the application that is requesting the token"""
+
+
     retrieve_url: Optional[str] = Field(
         None,
         description="The url to use for retrieving the token (overwrited the endpoint url)",
     )
+    """The url to use for retrieving the token (overwrited the endpoint url)"""
 
-    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> Token:
+    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> str:
+        """Demand a token from the endpoint
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to demand the token from
+        request : FaktsRequest
+            The request to use for the demand
+
+        Returns
+        -------
+        str
+            The token that was retrieved
+        """
+
+
+
         retrieve_url = (
             self.retrieve_url
             or endpoint.retrieve_url
@@ -70,7 +90,9 @@ class RetrieveDemander(BaseModel):
 
                     raise RetrieveError(f"Unexpected status: {status}")
                 else:
-                    raise Exception("Error! Coud not claim this app on this endpoint")
+                    raise RetrieveError("Error! Coud not claim this app on this endpoint")
 
     class Config:
+        """Pydantic Config
+        """
         arbitrary_types_allowed = True

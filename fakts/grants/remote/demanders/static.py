@@ -1,6 +1,5 @@
 from pydantic import SecretStr
-from fakts.grants.remote import FaktsEndpoint
-from .types import Token
+from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
 from pydantic import BaseModel
 
 
@@ -24,5 +23,22 @@ class StaticDemander(BaseModel):
     token: SecretStr
     """ The token (secret) that uniquely identifies this application on the fakts server."""
 
-    async def ademand(self, endpoint: FaktsEndpoint, request) -> Token:
+    async def ademand(self, endpoint: FaktsEndpoint, request: FaktsRequest) -> str:
+        """Demand a token from the endpoint
+
+        Retrieve the token that was provided to the demander
+        
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to demand the token from
+
+        request : FaktsRequest
+            The request to use for the demand
+
+        Returns
+        -------
+        str
+            The token that was retrieved
+        """
         return self.token.get_secret_value()

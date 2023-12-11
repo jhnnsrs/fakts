@@ -1,12 +1,34 @@
-from fakts.grants.remote.discovery.base import Discovery
-from fakts.grants.remote.discovery.base import FaktsEndpoint
+from pydantic import BaseModel
+from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
 
 
-class StaticDiscovery(Discovery):
-    base_url = "http://localhost:8000/f/"
+class StaticDiscovery(BaseModel):
+    """A discovery that always returns the same endpoint
 
-    async def discover(self, request):
-        return FaktsEndpoint(base_url=self.base_url)
+    This is mostly used for testing purposes.
+    """
+
+    endpoint: FaktsEndpoint
+
+    async def adiscover(self, request: FaktsRequest) -> FaktsEndpoint:
+        """Discover the endpoint
+
+        This method will always return the same endpoint (the one that was
+        passed to the constructor)
+
+        Parameters
+        ----------
+        request : FaktsRequest
+            The request to use for the discovery process (is not used)
+
+        Returns
+        -------
+        FaktsEndpoint
+            A valid endpoint
+        """
+
+        return self.endpoint
 
     class Config:
+        """Pydantic Config"""
         extra = "forbid"

@@ -1,16 +1,39 @@
-from fakts.grants.remote.discovery.base import FaktsEndpoint
+from fakts.grants.remote.types import FaktsEndpoint
 import aiohttp
 import logging
 import ssl
-from fakts.grants.remote.discovery.errors import DiscoveryError
+from fakts.grants.remote.errors import DiscoveryError
 from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
 
 async def check_wellknown(
-    url: str, ssl_context: ssl.SSLContext, timeout=4
+    url: str, ssl_context: ssl.SSLContext, timeout: int =4
 ) -> FaktsEndpoint:
+    """Check the well-known endpoint
+    
+    This function will check the well-known endpoint and return the endpoint
+    if it is valid. If it is not valid, it will raise an exception.
+
+    Parameters
+    ----------
+    url : str
+        Url to check
+    ssl_context : ssl.SSLContext
+        The ssl context to use for the connection
+    timeout : int, optional
+        The timeout for the connection , by default 4
+
+    Returns
+    -------
+    FaktsEndpoint
+        A valid endpoint
+
+    Raises
+    ------
+    DiscoveryError
+    """
     url = f"{url}.well-known/fakts"
 
     async with aiohttp.ClientSession(
@@ -26,7 +49,7 @@ async def check_wellknown(
 
                 if "name" not in data:
                     logger.error(f"Malformed answer: {data}")
-                    raise Exception("Malformed Answer")
+                    raise DiscoveryError("Malformed Answer")
 
                 return FaktsEndpoint(**data)
 
@@ -42,8 +65,38 @@ async def discover_url(
     ssl_context: ssl.SSLContext,
     auto_protocols: Optional[List[str]] = None,
     allow_appending_slash: bool = False,
-    timeout=4,
+    timeout: int =4,
 ) -> FaktsEndpoint:
+    """Discover the endpoint from the url
+
+    This function will try to discover the endpoint from the url. If the url
+    does not contain a protocol, it will try to use the auto protocols to
+    discover the endpoint.
+
+    Parameters
+    ----------
+    url : str
+        The (base) url to discover
+    ssl_context : ssl.SSLContext
+        The ssl context to use for the connection
+    auto_protocols : Optional[List[str]], optional
+        The protocols to try (e.g. http https), by default None
+    allow_appending_slash : bool, optional
+        Should we autoappend a slash if the ur does not conain it, by default False
+    timeout : int, optional
+        How long to wait to consider a connection not valid, by default 4
+
+    Returns
+    -------
+    FaktsEndpoint
+        The endpoint
+
+    Raises
+    ------
+    DiscoveryError
+    """
+
+
     if "://" not in url:
         logger.info(f"No protocol specified on {url}")
         if not auto_protocols or len(auto_protocols) == 0:

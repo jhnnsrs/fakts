@@ -1,11 +1,15 @@
 from qtpy import QtWidgets
 from koil.qt import qt_to_async
-from fakts.grants.remote.demanders.types import Token
 from fakts.grants.remote.types import FaktsEndpoint
 
 
-class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
-    def __init__(self, endpoint: FaktsEndpoint, token: Token, *args, **kwargs) -> None:
+class ShouldWeSaveDialog(QtWidgets.QDialog):
+    """ A dialog that asks the user if we should save the token or not"""
+
+
+
+    def __init__(self, endpoint: FaktsEndpoint, token: str, *args, **kwargs) -> None:
+        """Constructor for ShouldWeSaveDialog"""
         super().__init__(*args, **kwargs)
         self.setWindowTitle(f"Connected to {endpoint.name}")
 
@@ -24,30 +28,34 @@ class ShouldWeSaveThisAsDefault(QtWidgets.QDialog):
         self.yes_button = QtWidgets.QPushButton("Yes")
         self.no_button = QtWidgets.QPushButton("No")
 
-        self.yes_button.clicked.connect(self.on_yes)
-        self.no_button.clicked.connect(self.on_no)
+        self.yes_button.clicked.connect(self._on_yes)
+        self.no_button.clicked.connect(self._on_no)
 
         hlayout.addWidget(self.yes_button)
         hlayout.addWidget(self.no_button)
 
-    def on_yes(self):
+    def _on_yes(self) -> None:
         self.accept()
 
-    def on_no(self):
+    def _on_no(self) -> None:
         self.reject()
 
 
 class AutoSaveTokenWidget(QtWidgets.QWidget):
+    """ A simple widget that asks the user if we should save the token or not
+    """
+
     def __init__(self, *args, **kwargs) -> None:
+        """Constructor for AutoSaveTokenWidget"""
         super().__init__(*args, **kwargs)
 
-        self.ashould_we = qt_to_async(self.should_we, autoresolve=True)
+        self.ashould_we = qt_to_async(self._should_we, autoresolve=True)
 
-    def should_we(self, endpoint: FaktsEndpoint, token: Token) -> bool:
-        dialog = ShouldWeSaveThisAsDefault(endpoint, token, parent=self)
+    def _should_we(self, endpoint: FaktsEndpoint, token: str) -> bool:
+        dialog = ShouldWeSaveDialog(endpoint, token, parent=self)
         dialog.exec_()
         return dialog.result() == QtWidgets.QDialog.Accepted
 
-    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: Token) -> bool:
+    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: str) -> bool:
         """Should ask the user if we should save the user"""
         return await self.ashould_we(endpoint, token)

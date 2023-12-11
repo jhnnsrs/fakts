@@ -1,7 +1,4 @@
-from socket import socket
-from fakts.grants.remote.discovery.base import Discovery
-from fakts.grants.remote.discovery.base import Beacon, FaktsEndpoint
-from typing import Dict, Optional, AsyncGenerator
+from typing import Dict, AsyncGenerator, List, Tuple
 
 from pydantic import Field
 from socket import socket, AF_INET, SOCK_DGRAM
@@ -12,41 +9,98 @@ from pydantic import BaseModel
 import ssl
 import certifi
 from .utils import discover_url
-from typing import Optional, List
+from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
+from fakts.grants.remote.errors import DiscoveryError
 
 logger = logging.getLogger(__name__)
 
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):
-    pass
+    "The protocol that is used to receive beacons, and put them in a queue"
 
-    def __init__(self, recvq) -> None:
+    def __init__(self, recvq: asyncio.Queue) -> None:
+        """Initialize the protocol
+
+        Parameters
+        ----------
+        recvq : asyncio.Queue
+            The queue to put the beacons in
+        """
         super().__init__()
         self._recvq = recvq
 
-    def datagram_received(self, data, addr):
+    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+        """Receive a datagram
+
+        This method is called when a datagram is received, and
+        puts it in the queue
+
+        Parameters
+        ----------
+        data : bytes
+            The data that was received
+        addr : Tuple[str, int]
+            The address it was received from
+        """
         self._recvq.put_nowait((data, addr))
 
 
-class AdvertisedConfig(BaseModel):
-    selected_endpoint: Optional[FaktsEndpoint]
 
 
 class ListenBinding(BaseModel):
+    """A binding to listen on for beacons"""
     address: str = ""
     port: int = 45678
     magic_phrase: str = "beacon-fakts"
 
 
+class Beacon(BaseModel):
+    """A beacon that is received when listening on 
+    a broadcast port"""
+
+    url: str
+    """The url of the endpoint"""
+
+
+
 async def alisten(
     bind: ListenBinding, strict: bool = False
 ) -> AsyncGenerator[Beacon, None]:
+    """A generator that listens on a broadcast port for beacons
+
+    This generator listens on a specific binding for beacons.
+    It will yield the beacons as it receives.
+
+
+    Parameters
+    ----------
+    bind : ListenBinding
+        The binding to listen on
+    strict : bool, optional
+        Should we error on bad Beacons, by default False
+
+
+    Yields
+    ------
+    Beacon
+        The beacon that was received
+
+    Raises
+    ------
+    e
+        Any exception that is raised by the socket
+    """
+
+
+
+
+
     s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
     s.bind((bind.address, bind.port))
 
     try:
         loop = asyncio.get_event_loop()
-        read_queue = asyncio.Queue()
+        read_queue = asyncio.Queue()  # type: ignore
         transport, pr = await loop.create_datagram_endpoint(
             lambda: DiscoveryProtocol(read_queue), sock=s
         )
@@ -92,6 +146,33 @@ async def alisten(
 async def alisten_pure(
     bind: ListenBinding, strict: bool = False
 ) -> AsyncGenerator[Beacon, None]:
+    """A generator that listens on a broadcast port for beacons
+
+    This generator listens on a specific binding for beacons.
+    It will yield the beacons as it receives, but will only yield
+    each beacon once.
+
+    
+    Parameters
+    ----------
+    bind : ListenBinding
+        The binding to listen on
+    strict : bool, optional
+        Should we error on bad Beacons, by default False
+
+
+    Yields
+    ------
+    Beacon
+        The beacon that was received
+
+    Raises
+    ------
+    e
+        Any exception that is raised by the socket
+    """
+
+
     already_detected = set()
 
     async for x in alisten(bind, strict):
@@ -99,13 +180,28 @@ async def alisten_pure(
             already_detected.add(x.url)
             yield x
 
+    return 
 
-class AdvertisedDiscovery(Discovery):
+
+
+
+class FirstAdvertisedDiscovery(BaseModel):
+    """A discovery that will return the first endpoint that is advertised
+
+    This discovery will listen on a broadcast port for beacons.
+    It will then try to connect to the endpoint and return it.
+    """
+
+
     broadcast_port = 45678
+    """The port the broadcast on"""
     magic_phrase = "beacon-fakts"
     bind = ""
+    """The address to bind to"""
     strict: bool = False
+    """Should we error on bad Beacons"""
     discovered_endpoints: Dict[str, FaktsEndpoint] = Field(default_factory=dict)
+    """A cache of discovered endpoints"""
     ssl_context: ssl.SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
         exclude=True,
@@ -124,7 +220,23 @@ class AdvertisedDiscovery(Discovery):
         description="The timeout for the connection",
     )
 
-    async def discover(self, request):
+    async def adiscover(self, request: FaktsRequest) -> FaktsEndpoint:
+        """Discover the endpoint
+
+        This method will always return the same endpoint (the one that was
+        passed to the constructor)
+
+        Parameters
+        ----------
+        request : FaktsRequest
+            The request to use for the discovery process (is not used)
+
+        Returns
+        -------
+        FaktsEndpoint
+            A valid endpoint
+        """
+
         binding = ListenBinding(
             address=self.bind,
             port=self.broadcast_port,
@@ -132,11 +244,14 @@ class AdvertisedDiscovery(Discovery):
         )
         async for beacon in alisten_pure(binding, strict=self.strict):
             try:
-                endpoint = await discover_url(beacon, self.ssl_context)
+                endpoint = await discover_url(beacon.url, self.ssl_context)
                 return endpoint
             except Exception as e:
                 logger.error(f"Could not connect to beacon {beacon.url}: {e}")
                 continue
 
+        raise DiscoveryError("Could not find any endpoint")
+
     class Config:
+        """Pydantic Config"""
         arbitrary_types_allowed = True

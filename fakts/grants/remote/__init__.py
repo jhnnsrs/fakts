@@ -9,7 +9,7 @@ legitmitate registration of apps on a dynamic endpoint
 """
 
 from .base import RemoteGrant
-from .types import Demander, Discovery, FaktsEndpoint
+from .types import Demander, Discovery, FaktsEndpoint, Claimer
 
 
-__all__ = ["RemoteGrant", "Demander", "Discovery", "FaktsEndpoint"]
+__all__ = ["RemoteGrant", "Demander", "Discovery", "FaktsEndpoint", "Claimer"]

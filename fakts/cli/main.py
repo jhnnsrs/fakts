@@ -1,11 +1,11 @@
-from fakts.grants.remote.discovery.beacon import retrieve_bindings, advertise
-from fakts.grants.remote.discovery.base import Beacon
+from fakts.cli.advertise import advertise, retrieve_bindings, AdvertiseBinding, AdvertiseBeacon
 import rich_click as click
 import asyncio
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.panel import Panel
 import sys
+from typing import List
 
 console = Console()
 
@@ -19,29 +19,38 @@ logo = """
 welcome = "The fakts beacon lets you advertise a fakts endpoint on your local network. This is useful if you want to advertise a fakts endpoint to other devices on your local network."
 
 
-async def adversite_all(bindings, url, interval=1, iterations=10):
+async def adversite_all(
+    bindings: List[AdvertiseBinding], beacons: List[AdvertiseBeacon], interval: int = 1, iterations: int = 10
+) -> None:
+    """Advertise on all bindings
+
+    This function will advertise on all bindings
+    all beacons.  And will wait for all of them to finish.
+
+    Parameters
+    ----------
+    bindings : List[AdvertiseBinding]
+        The bindings to use
+    beacons : List[AdvertiseBeacon]
+        The beacons / well-known-endpoints to advertise
+    interval : int, optional
+        How often to advertise (in seconds), by default 1
+    iterations : int, optional
+        How often should we adversite? If -1 its infiinite, by default 10
+    """
+
     await asyncio.gather(
         *[
             advertise(
-                binding, [Beacon(url=url)], interval=interval, iterations=iterations
+                binding, beacons, interval=interval, iterations=iterations
             )
             for binding in bindings
         ]
     )
 
 
-def advertise_cli(url: str, all=None, interval=1, iterations=10):
-    """Advertises the given endpoint on the interface specified by the user
-
-
-    Args:
-        name (str, optional): The name of the faktsendpoint. Defaults to None (user can specify it)
-        url (str, optional): The url of the faktsendpont. Defaults to None (user can specify it)
-    """
-
-
 @click.group()
-def cli():
+def cli() -> None:
     """
     Fakts cli lets you interact with the fakts api
     through the command line.
@@ -58,11 +67,16 @@ def cli():
     "-i",
     help="How many iterations (-1 equals indefintetly)",
     default=-1,
+    type=int,
 )
 @click.option(
-    "--interval", "-i", help="Which second interval between broadcast", default=5
+    "--interval",
+    "-i",
+    type=int,
+    help="Which second interval between broadcast",
+    default=5,
 )
-def beacon(url, all, iterations, interval):
+def beacon(url: str, all: bool, iterations: int, interval: int) -> None:
     """Runs the arkitekt app (using a builder)"""
 
     md = Panel(logo + welcome, title="Fakts Beacon", title_align="center")
@@ -111,7 +125,7 @@ def beacon(url, all, iterations, interval):
             asyncio.run(
                 advertise(
                     bindings[int(bind_index)],
-                    [Beacon(url=url)],
+                    [AdvertiseBeacon(url=url)],
                     interval=interval,
                     iterations=iterations,
                 )
@@ -120,7 +134,7 @@ def beacon(url, all, iterations, interval):
     else:
         with console.status("Advertising beacons"):
             asyncio.run(
-                adversite_all(bindings, url, interval=interval, iterations=iterations)
+                adversite_all(bindings,  [AdvertiseBeacon(url=url)], interval=interval, iterations=iterations)
             )
 
 

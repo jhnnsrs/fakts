@@ -9,11 +9,14 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 def test_cache():
 
+    grant = CacheGrant(grant=YamlGrant(filepath=f"{TESTS_FOLDER}/test.yaml"))
+   
+
     fakts = Fakts(
-        grant=CacheGrant(grant=YamlGrant(filepath=f"{TESTS_FOLDER}/test.yaml"))
+        grant=grant
     )
 
-    with fakts:
-        
 
+    with fakts:
         assert fakts.get("test")["hello"]["world"] == "Hello world"
+        assert fakts.get("test.hello.world") == "Hello world"

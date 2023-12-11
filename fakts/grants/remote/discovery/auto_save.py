@@ -13,32 +13,91 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class EndpointStore(Protocol):
+    """A protocol for storing an endpoint
+
+    This should be implemented and provided by the developer,
+    and finds an implementation in the the qt package.
+
+    We strictly separate the storage and user interaction from
+    the discovery process.
+
+    """
+
     async def aget_default_endpoint(self) -> Optional[FaktsEndpoint]:
+        """Gets the default endpoint
+
+        Should get the default endpoint from the storage
+        Should return None if there is no default endpoint
+
+        Returns
+        -------
+        Optional[FaktsEndpoint]
+            The (stored) default endpoint
+        """
         ...
 
-    async def aput_default_endpoint(self, endpoint: FaktsEndpoint) -> None:
+    async def aput_default_endpoint(self, endpoint: Optional[FaktsEndpoint]) -> None:
+        """Puts the default endpoint
+
+        Should store the default endpoint in the storage
+        Should remove the default endpoint if endpoint is None
+
+        Parameters
+        ----------
+        endpoint : Optional[FaktsEndpoint]
+            The (stored) default endpoint
+        """
+
         ...
 
 
 @runtime_checkable
 class AutoSaveDecider(Protocol):
+    """Should ask the user if he wants to save the endpoint
+
+    This should be implemented and provided by the developer,
+    e,g as a widget in the qt package.
+
+    """
+
     async def ashould_we_save(self, endpoint: FaktsEndpoint) -> bool:
-        """Should ask the user if he wants to save the endpoint"""
+        """Should ask the user if he wants to save the endpoint
+
+
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to save
+
+        Returns
+        -------
+        bool
+            Should we save the endpoint as a default?
+        """
         ...
 
 
 class StaticDecider(BaseModel):
+    """A decider that always returns the same value"""
+
     allow_save: bool = True
 
-    async def ashould_we_save(self, *args, **kwargs) -> bool:
+    async def ashould_we_save(self, endpoint: FaktsEndpoint) -> bool:
+        """Will always return the same value (allow_save)"""
         return self.allow_save
 
 
 class AutoSaveDiscovery(BaseModel):
-    """A discovery the autosaves the
-    discovered endpoint and selects it as the default one.
+    """Auto save discovery
 
+    This is a wrapper around a discovery that will ask the user if he wants to
+    use a previously saved default endpoint, and only delegate to the passed discovery if
+    the user does not want to use the default endpoint.
 
+    This is useful for example for a login widget, that will ask the user if he wants to
+    use the previously saved endpoint, and only delegate to the passed discovery if
+    the user does not want to use the default endpoint.
 
     """
 
@@ -69,12 +128,13 @@ class AutoSaveDiscovery(BaseModel):
         """
 
         try:
+            if request.context.get("delete_active", True):
+                await self.store.aput_default_endpoint(None)
+
             if request.context.get("allow_auto_discover", True):
-                stored_endpoint: EndpointStore = (
-                    await self.store.aget_default_endpoint()
-                )
+                stored_endpoint = await self.store.aget_default_endpoint()
                 if stored_endpoint:
-                    print("Discovered stored enpoint", stored_endpoint)
+                    logger.debug("Using stored endpoint")
                     # Lets check if the token is still valid
                     return stored_endpoint
 
@@ -82,9 +142,9 @@ class AutoSaveDiscovery(BaseModel):
 
             # We are skipping the widget and just fetching the token
 
-            print("Discovering endpoint", request)
-            endpoint = await self.discovery.discover(request)
-            print("Discovered endpoint", endpoint)
+            logger.debug("Discovering endpoint with attached discovery")
+            endpoint = await self.discovery.adiscover(request)
+            logger.debug("Discovered endpoint")
             should_we_save = await self.decider.ashould_we_save(endpoint)
             if should_we_save:
                 await self.store.aput_default_endpoint(endpoint)
@@ -101,5 +161,7 @@ class AutoSaveDiscovery(BaseModel):
             raise e
 
     class Config:
+        """pydantic config"""
+
         underscore_attrs_are_private = True
         arbitrary_types_allowed = True

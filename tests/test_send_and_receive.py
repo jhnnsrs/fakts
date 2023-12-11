@@ -1,7 +1,6 @@
-from fakts.discovery.beacon import advertise, retrieve_bindings
-from fakts.discovery.base import FaktsEndpoint
+from fakts.cli.advertise import advertise, retrieve_bindings, AdvertiseBeacon
 import asyncio
-from fakts.discovery.advertised import alisten, ListenBinding
+from fakts.grants.remote.discovery.advertised import alisten, ListenBinding
 import pytest
 
 
@@ -13,12 +12,10 @@ def test_can_retrieve_bindings():
 
 @pytest.mark.network
 async def test_advertise():
-
     bindings = retrieve_bindings()
 
-    endpoint = FaktsEndpoint(
-        name="test",
-        base_url="http://localhost:8000/f/",
+    endpoint = AdvertiseBeacon(
+        url="http://localhost:8000/f/",
     )
 
     for binding in bindings:
@@ -27,13 +24,11 @@ async def test_advertise():
 
 @pytest.mark.network
 async def test_adequate_canceling():
-
     bindings = retrieve_bindings()
     first_binding = bindings[0]
 
-    endpoint = FaktsEndpoint(
-        name="test",
-        base_url="http://localhost:8000/f/",
+    endpoint = AdvertiseBeacon(
+        url="http://localhost:8000/f/",
     )
 
     advertise_task = asyncio.create_task(
@@ -55,9 +50,8 @@ async def test_send_and_receive():
     bindings = retrieve_bindings()
     first_binding = bindings[0]
 
-    endpoint = FaktsEndpoint(
-        name="test",
-        base_url="http://localhost:8000/f/",
+    endpoint = AdvertiseBeacon(
+        url="http://localhost:8000/f/",
     )
 
     advertise_task = asyncio.create_task(
@@ -66,7 +60,7 @@ async def test_send_and_receive():
     await asyncio.sleep(0.1)
 
     async for p in alisten(ListenBinding()):
-        assert p.name == "test"
+        assert p.url == "http://localhost:8000/f/"
         break
 
     advertise_task.cancel()

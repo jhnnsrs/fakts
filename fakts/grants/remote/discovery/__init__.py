@@ -1,4 +1,17 @@
-from .static import StaticDiscovery
-from .base import FaktsEndpoint
+""" Remote Discovery mechanisms
 
-__all__ = ["StaticDiscovery", "FaktsEndpoint"]
+This module contains the different discovery mechanisms
+that can be used to discover the endpoint to connect to.
+
+These are NOT grants, and are used by the remote grants
+to discover the endpoint to connect to.
+
+"""
+
+
+
+from .static import StaticDiscovery
+from .well_known import WellKnownDiscovery
+from .advertised import FirstAdvertisedDiscovery
+
+__all__ = ["StaticDiscovery", "FirstAdvertisedDiscovery", "WellKnownDiscovery"]

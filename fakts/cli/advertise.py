@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from socket import AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_BROADCAST, socket
 import asyncio
 import json
-from fakts.grants.remote.discovery.base import Beacon
 import logging
 
 
@@ -11,10 +10,37 @@ logger = logging.getLogger(__name__)
 
 
 class BeaconProtocol(asyncio.DatagramProtocol):
+    """A protocol that sends beacons to a broadcast address
+
+    This protocol is used to send beacons to a broadcast address.
+    It is used by the advertise function.
+
+    
+    """
+
+
+
     pass
 
 
-class Binding(BaseModel):
+class AdvertiseBeacon(BaseModel):
+    """A beacon that is sent when advertising"""
+    url: str
+
+
+
+
+class AdvertiseBinding(BaseModel):
+    """ A binding for the advertise function
+    
+    This binding specifies the interface to use, the broadcast address
+    and the address to bind to. It also specifies the port to use and
+    a magic phrase that is used to identify the beacon.
+
+    It is retrieved by the retrieve_bindings function, and
+    used by the advertise function.
+    
+    """
     interface: str
     broadcast_addr: str
     bind_addr: str
@@ -22,7 +48,7 @@ class Binding(BaseModel):
     magic_phrase: str = "beacon-fakts"
 
 
-def retrieve_bindings() -> List[Binding]:
+def retrieve_bindings() -> List[AdvertiseBinding]:
     """Uses the netifaces library to retrieve all available interfaces and
     if they are up and running and have a broadcast address, it will return
     a list of bindings for the beacon to use.
@@ -41,7 +67,7 @@ def retrieve_bindings() -> List[Binding]:
             "netifaces is required to use the advertised discovery. please install it seperately or install fakts with the 'beacon' extras"
         ) from e
 
-    potential_bindings: List[Binding] = []
+    potential_bindings: List[AdvertiseBinding] = []
 
     for interface in netifaces.interfaces():
         addrs = netifaces.ifaddresses(interface)
@@ -50,7 +76,7 @@ def retrieve_bindings() -> List[Binding]:
             for i in informations:
                 if "broadcast" in i:
                     potential_bindings.append(
-                        Binding(
+                        AdvertiseBinding(
                             interface=interface,
                             bind_addr=i["addr"],
                             broadcast_addr=i["broadcast"],
@@ -60,8 +86,8 @@ def retrieve_bindings() -> List[Binding]:
 
 
 async def advertise(
-    binding: Binding,
-    endpoints: List[Beacon],
+    binding: AdvertiseBinding,
+    endpoints: List[AdvertiseBeacon],
     interval: int = 1,
     iterations: int = 10,
 ) -> None:
@@ -97,10 +123,10 @@ async def advertise(
         i = 1
         while i <= iterations or iterations == -1:
             for message in messages:
-                transport.sendto(
+                transport.sendto( # type: ignore
                     message, (binding.broadcast_addr, binding.broadcast_port)
-                )
-                logger.debug(f"Send Message {message}")
+                ) 
+                logger.debug(f"Send Message {message!r}")
 
             await asyncio.sleep(interval)
             i += 1

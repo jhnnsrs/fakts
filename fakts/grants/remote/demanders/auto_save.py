@@ -5,7 +5,7 @@ import logging
 import asyncio
 from fakts.grants.remote.types import FaktsEndpoint
 from fakts.types import FaktsRequest
-from .types import Token
+
 from fakts.grants.remote.types import Demander
 
 logger = logging.getLogger(__name__)
@@ -13,65 +13,148 @@ logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class TokenStore(Protocol):
+    """A token store is a protocol that is used to store
+    tokens for endpoints."""
+
+
     async def aget_default_token_for_endpoint(
         self, endpoint: FaktsEndpoint
-    ) -> Optional[FaktsEndpoint]:
+    ) -> Optional[str]:
+        """A function that gets the default token for an endpoint
+
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to get the token for
+
+        Returns
+        -------
+        Optional[str]
+            The token for the endpoint, or None if there is no token
+        """
         ...
 
     async def aput_default_token_for_endpoint(
-        self, endpoint: FaktsEndpoint, token: Token
+        self, endpoint: FaktsEndpoint, token: Optional[str]
     ) -> None:
+        """A function that puts the default token for an endpoint
+        
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to put the token for
+        token : Optional[str]
+            The token to put, or None to delete the token
+        """
         ...
 
 
 @runtime_checkable
 class AutoSaveDecider(Protocol):
-    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: Token) -> bool:
-        """Should ask the user if he wants to save the endpoint"""
+    """A decider that decides if we should save the token or not
+
+    This could be for example a widget that asks the user if he wants to save
+    the token or not.
+    
+    
+    
+    """
+
+
+    
+    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: str) -> bool:
+        """A function that decides if we should save the token or not
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to save the token for
+        token : str
+            Tbe token to save
+
+        Returns
+        -------
+        bool
+            True if we should save the token, False otherwise
+        """
         ...
 
 
 class StaticDecider(BaseModel):
-    allow_save: bool = True
+    """A decider that always returns the same value
 
-    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: Token) -> bool:
+    """
+
+
+    allow_save: bool = True
+    """The value to return"""
+
+    async def ashould_we_save(self, endpoint: FaktsEndpoint, token: str) -> bool:
+        """A function that decides if we should save the token or not
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to save the token for
+        token : str
+            Tbe token to save
+
+        Returns
+        -------
+        bool
+            True if we should save the token, False otherwise
+        """
         return self.allow_save
 
 
 class AutoSaveDemander(BaseModel):
     """A discovery the autosaves the
     discovered endpoint and selects it as the default one.
-
-
-
     """
 
     store: TokenStore
-    """this is the login widget (protocol)"""
+    """A token store to use for the saving and loading of tokens"""
 
     decider: AutoSaveDecider = Field(default_factory=lambda: StaticDecider())
-    """this is the login widget (protocol)"""
+    """ A decider to to decide if we should save the token or not"""
 
     demander: Demander
-    """The grant to use for the login flow."""
+    """The demander to use to fetch the token if we don't have it"""
 
     async def ademand(
         self, endpoint: FaktsEndpoint, request: FaktsRequest
-    ) -> FaktsEndpoint:
-        """Fetches the token
+    ) -> str:
+        """Fetch the token for the endpoint
 
-        This function will only delegate to the grant if the user has not
-        previously logged in (aka there is no token in the storage) Or if the
-        force_refresh flag is set.
+        This method will first try to fetch the token from the store.
+        If it is not found, it will fetch it from the demander.
+        If the decider decides that we should save the token, we will
+        save it in the store.
 
-        Args:
-            force_refresh (bool, optional): _description_. Defaults to False.
+        Request context parameters:
+        - allow_auto_demand: If this is set to False, we will not try to
+            fetch the token from the store, and will only fetch it from
+            the demander.
 
-        Raises:
-            e: _description_
 
-        Returns:
-            Token: _description_
+
+
+        Parameters
+        ----------
+        endpoint : FaktsEndpoint
+            The endpoint to fetch the token for
+        request : FaktsRequest
+            The request to use for the fetching of the token
+
+        Returns
+        -------
+        str
+            The token for the endpoint
+
+        Raises
+        ------
+        e
         """
 
         try:
@@ -102,5 +185,6 @@ class AutoSaveDemander(BaseModel):
             raise e
 
     class Config:
+        """Config for the model"""
         underscore_attrs_are_private = True
         arbitrary_types_allowed = True
