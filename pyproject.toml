@@ -8,37 +8,36 @@ readme = "README.md"
 packages = [{ include = "fakts" }]
 
 [tool.poetry.dependencies]
-python = "^3.7"
-pydantic = ">1.8.2"
-PyYAML = ">= 5.2"
+python = "^3.8"
+pydantic = ">1.9,<2"
+PyYAML = ">=6"
 QtPy = "^2.0.1"
 koil = ">=0.3.5"
 aiohttp = { version = "^3.8.2", optional = true }
 certifi = { version = ">2021", optional = true }
+click = { version = "^8.0.1", optional = true }
+
 
 [tool.poetry.extras]
 remote = ["aiohttp", "certifi"]
+cli = ["click"]
 
-[tool.poetry.dev-dependencies]
-pytest = "^6.2.5"
-pytest-aiohttp = "^0.3.0"
-tox = "^3.24.5"
-pytest-cov = "^3.0.0"
-pytest-qt = "^4.0.2"
-PyQt5 = "^5.15.6"
-testcontainers = "^3.5.3"
-black = "^22.8.0"
-autoflake = "^1.6.1"
-pydoc-markdown = "4.5.1"
 
 
 [tool.poetry.group.dev.dependencies]
-mypy = "^0.991"
-rich = "^12.6.0"
-pyperclip = "^1.8.2"
-netifaces = "^0.11.0"
-types-toml = "^0.10.8.7"
-types-pyyaml = "^6.0.12.12"
+httpx = "^0.23.0"
+autoflake = "^1.7.7"
+pytest = "^7.2.0"
+testcontainers = "^3.7.0"
+pytest-qt = "^4.2.0"
+pytest-asyncio = "^0.20.2"
+aiohttp = "^3.8.3"
+websockets = "^10.4"
+black = ">=22"
+pytest-cov = "^4.0.0"
+ruff = "^0.0.282"
+mypy = "^1.7.1"
+pydoc-markdown = "^4.8.2"
 
 [tool.pytest.ini_options]
 qt_api = "pyqt5"

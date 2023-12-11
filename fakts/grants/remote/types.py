@@ -11,15 +11,15 @@ class FaktsEndpoint(BaseModel):
     the endpoints that are discovered by the discovery mechanisms.
     (For example, when accessing a well-known fakts URL)"""
 
-    base_url = "http://localhost:8000/f/"
+    base_url: str = "http://localhost:8000/f/"
     """The base URL of the endpoint. Akin to the base URL of a Oauth2 """
     name: str = "Helper"
     """ A human readable name for the endpoint"""
-    description: Optional[str]
+    description: Optional[str] = None
     """ A human readable description for the endpoint"""
-    retrieve_url: Optional[str]
-    claim_url: Optional[str]
-    version: Optional[str]
+    retrieve_url: Optional[str]  = None
+    claim_url: Optional[str]  = None
+    version: Optional[str]  = None
 
 
 @runtime_checkable
