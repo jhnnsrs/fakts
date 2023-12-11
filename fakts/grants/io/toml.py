@@ -2,7 +2,7 @@ try:
     import tomllib as toml
 except ImportError:
     try:
-        import toml
+        import toml # type: ignore
     except ImportError:
         raise ImportError(
             "You need to install the `toml` package to use the toml grant."
