@@ -9,10 +9,9 @@ def test_env_grant():
 
     fakts = Fakts(grant=EnvGrant())
     with fakts:
-
         assert (
             fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+        ), "Incorrectly loaded the fakts"
 
 
 def test_env_grant_with_prepend():
@@ -20,10 +19,9 @@ def test_env_grant_with_prepend():
 
     fakts = Fakts(grant=EnvGrant(prepend="TEST_FAKTS_"))
     with fakts:
-
         assert (
-            fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+            fakts.get("test.hello.world") == "Hello World"
+        ), "Incorrectly loaded the fakts"
 
 
 def test_env_grant_with_delimiter():
@@ -31,7 +29,6 @@ def test_env_grant_with_delimiter():
 
     fakts = Fakts(grant=EnvGrant(delimiter="-"))
     with fakts:
-
         assert (
             fakts.get("test")["hello"]["world"] == "Hello World"
-        ), f"No Konfik for group test found"
+        ), "Incorrectly loaded the fakts"

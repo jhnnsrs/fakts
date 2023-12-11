@@ -1,14 +1,13 @@
 from PyQt5 import QtWidgets
 import sys
 from fakts import Fakts
-from fakts.grants.qt.qtbeacon import QtSelectableBeaconGrant
 from koil.qt import QtKoil, QtRunner
 
 from fakts.grants.qt.qtyamlgrant import QtYamlGrant
 
 
 class Faktual(QtWidgets.QWidget):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.koil = QtKoil(parent=self)
         self.koil.connect()

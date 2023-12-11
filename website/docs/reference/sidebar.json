@@ -9,61 +9,26 @@
     },
     {
       "items": [
-        "reference/beacon/__init__",
-        "reference/beacon/beacon"
+        "reference/cli/__init__",
+        "reference/cli/advertise",
+        "reference/cli/main"
       ],
-      "label": "beacon",
+      "label": "cli",
       "type": "category"
     },
     {
       "items": [
         {
           "items": [
-            "reference/discovery/qt/__init__",
-            "reference/discovery/qt/selectable_beacon"
-          ],
-          "label": "discovery.qt",
-          "type": "category"
-        },
-        "reference/discovery/__init__",
-        "reference/discovery/advertised",
-        "reference/discovery/base",
-        "reference/discovery/endpoint",
-        "reference/discovery/static"
-      ],
-      "label": "discovery",
-      "type": "category"
-    },
-    {
-      "items": [
-        "reference/fakt/__init__",
-        "reference/fakt/base"
-      ],
-      "label": "fakt",
-      "type": "category"
-    },
-    {
-      "items": [
-        {
-          "items": [
-            "reference/grants/cli/__init__",
-            "reference/grants/cli/clibeacon"
-          ],
-          "label": "grants.cli",
-          "type": "category"
-        },
-        {
-          "items": [
-            "reference/grants/env/__init__",
-            "reference/grants/env/overwritten",
-            "reference/grants/env/vanilla"
-          ],
-          "label": "grants.env",
-          "type": "category"
-        },
-        {
-          "items": [
+            {
+              "items": [
+                "reference/grants/io/qt/yaml"
+              ],
+              "label": "grants.io.qt",
+              "type": "category"
+            },
             "reference/grants/io/__init__",
+            "reference/grants/io/toml",
             "reference/grants/io/yaml"
           ],
           "label": "grants.io",
@@ -72,6 +37,7 @@
         {
           "items": [
             "reference/grants/meta/__init__",
+            "reference/grants/meta/cache",
             "reference/grants/meta/failsafe",
             "reference/grants/meta/parallel"
           ],
@@ -80,34 +46,79 @@
         },
         {
           "items": [
+            {
+              "items": [
+                "reference/grants/remote/claimers/__init__",
+                "reference/grants/remote/claimers/post",
+                "reference/grants/remote/claimers/static"
+              ],
+              "label": "grants.remote.claimers",
+              "type": "category"
+            },
+            {
+              "items": [
+                {
+                  "items": [
+                    "reference/grants/remote/demanders/qt/__init__",
+                    "reference/grants/remote/demanders/qt/auto_save_token_widget",
+                    "reference/grants/remote/demanders/qt/qt_settings_token_store"
+                  ],
+                  "label": "grants.remote.demanders.qt",
+                  "type": "category"
+                },
+                "reference/grants/remote/demanders/__init__",
+                "reference/grants/remote/demanders/auto_save",
+                "reference/grants/remote/demanders/cache",
+                "reference/grants/remote/demanders/device_code",
+                "reference/grants/remote/demanders/retrieve",
+                "reference/grants/remote/demanders/static",
+                "reference/grants/remote/demanders/utils"
+              ],
+              "label": "grants.remote.demanders",
+              "type": "category"
+            },
+            {
+              "items": [
+                {
+                  "items": [
+                    "reference/grants/remote/discovery/qt/__init__",
+                    "reference/grants/remote/discovery/qt/auto_save_endpoint_widget",
+                    "reference/grants/remote/discovery/qt/qt_settings_endpoint_store",
+                    "reference/grants/remote/discovery/qt/selectable_beacon"
+                  ],
+                  "label": "grants.remote.discovery.qt",
+                  "type": "category"
+                },
+                "reference/grants/remote/discovery/__init__",
+                "reference/grants/remote/discovery/advertised",
+                "reference/grants/remote/discovery/auto_save",
+                "reference/grants/remote/discovery/cache",
+                "reference/grants/remote/discovery/static",
+                "reference/grants/remote/discovery/utils",
+                "reference/grants/remote/discovery/well_known"
+              ],
+              "label": "grants.remote.discovery",
+              "type": "category"
+            },
             "reference/grants/remote/__init__",
             "reference/grants/remote/base",
-            "reference/grants/remote/claim",
-            "reference/grants/remote/device_code",
+            "reference/grants/remote/builders",
             "reference/grants/remote/errors",
-            "reference/grants/remote/public_redirect_grant",
-            "reference/grants/remote/redirect_grant"
+            "reference/grants/remote/types"
           ],
           "label": "grants.remote",
           "type": "category"
         },
         "reference/grants/__init__",
-        "reference/grants/base",
+        "reference/grants/env",
         "reference/grants/errors"
       ],
       "label": "grants",
       "type": "category"
     },
-    {
-      "items": [
-        "reference/middleware/__init__",
-        "reference/middleware/base"
-      ],
-      "label": "middleware",
-      "type": "category"
-    },
     "reference/errors",
     "reference/fakts",
+    "reference/types",
     "reference/utils"
   ],
   "label": "Reference",

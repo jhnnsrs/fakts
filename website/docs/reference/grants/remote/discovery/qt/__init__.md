@@ -1,0 +1,11 @@
+---
+sidebar_label: qt
+title: grants.remote.discovery.qt
+---
+
+QT Disocvery mechanisms
+
+This module contains the different helpers to
+integrate with Discovery mechanisms with Qt
+applications.
+
