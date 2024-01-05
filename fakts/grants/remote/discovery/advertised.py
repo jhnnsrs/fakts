@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import ssl
 import certifi
 from .utils import discover_url
-from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
+from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest
 from fakts.grants.remote.errors import DiscoveryError
 
 logger = logging.getLogger(__name__)

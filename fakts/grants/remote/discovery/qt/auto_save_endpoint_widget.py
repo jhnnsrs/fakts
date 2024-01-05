@@ -1,5 +1,5 @@
 from qtpy import QtWidgets
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 from koil.qt import qt_to_async
 
 

@@ -4,7 +4,7 @@ import certifi
 import aiohttp
 from typing import Dict
 from fakts.grants.remote.errors import ClaimError
-from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest, FaktValue
+from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest, FaktValue
 from pydantic import BaseModel
 
 

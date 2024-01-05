@@ -11,8 +11,8 @@ except ImportError:
 
 
 from fakts.grants.base import FaktsGrant
-from fakts.types import FaktsRequest
-from fakts.types import FaktValue
+from fakts.models import FaktsRequest
+from fakts.models import FaktValue
 from typing import Dict
 
 

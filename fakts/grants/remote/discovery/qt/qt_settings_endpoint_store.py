@@ -1,7 +1,7 @@
 import logging
 from qtpy import QtCore
 
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 from typing import Optional
 
 from pydantic import BaseModel

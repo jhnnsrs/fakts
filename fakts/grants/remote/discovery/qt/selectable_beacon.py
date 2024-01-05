@@ -4,7 +4,7 @@ import asyncio
 import logging
 from koil.qt import QtCoro, QtFuture, QtSignal
 from fakts.grants.remote.discovery.utils import discover_url
-from fakts.types import FaktsRequest
+from fakts.models import FaktsRequest
 from pydantic import BaseModel
 from typing import Any, Optional
 from typing import Dict, List
@@ -12,7 +12,7 @@ from typing import Dict, List
 from pydantic import Field
 import ssl
 import certifi
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ import pydantic
 import logging
 import json
 from pydantic import BaseModel
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 
 
 logger = logging.getLogger(__name__)

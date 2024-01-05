@@ -1,5 +1,5 @@
 from pydantic import SecretStr
-from fakts.grants.remote.types import FaktsEndpoint, FaktsRequest
+from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest
 from pydantic import BaseModel
 
 

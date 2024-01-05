@@ -5,7 +5,7 @@ import webbrowser
 import aiohttp
 import time
 from typing import Any, Dict, Type
-from fakts.types import FaktsRequest
+from fakts.models import FaktsRequest
 from pydantic import BaseModel, Field, root_validator
 from fakts.grants.remote import FaktsEndpoint
 from fakts.grants.remote.errors import DemandError

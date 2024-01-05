@@ -1,7 +1,7 @@
 from fakts.grants.errors import GrantError
 import os
 import logging
-from fakts.types import FaktsRequest, FaktValue
+from fakts.models import FaktsRequest, FaktValue
 from typing import Dict, Any, List
 from pydantic import BaseModel
 

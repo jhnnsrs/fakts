@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from fakts.grants.remote.types import FaktsEndpoint
+from fakts.grants.remote.models import FaktsEndpoint
 from fakts.grants.remote.base import RemoteGrant
 from fakts.fakts import Fakts
 from fakts.grants.io.qt.yaml import QtYamlGrant, WrappingWidget, QtSelectYaml
