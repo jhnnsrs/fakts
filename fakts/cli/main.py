@@ -21,7 +21,7 @@ logo = """
  |_| \__,_|_\_\\__/__/                     
  """
 
-welcome = "The fakts beacon lets you advertise a fakts endpoint on your local network. This is useful if you want to advertise a fakts endpoint to other devices on your local network."
+welcome = "\nThe fakts beacon lets you advertise a fakts endpoint on your local network. This is useful if you want to advertise a fakts endpoint to other devices on your local network."
 
 
 async def adversite_all(
@@ -66,7 +66,7 @@ def cli() -> None:
 
 
 @cli.command("beacon", short_help="Advertises a fakts endpoint")
-@click.argument("url")
+@click.option("--url", "-u", help="The url to advertise", required=False)
 @click.option("--all", "-a", help="Advertise on all interfaces", is_flag=True)
 @click.option(
     "--iterations",
@@ -101,6 +101,9 @@ def beacon(url: str, all: bool, iterations: int, interval: int) -> None:
 
     console.print("Which Interface should be used for broadcasting?")
 
+    if not url:
+        url = Prompt.ask("What is the url of the endpoint you want to advertise?")
+
     all = (
         all
         or Prompt.ask(
@@ -109,8 +112,10 @@ def beacon(url: str, all: bool, iterations: int, interval: int) -> None:
         == "y"
     )
 
+
+
     console.print(
-        f"Advertising endpoint every {interval} seconds " + "forever"
+        f"Advertising {url} every {interval} seconds " + "forever"
         if iterations == -1
         else f"{iterations} times"
     )

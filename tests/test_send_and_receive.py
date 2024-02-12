@@ -5,12 +5,14 @@ import pytest
 
 
 @pytest.mark.network
+@pytest.mark.asyncio
 def test_can_retrieve_bindings():
     bindings = retrieve_bindings()
     assert len(bindings) > 0
 
 
 @pytest.mark.network
+@pytest.mark.asyncio
 async def test_advertise():
     bindings = retrieve_bindings()
 
@@ -23,6 +25,7 @@ async def test_advertise():
 
 
 @pytest.mark.network
+@pytest.mark.asyncio
 async def test_adequate_canceling():
     bindings = retrieve_bindings()
     first_binding = bindings[0]
@@ -46,6 +49,7 @@ async def test_adequate_canceling():
 
 
 @pytest.mark.network
+@pytest.mark.asyncio
 async def test_send_and_receive():
     bindings = retrieve_bindings()
     first_binding = bindings[0]

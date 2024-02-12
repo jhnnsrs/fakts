@@ -302,10 +302,7 @@ class QtSelectableDiscovery(BaseModel):
     that the user manually enters.
     """
 
-    broadcast_port = 45678
-    """The port the broadcast on"""
-    magic_phrase = "beacon-fakts"
-    bind = ""
+    binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""
     strict: bool = False
     """Should we error on bad Beacons"""
@@ -351,11 +348,7 @@ class QtSelectableDiscovery(BaseModel):
 
         try:
             try:
-                binding = ListenBinding(
-                    address=self.bind,
-                    port=self.broadcast_port,
-                    magic_phrase=self.magic_phrase,
-                )
+                binding = self.binding
                 async for beacon in alisten_pure(binding, strict=self.strict):
                     try:
                         if beacon.url == "localhost:8000" and self.scan_localhost:

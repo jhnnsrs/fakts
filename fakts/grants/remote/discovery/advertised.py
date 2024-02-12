@@ -1,7 +1,7 @@
 from typing import Dict, AsyncGenerator, List, Tuple
 
-from pydantic import Field
-from socket import socket, AF_INET, SOCK_DGRAM
+from pydantic import Field, validator
+from socket import socket, AF_INET, SOCK_DGRAM, IPPROTO_UDP
 import asyncio
 import json
 import logging
@@ -48,9 +48,16 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
 class ListenBinding(BaseModel):
     """A binding to listen on for beacons"""
 
-    address: str = ""
+    address: str = "0.0.0.0"
     port: int = 45678
     magic_phrase: str = "beacon-fakts"
+
+    @validator("port")
+    def check_port(cls, v):
+        if not isinstance(v, int):
+            raise ValueError(f"Port {v} is not an integer")
+        if v < 0 or v > 65535:
+            raise ValueError(f"Port {v} is not in the valid range")
 
 
 class Beacon(BaseModel):
@@ -88,15 +95,16 @@ async def alisten(
     e
         Any exception that is raised by the socket
     """
-
-    s = socket(AF_INET, SOCK_DGRAM)  # create UDP socket
-    s.bind((bind.address, bind.port))
+    transport = None
 
     try:
         loop = asyncio.get_event_loop()
         read_queue = asyncio.Queue()  # type: ignore
         transport, pr = await loop.create_datagram_endpoint(
-            lambda: DiscoveryProtocol(read_queue), sock=s
+            lambda: DiscoveryProtocol(read_queue),
+            local_addr=(bind.address, bind.port),  # Change port number here
+            family=AF_INET,
+            proto=IPPROTO_UDP,
         )
 
         while True:
@@ -127,13 +135,13 @@ async def alisten(
                     raise e
 
     except asyncio.CancelledError as e:
-        transport.close()
-        s.close()
+        if transport:
+            transport.close()
         logger.info("Stopped checking")
         raise e
     finally:
-        transport.close()
-        s.close()
+        if transport:
+            transport.close()
         logger.info("Stopped checking")
 
 
@@ -183,10 +191,7 @@ class FirstAdvertisedDiscovery(BaseModel):
     It will then try to connect to the endpoint and return it.
     """
 
-    broadcast_port = 45678
-    """The port the broadcast on"""
-    magic_phrase = "beacon-fakts"
-    bind = ""
+    binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""
     strict: bool = False
     """Should we error on bad Beacons"""
@@ -227,12 +232,7 @@ class FirstAdvertisedDiscovery(BaseModel):
             A valid endpoint
         """
 
-        binding = ListenBinding(
-            address=self.bind,
-            port=self.broadcast_port,
-            magic_phrase=self.magic_phrase,
-        )
-        async for beacon in alisten_pure(binding, strict=self.strict):
+        async for beacon in alisten_pure(self.binding, strict=self.strict):
             try:
                 endpoint = await discover_url(beacon.url, self.ssl_context)
                 return endpoint
