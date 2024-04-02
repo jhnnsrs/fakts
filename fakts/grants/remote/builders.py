@@ -3,6 +3,7 @@ from fakts.grants.remote import RemoteGrant
 from fakts.grants.remote.claimers.static import StaticClaimer
 from fakts.grants.remote.discovery.static import StaticDiscovery
 from fakts.grants.remote.demanders.static import StaticDemander
+from fakts.grants.remote.demanders.redeem import RedeemDemander
 from fakts.grants.remote.claimers.post import ClaimEndpointClaimer
 from fakts.grants.remote.models import FaktsEndpoint, FaktValue
 from typing import Dict
@@ -30,6 +31,15 @@ def build_remote_testing(value: Dict[str, FaktValue]) -> RemoteGrant:
         ),
         claimer=StaticClaimer(value=value),
         demander=StaticDemander(token="token"),  # type: ignore
+    )
+
+
+def build_redeem_grant(url: str, manifest: Dict[str, FaktValue], redeem_token: str ) -> RemoteGrant:
+
+    return RemoteGrant(
+        discovery=StaticDiscovery(endpoint=FaktsEndpoint(base_url=url)),
+        claimer=ClaimEndpointClaimer(),
+        demander=RedeemDemander(manifest=manifest, token=redeem_token),
     )
 
 

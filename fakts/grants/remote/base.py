@@ -3,8 +3,8 @@ from typing import Dict
 import logging
 from .models import Demander, Discovery, Claimer
 from fakts.models import FaktsRequest, FaktValue
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
+from fakts.grants.remote.claimers.static import StaticClaimer
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +40,7 @@ class RemoteGrant(BaseModel):
     demander: Demander
     """The demander mechanism to use for demanding the token FROM the endpoint"""
 
-    claimer: Claimer
+    claimer: Claimer 
     """The claimer mechanism to use for claiming the token FROM the endpoint"""
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
