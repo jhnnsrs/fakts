@@ -325,33 +325,35 @@ class QtSelectableDiscovery(BaseModel):
         default=3,
         description="The timeout for the connection",
     )
+    additional_beacons: List[str] = Field(
+        default_factory=lambda: ["localhost:11000", "localhost:11001", "localhost:8000"]
+    )
     widget: SelectBeaconWidget
-    scan_localhost: bool = True
 
     async def emit_endpoints(self) -> None:
         """A long running task that will emit endpoints that are discovered
         through the network and emit them to be displayed in the widget.
         """
-        if self.scan_localhost:
-            try:
-                localhost_url = "localhost:8000"
-                endpoint = await discover_url(
-                    localhost_url,
-                    self.ssl_context,
-                    auto_protocols=self.auto_protocols,
-                    allow_appending_slash=self.allow_appending_slash,
-                    timeout=self.timeout,
-                )
-                self.widget.new_local_endpoint.emit(endpoint)
-            except Exception as e:
-                logger.info(f"Could not connect to localhost: {e}")
+        if self.additional_beacons:
+            for i in self.additional_beacons:
+                try:
+                    endpoint = await discover_url(
+                        i,
+                        self.ssl_context,
+                        auto_protocols=self.auto_protocols,
+                        allow_appending_slash=self.allow_appending_slash,
+                        timeout=self.timeout,
+                    )
+                    self.widget.new_local_endpoint.emit(endpoint)
+                except Exception as e:
+                    logger.info(f"Could not connect to localhost: {e}")
 
         try:
             try:
                 binding = self.binding
                 async for beacon in alisten_pure(binding, strict=self.strict):
                     try:
-                        if beacon.url == "localhost:8000" and self.scan_localhost:
+                        if beacon.url in self.additional_beacons:
                             # we already did this one
                             continue
                         endpoint = await discover_url(
