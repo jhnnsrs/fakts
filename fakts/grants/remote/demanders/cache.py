@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class EndpointDefaults(BaseModel):
     """A serialization helper for the
     default token store"""
-
+    hash: str = ""
     default_token: Dict[str, str] = {}
 
 
@@ -26,7 +26,7 @@ class CacheTokenStore(BaseModel):
 
 
     """
-
+    hash: str = ""
     cache_file: str = ".fakts_cache.json"
 
     def _read_from_cache(self) -> EndpointDefaults:
@@ -38,6 +38,13 @@ class CacheTokenStore(BaseModel):
             x = json.loads(f.read())
             try:
                 cache = EndpointDefaults(**x)
+                if cache.hash != self.hash:
+                    print("Invalid hash")
+                    logger.warning(
+                        "The cache  is no longer valid. Deleting it"
+                    )
+                    return EndpointDefaults()
+                
                 return cache
             except pydantic.ValidationError as e:
                 logger.error(f"Could not load cache file: {e}. Ignoring it")
@@ -68,6 +75,7 @@ class CacheTokenStore(BaseModel):
                 del storage.default_token[endpoint.base_url]
         else:
             storage.default_token[endpoint.base_url] = token
+            storage.hash = self.hash
 
         self._write_to_cache(storage)
 
