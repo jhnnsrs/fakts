@@ -20,6 +20,7 @@ class FaktsEndpoint(BaseModel):
     retrieve_url: Optional[str] = None
     claim_url: Optional[str] = None
     version: Optional[str] = None
+    ca_crt: Optional[str] = None
 
 
 @runtime_checkable
