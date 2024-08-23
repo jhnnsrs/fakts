@@ -65,7 +65,6 @@ class RemoteGrant(BaseModel):
         """
         endpoint = await self.discovery.adiscover(request)
         token = await self.demander.ademand(endpoint, request)
-
         return await self.claimer.aclaim(token, endpoint, request)
 
     class Config:

@@ -48,7 +48,8 @@ class QTSettingTokenStore(BaseModel):
         else:
             try:
                 storage = EndpointDefaults(**json.loads(un_storage))
-            except Exception:
+            except Exception as e:
+                print("Error loading token store", e)
                 storage = EndpointDefaults()
 
         if token is None:

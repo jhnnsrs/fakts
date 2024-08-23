@@ -112,8 +112,6 @@ def beacon(url: str, all: bool, iterations: int, interval: int) -> None:
         == "y"
     )
 
-
-
     console.print(
         f"Advertising {url} every {interval} seconds " + "forever"
         if iterations == -1

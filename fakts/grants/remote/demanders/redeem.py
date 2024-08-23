@@ -22,7 +22,7 @@ class RedeemDemander(BaseModel):
     A reedem grant is a remote grant that can be used to in one shot, create a new client and retrieve a token and a configuration from a fakts server.
     The redeem token is a token that was issued by the fakts server before, and that can be used to create a any new client (restricted to development
     clients bound to one user). This is useful for creating new clients in an environment where the client CAN keep a secret, but where the clients manifest
-    is not known to the fakts server. 
+    is not known to the fakts server.
 
     """
 
@@ -61,9 +61,7 @@ class RedeemDemander(BaseModel):
         """
 
         retrieve_url = (
-            self.retrieve_url
-            or endpoint.retrieve_url
-            or f"{endpoint.base_url}redeem/"
+            self.retrieve_url or endpoint.retrieve_url or f"{endpoint.base_url}redeem/"
         )
 
         async with aiohttp.ClientSession(
