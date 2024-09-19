@@ -115,7 +115,7 @@ class CacheGrant(pydantic.BaseModel):
             )
 
         with open(self.cache_file, "w+") as f:
-            json.dump(json.loads(cache.json()), f)
+            json.dump(json.loads(cache.model_dump_json()), f)
 
         return cache.config
 

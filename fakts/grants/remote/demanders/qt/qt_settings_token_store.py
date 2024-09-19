@@ -58,7 +58,7 @@ class QTSettingTokenStore(BaseModel):
         else:
             storage.default_token[endpoint.base_url] = token
 
-        self.settings.setValue(self.save_key, storage.json())
+        self.settings.setValue(self.save_key, storage.model_dump_json())
 
     async def aget_default_token_for_endpoint(
         self, endpoint: FaktsEndpoint

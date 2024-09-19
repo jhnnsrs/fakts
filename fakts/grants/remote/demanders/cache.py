@@ -52,7 +52,7 @@ class CacheTokenStore(BaseModel):
 
     def _write_to_cache(self, cache: EndpointDefaults) -> None:
         with open(self.cache_file, "w") as f:
-            f.write(cache.json())
+            f.write(cache.model_dump_json())
 
     async def aput_default_token_for_endpoint(
         self, endpoint: FaktsEndpoint, token: Optional[str]

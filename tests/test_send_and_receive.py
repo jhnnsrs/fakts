@@ -5,7 +5,6 @@ import pytest
 
 
 @pytest.mark.network
-@pytest.mark.asyncio
 def test_can_retrieve_bindings():
     bindings = retrieve_bindings()
     assert len(bindings) > 0

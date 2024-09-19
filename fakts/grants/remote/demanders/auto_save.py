@@ -1,5 +1,5 @@
 from typing import Optional, runtime_checkable, Protocol
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 import logging
 import asyncio
@@ -106,6 +106,7 @@ class AutoSaveDemander(BaseModel):
     """A discovery the autosaves the
     discovered endpoint and selects it as the default one.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)  # noqa: F821
 
     store: TokenStore

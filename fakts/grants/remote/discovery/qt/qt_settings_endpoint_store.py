@@ -24,7 +24,7 @@ class QtSettingsEndpointStore(BaseModel):
         endpoint : FaktsEndpoint
             The endpoint to put
         """
-        self.settings.setValue(self.save_key, endpoint.json() if endpoint else None)
+        self.settings.setValue(self.save_key, endpoint.model_dump_json() if endpoint else None)
 
     async def aget_default_endpoint(self) -> Optional[FaktsEndpoint]:
         """A function that gets the default endpoint

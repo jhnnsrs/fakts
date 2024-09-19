@@ -41,7 +41,7 @@ class AutoSaveCacheStore(BaseModel):
             return
 
         with open(self.cache_file, "w") as f:
-            f.write(endpoint.json())
+            f.write(endpoint.model_dump_json())
 
     async def aput_default_endpoint(self, endpoint: Optional[FaktsEndpoint]) -> None:
         """Puts the default endpoint
