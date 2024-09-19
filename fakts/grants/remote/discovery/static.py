@@ -28,8 +28,3 @@ class StaticDiscovery(BaseModel):
         """
 
         return self.endpoint
-
-    class Config:
-        """Pydantic Config"""
-
-        extra = "forbid"

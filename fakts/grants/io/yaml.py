@@ -1,7 +1,7 @@
 import yaml
 from fakts.models import FaktsRequest, FaktValue
 from typing import Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class YamlGrant(BaseModel):
@@ -13,7 +13,7 @@ class YamlGrant(BaseModel):
     filepath : str
         The path of the YAML file.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     filepath: str
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -23,7 +23,3 @@ class YamlGrant(BaseModel):
 
         return config
 
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

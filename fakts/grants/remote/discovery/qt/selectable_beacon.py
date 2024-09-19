@@ -5,7 +5,7 @@ import logging
 from koil.qt import QtCoro, QtFuture, QtSignal
 from fakts.grants.remote.discovery.utils import discover_url
 from fakts.models import FaktsRequest
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Optional
 from typing import Dict, List
 
@@ -301,7 +301,7 @@ class QtSelectableDiscovery(BaseModel):
     from a list of network discovered endpoints, as well as endpoints
     that the user manually enters.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""
     strict: bool = False
@@ -455,8 +455,3 @@ class QtSelectableDiscovery(BaseModel):
                 logger.info("Cancelled the Discovery task")
 
             raise e
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

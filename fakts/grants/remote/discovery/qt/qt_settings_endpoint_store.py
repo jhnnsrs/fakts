@@ -4,7 +4,7 @@ from qtpy import QtCore
 from fakts.grants.remote.models import FaktsEndpoint
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class QtSettingsEndpointStore(BaseModel):
     """Retrieves and stores users matching the currently
     active fakts grant"""
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     settings: QtCore.QSettings
     save_key: str
 
@@ -46,8 +46,3 @@ class QtSettingsEndpointStore(BaseModel):
             print(e)
 
         return None
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

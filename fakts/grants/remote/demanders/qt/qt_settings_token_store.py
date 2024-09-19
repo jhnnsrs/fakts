@@ -7,7 +7,7 @@ from fakts.grants.remote.models import FaktsEndpoint
 from typing import Dict, Optional
 
 import json
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class EndpointDefaults(BaseModel):
 class QTSettingTokenStore(BaseModel):
     """Retrieves and stores users matching the currently
     active fakts grant"""
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     settings: QtCore.QSettings
     """The settings to use to store the tokens"""
     save_key: str
@@ -89,8 +89,3 @@ class QTSettingTokenStore(BaseModel):
             return None
 
         return None
-
-    class Config:
-        """Pydantic config"""
-
-        arbitrary_types_allowed = True

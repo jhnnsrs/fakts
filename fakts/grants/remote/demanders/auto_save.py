@@ -106,6 +106,7 @@ class AutoSaveDemander(BaseModel):
     """A discovery the autosaves the
     discovered endpoint and selects it as the default one.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)  # noqa: F821
 
     store: TokenStore
     """A token store to use for the saving and loading of tokens"""
@@ -175,9 +176,3 @@ class AutoSaveDemander(BaseModel):
         except Exception as e:
             logger.error(e, exc_info=True)
             raise e
-
-    class Config:
-        """Config for the model"""
-
-        underscore_attrs_are_private = True
-        arbitrary_types_allowed = True

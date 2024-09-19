@@ -100,8 +100,3 @@ class CacheTokenStore(BaseModel):
             return storage.default_token[endpoint.base_url]
 
         return None
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

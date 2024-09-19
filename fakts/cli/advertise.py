@@ -115,7 +115,7 @@ async def advertise(
         transport, pr = await loop.create_datagram_endpoint(BeaconProtocol, sock=s)
 
         messages = [
-            bytes(binding.magic_phrase + json.dumps(beacon.dict()), "utf8")
+            bytes(binding.magic_phrase + json.dumps(beacon.model_dump()), "utf8")
             for beacon in endpoints
         ]
         i = 1

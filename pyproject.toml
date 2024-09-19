@@ -9,10 +9,10 @@ packages = [{ include = "fakts" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"
-pydantic = ">1.9,<2"
+pydantic = ">2"
 PyYAML = ">=6"
 QtPy = "^2.0.1"
-koil = ">=0.3.5"
+koil = ">=1.0.0"
 aiohttp = { version = "^3.8.2", optional = true }
 certifi = { version = ">2021", optional = true }
 rich_click = { version = ">=0.3", optional = true }

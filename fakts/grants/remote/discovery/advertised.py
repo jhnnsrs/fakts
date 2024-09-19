@@ -1,6 +1,6 @@
 from typing import Dict, AsyncGenerator, List, Tuple
 
-from pydantic import Field, validator
+from pydantic import ConfigDict, Field, field_validator
 from socket import socket, AF_INET, SOCK_DGRAM, IPPROTO_UDP
 import asyncio
 import json
@@ -52,7 +52,7 @@ class ListenBinding(BaseModel):
     port: int = 45678
     magic_phrase: str = "beacon-fakts"
 
-    @validator("port")
+    @field_validator("port")
     def check_port(cls, v):
         if not isinstance(v, int):
             raise ValueError(f"Port {v} is not an integer")
@@ -190,7 +190,7 @@ class FirstAdvertisedDiscovery(BaseModel):
     This discovery will listen on a broadcast port for beacons.
     It will then try to connect to the endpoint and return it.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""
     strict: bool = False
@@ -241,8 +241,3 @@ class FirstAdvertisedDiscovery(BaseModel):
                 continue
 
         raise DiscoveryError("Could not find any endpoint")
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import ConfigDict, Field
 import ssl
 import certifi
 import aiohttp
@@ -17,6 +17,7 @@ class ClaimEndpointClaimer(BaseModel):
 
 
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
@@ -75,7 +76,3 @@ class ClaimEndpointClaimer(BaseModel):
                 else:
                     raise ClaimError("Error! Coud not claim this app on this endpoint")
 
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

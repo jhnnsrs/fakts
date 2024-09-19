@@ -3,7 +3,7 @@ from typing import Optional
 import pydantic
 import logging
 import json
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from fakts.grants.remote.models import FaktsEndpoint
 
 
@@ -19,7 +19,7 @@ class AutoSaveCacheStore(BaseModel):
 
 
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     cache_file: str = ".endpoint_cache.json"
 
     def _read_from_cache(self) -> Optional[FaktsEndpoint]:
@@ -70,8 +70,3 @@ class AutoSaveCacheStore(BaseModel):
         ...
 
         return self._read_from_cache()
-
-    class Config:
-        """Pydantic config"""
-
-        arbitrary_types_allowed = True

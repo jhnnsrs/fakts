@@ -289,15 +289,6 @@ class Fakts(KoiledModel):
         """(Internal) HTML representation for jupyter"""
         return f"<table><tr><td>grant</td><td>{self.grant.__class__.__name__}</td></tr></table>"
 
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True
-        underscore_attrs_are_private = True
-        json_encoders = {
-            FaktsGrant: lambda x: f"Fakts Grant {x.__class__.__name__}",  # we don't want to serialize the grant when we save the fakts
-        }
-
 
 def get_current_fakts() -> Fakts:
     """Get the current fakts instance

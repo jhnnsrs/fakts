@@ -2,7 +2,7 @@ from typing import List, Dict
 from fakts.grants.errors import GrantError
 import logging
 from fakts.models import FaktsRequest, FaktsGrant, FaktValue
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class FailsafeGrant(BaseModel):
     of other grants. It will try to load the grants in order,
     and will return the values from the first grant that succeeds.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     grants: List[FaktsGrant]
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -43,8 +43,3 @@ class FailsafeGrant(BaseModel):
                 continue
 
         raise GrantError("Failed to load any grants")
-
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

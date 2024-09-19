@@ -50,8 +50,3 @@ class TomlGrant(FaktsGrant):
             config = toml.load(file)
 
         return config
-
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

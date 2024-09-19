@@ -48,7 +48,7 @@ class CacheGrant(pydantic.BaseModel):
 
 
     """
-
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
     grant: FaktsGrant = pydantic.Field(..., description="The grant to cache")
     """The grant to cache"""
 
@@ -60,7 +60,7 @@ class CacheGrant(pydantic.BaseModel):
     )
     """The hash to validate the cache against (if this value differes from the one in the cache, the grant will be reloaded)"""
 
-    expires_in: Optional[int]
+    expires_in: Optional[int] = None
     """When should the cache expire"""
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -119,7 +119,3 @@ class CacheGrant(pydantic.BaseModel):
 
         return cache.config
 
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

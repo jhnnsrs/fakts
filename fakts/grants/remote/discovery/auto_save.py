@@ -1,5 +1,5 @@
 from typing import Optional, runtime_checkable, Protocol
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 import logging
 import asyncio
@@ -100,6 +100,7 @@ class AutoSaveDiscovery(BaseModel):
     the user does not want to use the default endpoint.
 
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     store: EndpointStore
     """this is the login widget (protocol)"""
@@ -159,9 +160,3 @@ class AutoSaveDiscovery(BaseModel):
         except Exception as e:
             logger.error(e, exc_info=True)
             raise e
-
-    class Config:
-        """pydantic config"""
-
-        underscore_attrs_are_private = True
-        arbitrary_types_allowed = True

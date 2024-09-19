@@ -71,7 +71,7 @@ class RedeemDemander(BaseModel):
             async with session.post(
                 retrieve_url,
                 json={
-                    "manifest": self.manifest.dict(),
+                    "manifest": self.manifest.model_dump(),
                     "token": self.token,
                 },
             ) as resp:

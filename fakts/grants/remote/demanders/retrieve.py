@@ -1,6 +1,6 @@
 import aiohttp
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import logging
 from fakts.grants.remote.errors import DemandError
 from fakts.grants.remote.models import FaktsEndpoint, FaktsRequest
@@ -25,6 +25,7 @@ class RetrieveDemander(BaseModel):
     on the fakts server.
 
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
@@ -70,7 +71,7 @@ class RetrieveDemander(BaseModel):
             async with session.post(
                 retrieve_url,
                 json={
-                    "manifest": self.manifest.dict(),
+                    "manifest": self.manifest.model_dump(),
                 },
             ) as resp:
                 data = await resp.json()
@@ -91,8 +92,3 @@ class RetrieveDemander(BaseModel):
                     raise RetrieveError(
                         "Error! Coud not claim this app on this endpoint"
                     )
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

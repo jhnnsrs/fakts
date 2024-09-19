@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import ConfigDict, Field
 from fakts.grants.errors import GrantError
 import yaml
 from koil.qt import QtCoro, QtFuture
@@ -140,7 +140,7 @@ class QtYamlGrant(BaseModel):
     aload(request: FaktsRequest)
         Asynchronously loads the YAML file and returns the configuration.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     widget: FileWidget = Field(exclude=True)
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -162,7 +162,3 @@ class QtYamlGrant(BaseModel):
 
         return config
 
-    class Config:
-        """Pydantic Config class for QtYamlGrant."""
-
-        arbitrary_types_allowed = True

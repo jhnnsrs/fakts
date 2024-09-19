@@ -6,7 +6,7 @@ import aiohttp
 import time
 from typing import Any, Dict, Type
 from fakts.models import FaktsRequest
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, ConfigDict, Field, root_validator
 from fakts.grants.remote import FaktsEndpoint
 from fakts.grants.remote.errors import DemandError
 
@@ -54,6 +54,7 @@ class DeviceCodeDemander(BaseModel):
     token will be returned. If the code is denied, an exception will be raised.
 
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where()),
@@ -76,13 +77,13 @@ class DeviceCodeDemander(BaseModel):
     )
     """The kind of client that you want to request. Check the ClientKind enum for more information"""
 
-    timeout = 60
+    timeout: int = 60
     """The timeout for the device code grant in seconds. If the timeout is reached, the grant will fail."""
 
-    open_browser = True
+    open_browser: bool = True
     """If set to True, the URL will be opened in the default browser (if exists). Otherwise the user will be prompted to enter the code manually."""
 
-    @root_validator(allow_reuse=True)
+    @root_validator(allow_reuse=True, skip_on_failure=True)
     @classmethod
     def check_requested_matches_redirect_uris(cls: Type["DeviceCodeDemander"], values: Dict[str, Any]) -> Dict[str, Any]:  # type: ignore
         """Validates and checks that either a schema_dsl or schema_glob is provided, or that allow_introspection is set to True"""
@@ -121,7 +122,7 @@ class DeviceCodeDemander(BaseModel):
                 async with session.post(
                     f"{endpoint.base_url}start/",
                     json={
-                        "manifest": self.manifest.dict(),
+                        "manifest": self.manifest.model_dump(),
                         "expiration_time_seconds": self.expiration_time_seconds,
                         "redirect_uris": self.redirect_uris,
                         "requested_client_kind": self.requested_client_kind,
@@ -225,8 +226,3 @@ class DeviceCodeDemander(BaseModel):
                         raise DeviceCodeError(
                             f"Error! Could not retrieve code {await response.text()}"
                         )
-
-    class Config:
-        """Pydantic Config"""
-
-        arbitrary_types_allowed = True

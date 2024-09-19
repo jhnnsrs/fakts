@@ -4,7 +4,7 @@ from functools import reduce
 
 from fakts.utils import update_nested
 from fakts.models import FaktsRequest, FaktValue, FaktsGrant
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ParallelGrant(BaseModel):
@@ -20,10 +20,10 @@ class ParallelGrant(BaseModel):
         Omit exceptions if any of the grants fail to load (otherwise will raise an exception)
 
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     grants: List[FaktsGrant]
     " The grants to load in parallel "
-    omit_exceptions = False
+    omit_exceptions: bool = False
     " Omit exceptions if any of the grants fail to load "
 
     async def aload(self, request: FaktsRequest) -> Dict[str, FaktValue]:
@@ -51,7 +51,3 @@ class ParallelGrant(BaseModel):
         # TODO: Check if this is the correct way to merge the configs
         return reduce(lambda x, y: update_nested(x, y), configs, {})  # type: ignore
 
-    class Config:
-        """A pydantic config class"""
-
-        arbitrary_types_allowed = True

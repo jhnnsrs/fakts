@@ -1,6 +1,6 @@
 import ssl
 import certifi
-from pydantic import Field, BaseModel
+from pydantic import ConfigDict, Field, BaseModel
 import logging
 from typing import List
 from .utils import discover_url
@@ -23,7 +23,7 @@ class WellKnownDiscovery(BaseModel):
     if no protocol is specified in the url.
 
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     url: str
     """The url of the well-known endpoint"""
     ssl_context: ssl.SSLContext = Field(
@@ -73,9 +73,3 @@ class WellKnownDiscovery(BaseModel):
             allow_appending_slash=self.allow_appending_slash,
             timeout=self.timeout,
         )
-
-    class Config:
-        """Pydantic Config"""
-
-        extra = "forbid"
-        arbitrary_types_allowed = True

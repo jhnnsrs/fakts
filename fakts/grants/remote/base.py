@@ -3,7 +3,7 @@ from typing import Dict
 import logging
 from .models import Demander, Discovery, Claimer
 from fakts.models import FaktsRequest, FaktValue
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from fakts.grants.remote.claimers.static import StaticClaimer
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class RemoteGrant(BaseModel):
     You can use a specific builder to build a remote grant
     that fits your needs.
     """
-
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     discovery: Discovery
     """The discovery mechanism to use for finding the endpoint"""
 
@@ -66,8 +66,3 @@ class RemoteGrant(BaseModel):
         endpoint = await self.discovery.adiscover(request)
         token = await self.demander.ademand(endpoint, request)
         return await self.claimer.aclaim(token, endpoint, request)
-
-    class Config:
-        """A pydantic config class for the RemoteGrant"""
-
-        arbitrary_types_allowed = True
