@@ -19,6 +19,7 @@ class AutoSaveCacheStore(BaseModel):
 
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     cache_file: str = ".endpoint_cache.json"
 

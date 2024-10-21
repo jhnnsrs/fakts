@@ -17,6 +17,7 @@ class ClaimEndpointClaimer(BaseModel):
 
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(
@@ -75,4 +76,3 @@ class ClaimEndpointClaimer(BaseModel):
                     raise ClaimError(f"Unexpected status: {status}")
                 else:
                     raise ClaimError("Error! Coud not claim this app on this endpoint")
-

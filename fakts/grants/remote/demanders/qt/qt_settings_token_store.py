@@ -22,6 +22,7 @@ class EndpointDefaults(BaseModel):
 class QTSettingTokenStore(BaseModel):
     """Retrieves and stores users matching the currently
     active fakts grant"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     settings: QtCore.QSettings
     """The settings to use to store the tokens"""

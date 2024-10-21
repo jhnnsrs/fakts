@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class QtSettingsEndpointStore(BaseModel):
     """Retrieves and stores users matching the currently
     active fakts grant"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     settings: QtCore.QSettings
     save_key: str
@@ -24,7 +25,9 @@ class QtSettingsEndpointStore(BaseModel):
         endpoint : FaktsEndpoint
             The endpoint to put
         """
-        self.settings.setValue(self.save_key, endpoint.model_dump_json() if endpoint else None)
+        self.settings.setValue(
+            self.save_key, endpoint.model_dump_json() if endpoint else None
+        )
 
     async def aget_default_endpoint(self) -> Optional[FaktsEndpoint]:
         """A function that gets the default endpoint

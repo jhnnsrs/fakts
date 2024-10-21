@@ -23,6 +23,7 @@ class WellKnownDiscovery(BaseModel):
     if no protocol is specified in the url.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     url: str
     """The url of the well-known endpoint"""

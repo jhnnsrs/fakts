@@ -20,6 +20,7 @@ class ParallelGrant(BaseModel):
         Omit exceptions if any of the grants fail to load (otherwise will raise an exception)
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     grants: List[FaktsGrant]
     " The grants to load in parallel "
@@ -50,4 +51,3 @@ class ParallelGrant(BaseModel):
         )
         # TODO: Check if this is the correct way to merge the configs
         return reduce(lambda x, y: update_nested(x, y), configs, {})  # type: ignore
-

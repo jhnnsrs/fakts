@@ -190,6 +190,7 @@ class FirstAdvertisedDiscovery(BaseModel):
     This discovery will listen on a broadcast port for beacons.
     It will then try to connect to the endpoint and return it.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""

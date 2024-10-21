@@ -25,6 +25,7 @@ class RetrieveDemander(BaseModel):
     on the fakts server.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(

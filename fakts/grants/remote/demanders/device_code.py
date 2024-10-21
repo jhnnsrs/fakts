@@ -54,6 +54,7 @@ class DeviceCodeDemander(BaseModel):
     token will be returned. If the code is denied, an exception will be raised.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     ssl_context: ssl.SSLContext = Field(

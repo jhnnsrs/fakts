@@ -34,6 +34,7 @@ class RemoteGrant(BaseModel):
     You can use a specific builder to build a remote grant
     that fits your needs.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     discovery: Discovery
     """The discovery mechanism to use for finding the endpoint"""
@@ -63,6 +64,9 @@ class RemoteGrant(BaseModel):
 
 
         """
-        endpoint = await self.discovery.adiscover(request)
+        try:
+            endpoint = await self.discovery.adiscover(request)
+        except Exception as e:
+            raise RemoteGrantError(f"Could not discover endpoint: {e}") from e
         token = await self.demander.ademand(endpoint, request)
         return await self.claimer.aclaim(token, endpoint, request)

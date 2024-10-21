@@ -301,6 +301,7 @@ class QtSelectableDiscovery(BaseModel):
     from a list of network discovered endpoints, as well as endpoints
     that the user manually enters.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     binding: ListenBinding = Field(default_factory=ListenBinding)
     """The address to bind to"""

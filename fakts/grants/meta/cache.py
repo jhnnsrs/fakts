@@ -48,6 +48,7 @@ class CacheGrant(pydantic.BaseModel):
 
 
     """
+
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
     grant: FaktsGrant = pydantic.Field(..., description="The grant to cache")
     """The grant to cache"""
@@ -118,4 +119,3 @@ class CacheGrant(pydantic.BaseModel):
             json.dump(json.loads(cache.model_dump_json()), f)
 
         return cache.config
-

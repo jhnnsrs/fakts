@@ -13,6 +13,7 @@ class YamlGrant(BaseModel):
     filepath : str
         The path of the YAML file.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     filepath: str
 
@@ -22,4 +23,3 @@ class YamlGrant(BaseModel):
             config = yaml.load(file, Loader=yaml.FullLoader)  # type: ignore #TODO: Check why this is not working
 
         return config
-

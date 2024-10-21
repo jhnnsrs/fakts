@@ -100,6 +100,7 @@ class AutoSaveDiscovery(BaseModel):
     the user does not want to use the default endpoint.
 
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     store: EndpointStore

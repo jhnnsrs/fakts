@@ -13,6 +13,7 @@ class FailsafeGrant(BaseModel):
     of other grants. It will try to load the grants in order,
     and will return the values from the first grant that succeeds.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     grants: List[FaktsGrant]
 

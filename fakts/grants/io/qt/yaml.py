@@ -140,6 +140,7 @@ class QtYamlGrant(BaseModel):
     aload(request: FaktsRequest)
         Asynchronously loads the YAML file and returns the configuration.
     """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
     widget: FileWidget = Field(exclude=True)
 
@@ -161,4 +162,3 @@ class QtYamlGrant(BaseModel):
             config = yaml.load(file, Loader=yaml.FullLoader)  # type: ignore #TODO: Check why this is not working
 
         return config
-
