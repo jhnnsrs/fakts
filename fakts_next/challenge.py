@@ -33,7 +33,27 @@ from fakts_next.models import ChallengeKey
 logger = logging.getLogger(__name__)
 
 CHALLENGE_DOMAIN = "fakts-challenge-v1"
-"""Domain separation tag prefixed to every signed challenge message"""
+"""Domain separation tag prefixed to every signed challenge message.
+
+.. warning::
+
+   The signed message is ``{domain}:{nonce}`` — it does **not** commit to the
+   host being challenged. A signature therefore proves that *someone holding
+   the service key saw this nonce*, not that the host which answered holds
+   it. An intermediary that forwards the probe to the genuine service (a
+   reverse proxy, or a redirect) can satisfy the challenge while receiving
+   all subsequent traffic itself, including the bearer token — and it can do
+   so over TLS with a certificate valid for its own name.
+
+   The client mitigates the easy case by refusing to follow redirects on the
+   probe. The real fix is to bind the message to the alias origin —
+   ``{domain}:{origin}:{nonce}`` — which requires a coordinated change on
+   every service that signs challenges, so it is a protocol revision rather
+   than a client patch.
+
+   Until then: treat a signed challenge as evidence that the service *exists
+   and is reachable*, not as authentication of the connection.
+"""
 
 
 def generate_nonce() -> str:

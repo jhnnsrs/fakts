@@ -27,18 +27,26 @@ from fakts_next.models import (
 pytestmark = pytest.mark.asyncio
 
 
-def make_fakts_value(host: str = "localhost") -> ActiveFakts:
+def make_fakts_value(
+    host: str = "localhost",
+    *,
+    refresh_token: str = "test_refresh_token",
+    client_id: str = "test_client_id",
+    access_token: str | None = None,
+    expires_at: float | None = None,
+) -> ActiveFakts:
     return ActiveFakts(
         self=SelfFakt(
             deployment_name="test_deployment",
             alias=Alias(id="self", host=host, port=8000, path="/self"),
         ),
         auth=AuthFakt(
-            client_id="test_client_id",
-            client_secret="test_client",
-            client_token="test_client_token",
-            token_url=f"http://{host}:8000/token",
-            report_url=f"http://{host}:8000/report",
+            client_id=client_id,
+            refresh_token=refresh_token,
+            access_token=access_token,
+            expires_at=expires_at,
+            token_endpoint=f"http://{host}:8000/token",
+            report_endpoint=f"http://{host}:8000/report",
         ),
         instances={
             "test": Instance(
@@ -374,7 +382,7 @@ async def test_aget_alias_or_none():
 async def test_report_skipped_when_endpoint_has_no_report_url():
     """With reporting on (the default), a missing report_url must be skipped silently."""
     value = make_fakts_value()
-    value.auth.report_url = None
+    value.auth.report_endpoint = None
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -387,8 +395,8 @@ async def test_report_skipped_when_endpoint_has_no_report_url():
 
 async def test_report_errors_are_caught():
     """A failing report endpoint must log and continue, not break alias resolution."""
-    value = make_fakts_value()
-    value.auth.report_url = "http://localhost:1/report"
+    value = make_fakts_value(access_token="cached_access_token")
+    value.auth.report_endpoint = "http://localhost:1/report"
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -457,11 +465,23 @@ async def test_arefresh_reloads_from_grant():
     assert grant.load_count == 2
 
 
-async def test_load_on_enter():
+async def test_entering_does_not_run_the_grant():
+    """Entering the context is pure setup: locks and the cache hash binding.
+
+    There used to be a `load_on_enter` flag that ran the grant here. It made
+    `async with fakts:` able to open a browser and to fail with whatever the
+    grant failed with, at a place where callers expect neither. Loading is
+    lazy (allow_auto_load) or explicit.
+    """
     grant = CountingGrant(fakts=make_fakts_value())
-    fakts = Fakts(grant=grant, manifest=make_manifest(), load_on_enter=True)
+    fakts = Fakts(grant=grant, manifest=make_manifest())
 
     async with fakts:
+        assert grant.load_count == 0
+        assert fakts.loaded_fakts is None
+
+        # ...and it still loads on first use.
+        await fakts.aload()
         assert grant.load_count == 1
         assert fakts.loaded_fakts is not None
 
@@ -490,39 +510,54 @@ async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch)
     assert grant.load_count == 1
 
 
-async def test_rejected_client_adopts_fresh_cached_credentials():
-    """If the cache holds different credentials than the rejected ones
-    (e.g. another process re-registered), they are adopted without
-    re-registering through the grant."""
-    fresh = make_fakts_value()
-    fresh.auth.client_id = "new_client_id"
-    fresh.auth.client_secret = "new_client_secret"
+async def test_rejected_credential_adopts_fresh_cached_one():
+    """If the cache holds a credential we have not tried (e.g. a sibling
+    process rotated first), adopt it instead of re-running the grant."""
+    fresh = make_fakts_value(refresh_token="rotated_token", client_id="new_client_id")
 
     grant = CountingGrant(fakts=make_fakts_value())
     cache = MemoryCache(value=fresh)
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        rejected = make_fakts_value()
-        adopted = await fakts._aadopt_newer_cached_fakts(rejected)
+        adopted = await fakts._aadopt_cached_credentials(set())
 
-        assert adopted
+        assert adopted is not None
         assert fakts.loaded_fakts is not None
         assert fakts.loaded_fakts.auth.client_id == "new_client_id"
+        assert fakts.loaded_fakts.auth.refresh_token == "rotated_token"
         assert grant.load_count == 0, "The grant must not have been triggered"
 
 
-async def test_rejected_client_falls_back_to_grant_on_same_credentials():
-    """If the cache holds the very credentials that were rejected, adoption
-    must be refused so the caller reloads from the grant."""
+async def test_already_tried_credential_is_not_adopted_again():
+    """Adoption keys on (client_id, refresh_token). Re-adopting something we
+    already tried would spin instead of converging."""
+    cached = make_fakts_value(refresh_token="tok_a", client_id="cid_a")
+
     grant = CountingGrant(fakts=make_fakts_value())
-    cache = MemoryCache(value=make_fakts_value())
+    cache = MemoryCache(value=cached)
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._aadopt_newer_cached_fakts(make_fakts_value())
+        adopted = await fakts._aadopt_cached_credentials({("cid_a", "tok_a")})
 
-    assert not adopted
+    assert adopted is None
+
+
+async def test_reapproval_rotating_client_id_is_adopted():
+    """Re-approval rotates the client identity too, so a matching refresh
+    token alone must not be treated as 'the same credential'."""
+    cached = make_fakts_value(refresh_token="same_token", client_id="rotated_client")
+
+    grant = CountingGrant(fakts=make_fakts_value())
+    cache = MemoryCache(value=cached)
+    fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
+
+    async with fakts:
+        adopted = await fakts._aadopt_cached_credentials({("old_client", "same_token")})
+
+    assert adopted is not None
+    assert adopted.auth.client_id == "rotated_client"
 
 
 async def test_delete_on_exit(tmp_path: Path):

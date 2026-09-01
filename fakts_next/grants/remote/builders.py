@@ -1,23 +1,33 @@
+import ssl
 from hashlib import sha256
 from typing import Optional
+
+import certifi
 
 from fakts_next.cache.file import FileCache
 from fakts_next.cache.nocache import NoCache
 from fakts_next.fakts import Fakts
+from fakts_next.grants.hard import HardFaktsGrant
 from fakts_next.grants.remote import RemoteGrant
-from fakts_next.grants.remote.claimers.post import ClaimEndpointClaimer
-from fakts_next.grants.remote.claimers.static import StaticClaimer
-from fakts_next.grants.remote.demanders.device_code import (
+from fakts_next.grants.remote.authorizers.device_code import (
     ClientKind,
-    DeviceCodeDemander,
+    ClientRole,
+    DeviceCodeAuthorizer,
 )
-from fakts_next.grants.remote.demanders.redeem import RedeemDemander
-from fakts_next.grants.remote.demanders.static import StaticDemander
-from fakts_next.grants.remote.discovery.static import StaticDiscovery
+from fakts_next.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts_next.grants.remote.discovery.well_known import WellKnownDiscovery
-from fakts_next.grants.remote.models import ActiveFakts, FaktsEndpoint
-from fakts_next.models import Manifest
+from fakts_next.models import ActiveFakts, Manifest
 from fakts_next.protocols import FaktsCache
+
+
+def _resolve_ssl(ssl_context: Optional[ssl.SSLContext]) -> ssl.SSLContext:
+    """One TLS context for the whole client.
+
+    Discovery, the grant and the runtime each used to build their own, so
+    pinning a private CA on ``Fakts`` silently left discovery and the device
+    flow on the default bundle.
+    """
+    return ssl_context or ssl.create_default_context(cafile=certifi.where())
 
 
 def _build_cache(
@@ -29,7 +39,9 @@ def _build_cache(
     configuration)."""
     if no_cache:
         return NoCache()
-    bound_hash = sha256(f"{url}:{manifest.hash()}".encode()).hexdigest()
+    # The "v2:" prefix makes a protocol-v1 cache miss deterministically
+    # rather than relying on its now-invalid shape failing validation.
+    bound_hash = sha256(f"v2:{url}:{manifest.hash()}".encode()).hexdigest()
     return FileCache(cache_file=cache_file, hash=bound_hash)
 
 
@@ -41,7 +53,10 @@ def build_device_code_fakts(
     no_cache: bool = False,
     headless: bool = False,
     requested_client_kind: ClientKind = ClientKind.DEVELOPMENT,
+    requested_client_role: ClientRole = ClientRole.INTERFACE,
     timeout: Optional[int] = None,
+    allow_insecure_transport: bool = False,
+    ssl_context: Optional[ssl.SSLContext] = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the device code flow.
 
@@ -92,25 +107,36 @@ def build_device_code_fakts(
     timeout : Optional[int], optional
         How long (seconds) to wait for the user to approve the device
         code. Defaults to the code's expiration time.
+    ssl_context : Optional[ssl.SSLContext], optional
+        TLS context used for *every* call — discovery, the device flow, the
+        token endpoint, alias challenges and the report. Pass one to trust a
+        private CA; without it, certifi's bundle applies throughout.
 
     Returns
     -------
     Fakts
         A fully wired Fakts instance (use it as a context manager).
     """
+    context = _resolve_ssl(ssl_context)
     return Fakts(
         grant=RemoteGrant(
-            discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"]),
-            demander=DeviceCodeDemander(
+            discovery=WellKnownDiscovery(
+                url=url, auto_protocols=["https", "http"], ssl_context=context
+            ),
+            authorizer=DeviceCodeAuthorizer(
                 manifest=manifest,
                 open_browser=not headless,
                 requested_client_kind=requested_client_kind,
+                requested_client_role=requested_client_role,
                 timeout=timeout,
+                allow_insecure_transport=allow_insecure_transport,
+                ssl_context=context,
             ),
-            claimer=ClaimEndpointClaimer(),
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),
         manifest=manifest,
+        allow_insecure_transport=allow_insecure_transport,
+        ssl_context=context,
     )
 
 
@@ -121,6 +147,8 @@ def build_redeem_fakts(
     *,
     cache_file: str = ".fakts_cache.json",
     no_cache: bool = False,
+    allow_insecure_transport: bool = False,
+    ssl_context: Optional[ssl.SSLContext] = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the redeem flow (headless/CI).
 
@@ -149,76 +177,58 @@ def build_redeem_fakts(
     Fakts
         A fully wired Fakts instance (use it as a context manager).
     """
+    context = _resolve_ssl(ssl_context)
     return Fakts(
         grant=RemoteGrant(
-            discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"]),
-            demander=RedeemDemander(manifest=manifest, token=token),
-            claimer=ClaimEndpointClaimer(),
+            discovery=WellKnownDiscovery(
+                url=url, auto_protocols=["https", "http"], ssl_context=context
+            ),
+            authorizer=RedeemAuthorizer(
+                manifest=manifest,
+                token=token,
+                allow_insecure_transport=allow_insecure_transport,
+                ssl_context=context,
+            ),
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),
         manifest=manifest,
+        allow_insecure_transport=allow_insecure_transport,
+        ssl_context=context,
     )
 
 
-def build_remote_testing(value: ActiveFakts) -> RemoteGrant:
-    """Builds a remote grant for testing purposes
+def build_remote_testing(value: ActiveFakts) -> "HardFaktsGrant":
+    """Builds a grant for testing purposes.
 
-    Will always return the same value when claiming.
-
-    Parameters
-    ----------
-    value : ActiveFakts
-        The value to return when claiming
-
-    Returns
-    -------
-    RemoteGrant
-        The remote grant
-
+    Always yields the same configuration, without touching the network. No
+    longer a `RemoteGrant`: under protocol v2 even a static session has to
+    come from somewhere, and pretending otherwise meant faking a token
+    endpoint. `HardFaktsGrant` says the same thing honestly.
     """
-    return RemoteGrant(
-        discovery=StaticDiscovery(
-            endpoint=FaktsEndpoint(base_url="https://example.com")
-        ),
-        claimer=StaticClaimer(value=value),
-        demander=StaticDemander(token="token"),  # type: ignore
-    )
+    return HardFaktsGrant(fakts=value)
 
 
-def build_redeem_grant(url: str, manifest: Manifest, redeem_token: str) -> RemoteGrant:
+def build_redeem_grant(
+    url: str,
+    manifest: Manifest,
+    redeem_token: str,
+    *,
+    allow_insecure_transport: bool = False,
+) -> RemoteGrant:
     """Builds a remote grant that redeems a token (grant only, no Fakts).
 
     Prefer :func:`build_redeem_fakts` unless you need to wire the Fakts
     instance yourself.
+
+    Discovery is well-known rather than static: under protocol v2 the token
+    endpoint is published by the server, and a static endpoint would have to
+    guess it.
     """
     return RemoteGrant(
-        discovery=StaticDiscovery(endpoint=FaktsEndpoint(base_url=url)),
-        claimer=ClaimEndpointClaimer(),
-        demander=RedeemDemander(manifest=manifest, token=redeem_token),
-    )
-
-
-def build_remote_testing_with_token(fakts_next_url: str, token: str) -> RemoteGrant:
-    """Builds a remote grant for testing purposes
-
-    This grant will use the given token to demand the configuration from fakts_next.
-    This is great for testing purposes, or when an api token is known at compile time.
-
-    Parameters
-    ----------
-    fakts_next_url : str
-        The url of the fakts server
-    token : str
-        The static token to use for claiming
-
-    Returns
-    -------
-    RemoteGrant
-        The remote grant
-
-    """
-    return RemoteGrant(
-        discovery=StaticDiscovery(endpoint=FaktsEndpoint(base_url=fakts_next_url)),
-        claimer=ClaimEndpointClaimer(),
-        demander=StaticDemander(token=token),  # type: ignore
+        discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"]),
+        authorizer=RedeemAuthorizer(
+            manifest=manifest,
+            token=redeem_token,
+            allow_insecure_transport=allow_insecure_transport,
+        ),
     )

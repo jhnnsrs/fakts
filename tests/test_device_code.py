@@ -3,8 +3,10 @@ from fakts_next import Fakts
 import os
 from fakts_next.cache.nocache import NoCache
 from fakts_next.grants.remote.base import RemoteGrant
-from fakts_next.grants.remote.claimers import ClaimEndpointClaimer
-from fakts_next.grants.remote.demanders.device_code import ClientKind, DeviceCodeDemander
+from fakts_next.grants.remote.authorizers.device_code import (
+    ClientKind,
+    DeviceCodeAuthorizer,
+)
 from fakts_next.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts_next.grants.remote.models import FaktsEndpoint
 from fakts_next.models import Manifest, Requirement
@@ -24,11 +26,16 @@ def test_device_code_grant(deployed_infra: Deployment):
     )
 
     async def authorize_through_cmd(endpoint: FaktsEndpoint, device_code: str) -> None:
-        """Asynchronous function to authorize through command line."""
+        """Approve the staged device code out of band, standing in for a user.
+
+        The hook receives the *user* code — the short one a person would type
+        on the approval page — which is what the server looks the pending
+        registration up by.
+        """
         
 
         await deployed_infra.arun(
-            "lok", f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --composition localhost"
+            "lok", f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --hub localhost"
         )
 
     fakts_next = Fakts(
@@ -36,12 +43,12 @@ def test_device_code_grant(deployed_infra: Deployment):
             discovery=WellKnownDiscovery(
                 url=f"http://localhost:{port_for_lok}",
             ),
-            demander=DeviceCodeDemander(
+            authorizer=DeviceCodeAuthorizer(
                 device_code_hook=authorize_through_cmd,
                 manifest=manifest,
                 requested_client_kind=ClientKind.DEVELOPMENT,
+                open_browser=False,
             ),
-            claimer=ClaimEndpointClaimer(),
         ),
         cache=NoCache(),
         manifest=manifest,

@@ -3,8 +3,7 @@ from fakts_next import Fakts
 import os
 from fakts_next.cache.nocache import NoCache
 from fakts_next.grants.remote.base import RemoteGrant
-from fakts_next.grants.remote.claimers import ClaimEndpointClaimer
-from fakts_next.grants.remote.demanders.redeem import RedeemDemander
+from fakts_next.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts_next.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts_next.models import Manifest, Requirement
 import pytest
@@ -30,11 +29,10 @@ def test_redeem_code_grant(deployed_infra: Deployment):
             discovery=WellKnownDiscovery(
                 url=f"http://localhost:{port_for_lok}",
             ),
-            demander=RedeemDemander(
+            authorizer=RedeemAuthorizer(
                 token="Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI",
                 manifest=manifest,
             ),
-            claimer=ClaimEndpointClaimer(),
         ),
         cache=NoCache(),
         manifest=manifest,
@@ -50,6 +48,7 @@ def test_redeem_code_grant(deployed_infra: Deployment):
             loaded = fakts_next.loaded_fakts
             assert loaded is not None
             assert loaded.auth.client_id
-            assert loaded.auth.token_url
+            assert loaded.auth.token_endpoint
+            assert loaded.auth.refresh_token
             assert "rekuest" in loaded.instances
             assert loaded.instances["rekuest"].service == "live.arkitekt.rekuest"

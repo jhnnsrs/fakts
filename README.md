@@ -84,15 +84,18 @@ the services it wants to talk to, referenced by a `key` of your choosing and
 a globally unique `service` identifier (reverse-domain style). Requirements
 can be `optional=True`: the app keeps working when they are absent.
 
-### The remote protocol: discover → demand → claim
+### The remote protocol: discover → authorize
 
-A `RemoteGrant` is composed of three pluggable parts:
+A `RemoteGrant` is composed of two pluggable parts:
 
 | Role | Question it answers | Implementations |
 |---|---|---|
 | **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `FirstAdvertisedDiscovery` (UDP beacons), `SelectBeaconWidget` (Qt picker), `StaticDiscovery` |
-| **Demander** | *How do we get a claim token?* | `DeviceCodeDemander` (browser approval), `RedeemDemander` (pre-issued token, headless), `StaticDemander` |
-| **Claimer** | *How do we fetch the config?* | `ClaimEndpointClaimer` (the default), `StaticClaimer` |
+| **Authorizer** | *How do we get a session?* | `DeviceCodeAuthorizer` (browser approval), `RedeemAuthorizer` (pre-issued provisioning token, headless), `StaticAuthorizer` (a credential from an earlier session) |
+
+Protocol v1 had a third role: a *claimer* that traded an approval artifact
+for the configuration. It is gone because the OAuth token endpoint returns
+both at once — there is nothing left to trade.
 
 The builders (`build_device_code_fakts`, `build_redeem_fakts`) wire the
 common combinations for you; compose `RemoteGrant` yourself for anything
@@ -101,11 +104,12 @@ exotic. The exact HTTP exchanges are specified in
 
 ### ActiveFakts: what the server grants
 
-The claimed configuration contains the deployment's identity (`self`), the
-OAuth2 client credentials minted for your app (`auth`), and one `Instance`
-per service, each with a list of `Alias`es — candidate addresses for
-reaching that service (a deployment may expose the same service on a LAN
-address, a VPN address and a public address).
+The granted configuration contains the deployment's identity (`self`), the
+OAuth2 session held for your app (`auth` — a `client_id` and a rotating
+refresh token, never a client secret), and one `Instance` per service, each
+with a list of `Alias`es — candidate addresses for reaching that service (a
+deployment may expose the same service on a LAN address, a VPN address and a
+public address).
 
 `instances` only ever contains services that were actually granted. The
 sibling `statuses` map reports the outcome per requirement key
@@ -141,199 +145,306 @@ last-known-good address first. Pass `force_refresh=True` to re-resolve, or
 ### Caching & self-healing
 
 The cache (`FileCache` by default in the builders) stores the granted
-configuration across runs, keyed to a hash of your manifest *and* the
-server url — change either and the cache invalidates itself. If a *cached*
-configuration turns out to be stale (services moved, client revoked), fakts
-reloads from the grant once and retries before failing: an expired client
-is re-registered, moved services are re-resolved.
+session across runs, keyed to a hash of your manifest *and* the server url —
+change either and the cache invalidates itself. If a *cached* configuration
+turns out to be stale (services moved), fakts reloads from the grant once
+and retries before failing.
+
+Under protocol v2 the cache is no longer just configuration: it holds a live
+refresh token that rotates on every renewal, so it is written at mode `0600`
+and updated far more often than before. Two consequences are worth knowing:
+
+- **Give each app its own cache path.** The default is relative to the
+  working directory, which is rarely what you want for anything but a script.
+- **Processes sharing a cache cooperate rather than compete.** Each rotation
+  revokes its predecessor, so a process whose token was rotated away adopts
+  the one it finds on disk instead of re-authorizing — which would otherwise
+  invalidate its siblings' credentials too.
+
+When a session cannot be renewed at all — the authorization was revoked, or
+it hit the server's maximum age — fakts raises `NeedsReauthenticationError`
+rather than silently opening a browser, because re-approving an app replaces
+its registration and disconnects every other process using it. Catch it and
+call `fakts.alogin()` at a point where prompting is appropriate:
+
+```python
+try:
+    token = await fakts.aget_token()
+except NeedsReauthenticationError:
+    await fakts.alogin()     # prompts only if the session cannot be revived
+    token = await fakts.aget_token()
+```
+
+`alogin()` is idempotent — a healthy session returns immediately without a
+prompt. `arefresh()` is the blunter tool: it *always* re-runs the grant, which
+replaces the app's client registration and disconnects sibling processes.
+
+To end a session, `alogout()` forgets it locally. It does **not** revoke
+anything: the protocol has no revocation endpoint, so the refresh token stays
+valid server-side until it expires, and a sibling process still holding it will
+re-persist it on its next rotation.
 
 ## The Fakts protocol
 
 Everything a server needs to implement to speak fakts. This section
-describes **protocol version `1`**; the server advertises the version it
-speaks in the well-known descriptor (`protocol_version`), and clients
-treat a missing value as `"1"`. All exchanges are JSON over HTTP(S).
-`{base}` is the server's fakts base URL as advertised by discovery (e.g.
-`https://example.com/f/`). The negotiation endpoints share one response
-envelope: a `status` field plus status-specific fields (`"granted"`
-carries the payload; `"error"` / `"denied"` carry a message).
+describes **protocol version `2`**, which is an extension of the OAuth 2.0
+device authorization grant ([RFC 8628][rfc8628]) rather than a protocol of
+its own. The server advertises the version it speaks in the well-known
+document (`protocol_version`); clients treat a missing value as `"1"` and
+refuse to continue, since v1 and v2 share no endpoints.
+
+What is genuinely fakts-specific — service instances, aliases, signed alias
+challenges, per-requirement consent and grant statuses — rides along as
+extension members on otherwise ordinary OAuth messages. Everything else is
+standard, so an off-the-shelf OAuth library recognises most of the exchange.
 
 ```
-discover ── GET  {url}/.well-known/fakts        Where is the server?
-demand   ── POST {base}start/ + {base}challenge/  One-time user approval → claim token
-            (or POST {base}redeem/ headless)
-claim    ── POST {base}claim/                   Claim token → ActiveFakts
-use      ── alias challenges, OAuth2 token url, report url
+discover ── GET  {url}/.well-known/fakts          Where is the server?
+demand   ── POST {device_authorization_endpoint}  Register + stage a user code
+consent  ── browser at verification_uri_complete  One-time user approval
+token    ── POST {token_endpoint}, polled         Tokens *and* configuration
+renew    ── POST {token_endpoint}                 grant_type=refresh_token
+use      ── alias challenges, report endpoint
 ```
+
+Two properties of the token endpoint shape everything downstream:
+
+- It returns the configuration **together with** the tokens. There is no
+  separate "claim" step, because there is no intermediate artifact to trade.
+- It re-renders that configuration on **every** response, including every
+  refresh. Aliases are host-aware, so configuration drift reaches clients
+  without anyone re-approving anything.
+
+[rfc8628]: https://datatracker.ietf.org/doc/html/rfc8628
 
 ### 1. Discovery — `GET {url}/.well-known/fakts`
 
-Returns the endpoint descriptor. Only `name` is required; `base_url`
-anchors all following requests:
+Returns a document that is simultaneously the fakts descriptor and OAuth 2.0
+authorization-server metadata:
 
 ```json
 {
-  "name": "my-deployment",
-  "base_url": "https://example.com/f/",
-  "protocol_version": "1",
-  "version": "1.2",
-  "description": "Our lab's deployment",
-  "configure_url": "https://example.com/configure/",
-  "claim_url": null,
-  "retrieve_url": null
+  "name": "My Deployment",
+  "version": "0.1.0",
+  "protocol_version": "2",
+  "description": "...",
+  "base_url": "https://example.com/lok/f/",
+
+  "issuer": "https://example.com",
+  "token_endpoint": "https://example.com/lok/o/token/",
+  "device_authorization_endpoint": "https://example.com/lok/o/app-authorization/",
+  "jwks_uri": "https://example.com/lok/o/jwks/",
+  "grant_types_supported": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_basic"],
+  "configure": "https://example.com/configure/{code}"
 }
 ```
 
-`protocol_version` is the fakts protocol version the server speaks
-(this document: `"1"`); `version` is the server software's own version,
-purely informational.
+`name` and `token_endpoint` are required. The fakts members carry **no
+prefix** — they sit alongside the standard ones in the same flat object,
+and unknown members must be ignored rather than rejected (the same document
+also advertises `mesh_*` and `hub_*` endpoints that most clients skip).
 
-### 2a. Demand (interactive): the device code flow
+**Every endpoint URL is absolute.** Deployments commonly sit under a
+script-name prefix (`/lok` above), so a client that rebuilds an endpoint by
+appending to `issuer` will get the path wrong. Take the URLs as given.
 
-The client registers its manifest and asks for a device code —
-`POST {base}start/`:
+The one exception is the **report endpoint**, which is not advertised;
+clients derive it as `{base_url}report/`.
+
+### 2. Demand — `POST {device_authorization_endpoint}`
+
+A JSON body, not form encoding — this is where v2 extends OAuth, because
+OAuth has no slot for "here is what my app needs, ask the user which parts
+to grant":
 
 ```json
 {
-  "manifest": {
-    "identifier": "my-app",
-    "version": "0.1.0",
-    "scopes": ["openid"],
-    "requirements": [
-      {"key": "rekuest", "service": "live.arkitekt.rekuest", "optional": false, "description": null}
-    ],
-    "logo": null, "description": null, "node_id": null, "public_sources": []
-  },
+  "manifest": {"identifier": "my-app", "version": "0.1.0", "scopes": ["openid"],
+               "requirements": [{"key": "rekuest", "service": "live.arkitekt.rekuest",
+                                 "optional": false}]},
   "expiration_time_seconds": 300,
   "redirect_uris": [],
-  "requested_client_kind": "development"
+  "requested_client_kind": "development",
+  "requested_client_role": "interface"
 }
 ```
 
-→ `{"status": "granted", "code": "<device-code>"}` (or
-`{"status": "error", "error": "..."}`).
+The manifest is a **nested object** here. (The redeem grant in §5 sends the
+same manifest as a JSON *string* in a form field — the encodings genuinely
+differ, so do not share a code path between them.)
 
-The client opens `{configure_url}{code}` in the browser. **This is the
-consent step**: the server shows the manifest — identifier, version,
-scopes and requirements, with optional ones individually declinable — and
-the *user* decides what the app gets.
+This request also performs client registration: the server mints a *public*
+OAuth client for the app (`client_secret: ""`,
+`token_endpoint_auth_method: "none"`) and binds it to the device code when
+the user approves. One client per app, not one per installation — under v2
+it is the *token* that identifies an installation.
 
-Meanwhile the client polls `POST {base}challenge/` with
-`{"code": "<device-code>"}` once per second:
-
-| Response | Meaning |
-|---|---|
-| `{"status": "waiting"}` / `{"status": "pending"}` | Not decided yet — keep polling (until the code expires) |
-| `{"status": "granted", "token": "<claim-token>"}` | Approved |
-| `{"status": "denied", "message": "..."}` | The user refused the app entirely |
-| `{"status": "error", "error": "..."}` | Code expired/invalid |
-
-### 2b. Demand (headless): the redeem flow
-
-A redeem token issued by the server beforehand is exchanged in one shot —
-`POST {base}redeem/` (or the discovery's `retrieve_url`) with
-`{"manifest": {...}, "token": "<redeem-token>"}` →
-`{"status": "granted", "token": "<claim-token>"}`. Redeem tokens are
-single-use.
-
-### 3. Claim — `POST {base}claim/`
-
-The claim token is exchanged for the actual configuration. Request:
-`{"token": "<claim-token>", "secure": true}` (`secure` reflects whether
-the client reached the server over https). Response:
-`{"status": "granted", "config": <ActiveFakts>}`:
+The response is RFC 8628 plus the minted `client_id`:
 
 ```json
 {
-  "self": {
-    "deployment_name": "my-deployment",
-    "alias": {"id": "self", "host": "example.com", "port": null, "ssl": true, "path": "lok", "challenge": "ht"}
-  },
-  "auth": {
-    "client_id": "...", "client_secret": "...",
-    "client_token": "...",
-    "token_url": "https://example.com/o/token/",
-    "report_url": "https://example.com/f/report/",
-    "scopes": ["openid"]
-  },
-  "instances": {
-    "rekuest": {
-      "service": "live.arkitekt.rekuest",
-      "identifier": "rekuest-prod",
-      "challenge_key": {"kind": "ed25519", "key": "<base64 raw 32-byte public key>"},
-      "aliases": [
-        {"id": "lan", "host": "10.0.0.5", "port": 8090, "ssl": false, "path": null, "challenge": "ht"},
-        {"id": "public", "host": "example.com", "port": null, "ssl": true, "path": "rekuest", "challenge": "ht"}
-      ]
-    }
-  },
-  "statuses": {
-    "rekuest": "granted",
-    "kabinet": "denied"
-  }
+  "status": "granted",
+  "device_code": "...", "user_code": "WDJB-MJHT", "client_id": "6f0c...",
+  "token_endpoint": "https://example.com/lok/o/token/",
+  "verification_uri": "https://example.com/configure/",
+  "verification_uri_complete": "https://example.com/configure/WDJB-MJHT",
+  "expires_in": 300, "interval": 5
 }
 ```
 
-- `instances` is keyed by the *requirement key* from the manifest and only
-  contains granted services. Each alias is one candidate address; its
-  challenge URL is `http(s)://{host}[:{port}][/{path}]/{challenge}`.
-- `challenge_key` is the service's identity key. Registering one is
-  **opt-in per service instance** — instances without a key keep the
-  plain 200-challenge. When present, alias challenges must be *signed*
-  (see below). One key per instance — the service has one identity no
-  matter which route reaches it.
-- `statuses` (optional, same keys) reports the outcome per requirement:
-  `"granted"`, `"denied"` (user declined) or `"unavailable"` (deployment
-  does not offer the service). Older servers omit it; clients coerce
-  unrecognized values to `unknown`, so new statuses are forward compatible.
-- `auth.client_token` identifies this client registration to the server
-  (used for reporting); `client_id`/`client_secret` are the OAuth2
-  client credentials.
+Clients must **carry `client_id` forward** — into polling, and into every
+later refresh. It is never derived from the manifest identifier. They should
+send the user to `verification_uri_complete` as given rather than deriving an
+approval URL.
 
-### 4. Using the configuration
+Two error shapes are specific to this endpoint and easy to mistake for
+success: failure is reported as **HTTP 200** with `{"status": "error",
+"error": "..."}`, and throttling as **HTTP 429** with a bare
+`{"error": "slow_down"}` and no `status` key at all.
 
-- **Alias challenge (plain)**: `GET` on an alias's challenge URL must
-  answer `200` if (and only if) the service is reachable through that
-  alias. The client probes aliases in order and uses the first that
-  answers.
-- **Alias challenge (signed)**: if the instance carries a
-  `challenge_key`, the client appends a fresh random nonce —
-  `GET {challenge_url}?nonce=<nonce>` — and the service must answer:
+### 3. Token — `POST {token_endpoint}`, polled
 
-  ```json
-  {"signature": "<base64(Ed25519-Sign(private_key, message))>"}
-  ```
+Standard RFC 8628 polling, form-encoded:
 
-  where `message = UTF8("fakts-challenge-v1:" + nonce)`. The client
-  verifies the signature against the pinned public key; with a key
-  pinned, **a plain 200 fails the challenge** (no silent downgrade), so
-  a host that merely answers the probe cannot impersonate the service.
-  The domain tag means the service never signs raw client-supplied
-  bytes; the fresh nonce prevents replaying recorded responses. Keys of
-  an unrecognized `kind` are ignored with a warning (forward
-  compatible). Requires the `crypto` extra
-  (`pip install fakts-next[crypto]`).
+```
+grant_type=urn:ietf:params:oauth:grant-type:device_code&device_code=...&client_id=...
+```
 
-  *Scope*: over plain http the signed challenge authenticates the
-  *probe*, not the connection — an active attacker can relay it and
-  hijack the traffic afterwards. Use `ssl: true` aliases for real
-  channel security (pinning the same key at the TLS layer, accepting
-  matching self-signed certificates, is the planned next step — it lets
-  LAN deployments skip public CAs entirely).
-- **Access tokens**: standard OAuth2 *client credentials* flow against
-  `auth.token_url` with `client_id`, `client_secret` and the granted
-  scopes.
-- **Report** (optional): if `auth.report_url` is advertised, the client
-  POSTs the outcome of alias resolution — best-effort telemetry that
-  lets the server flag broken compositions:
+The RFC 8628 error codes replace v1's bespoke status envelope:
 
-  ```json
-  {
-    "token": "<client_token>",
-    "alias_reports": {"rekuest": {"alias_id": "lan", "reason": null, "valid": true}},
-    "functional": true
-  }
-  ```
+| `error` | client behaviour |
+|---|---|
+| `authorization_pending` | keep polling |
+| `slow_down` | `interval += 5`, keep polling |
+| `access_denied` | the user refused — a legitimate outcome, not a fault |
+| `expired_token` | the code expired before approval |
+
+Success carries the tokens **and** the configuration as top-level members:
+
+```json
+{
+  "access_token": "eyJ...", "refresh_token": "...", "token_type": "Bearer",
+  "expires_in": 3600, "scope": "openid read",
+  "client_id": "6f0c...",
+
+  "self": {"deployment_name": "my-deployment",
+           "alias": {"id": "self", "host": "example.com", "ssl": true, "path": "lok", "challenge": "ht"}},
+  "instances": {
+    "rekuest": {"service": "live.arkitekt.rekuest", "identifier": "3",
+                "aliases": [{"id": "lan", "host": "10.0.0.4", "port": 8080, "challenge": "ht"}],
+                "challenge_key": {"kind": "ed25519", "key": "<base64>"}}
+  },
+  "statuses": {"rekuest": "granted", "kabinet": "denied"}
+}
+```
+
+`instances` is keyed by the **requirement key** from the manifest, not by
+service identifier. `statuses` is `granted` | `denied` | `unavailable`;
+`denied` means the user declined an optional requirement, `unavailable`
+that the deployment could not offer it. Unknown values must not break
+older clients.
+
+The granted `scope` may legitimately be narrower than what was requested —
+that is what per-requirement consent *means* — so clients must not validate
+one against the other.
+
+### 4. Renew — `grant_type=refresh_token`
+
+```
+grant_type=refresh_token&refresh_token=...&client_id=...
+```
+
+Both parameters are required: the endpoint authenticates the client before
+it validates the token, and then checks the token belongs to that client. A
+bare refresh token is not a usable credential.
+
+**Refresh tokens rotate**: each use issues a new one and revokes its
+predecessor immediately. This has consequences that are easy to get wrong,
+so they are stated as obligations below.
+
+### 5. Redeem — the headless grant
+
+For CI runners and deployed containers, where no human is available. An
+extension grant at the same token endpoint:
+
+```
+grant_type=urn:fakts:grant-type:redeem&redeem_token=...&manifest=<json string>
+```
+
+Note the URN has no `params:oauth` segment — it is a fakts URN. Returns the
+same combined response as §3, including a refresh token. It never returns a
+client secret; v2 issues none.
+
+### 6. Report — `POST {base_url}report/`
+
+Optional, best-effort telemetry that lets the server flag broken
+compositions. Authenticated with the access token, like any other resource:
+
+```
+Authorization: Bearer <access_token>
+```
+
+```json
+{
+  "alias_reports": {"rekuest": {"alias_id": "lan", "reason": null, "valid": true}},
+  "functional": true
+}
+```
+
+Keyed by requirement key. A failing report must never break the app.
+
+### 7. Using the configuration
+
+Alias challenges are unchanged from v1. Each alias advertises a `challenge`
+path; the client GETs it and requires a 200 before treating the alias as
+usable, trying them in order until one answers.
+
+When an instance carries a `challenge_key`, a plain 200 is no longer
+enough. The client sends a random nonce and the service must return a
+signature over the domain-separated message
+`fakts-challenge-v1:<nonce>`, made with the matching Ed25519 private key:
+
+```
+GET {alias.challenge_path}?nonce=<random>
+→ {"signature": "<base64>"}
+```
+
+The client verifies against the pinned key and **never downgrades**: an
+instance with a key that answers without a valid signature is rejected,
+which is what stops anything on the network from impersonating a service
+by answering first.
+
+### Client and server obligations
+
+Rotation only works if both sides hold up their end. These are normative.
+
+**Servers MUST NOT apply refresh-token reuse detection to fakts clients**,
+or MUST accept a superseded token for a short grace window. Fakts clients
+are public, share a process-local cache, and legitimately race. OAuth 2.1
+recommends reuse detection with family-wide revocation; applying it here
+turns a recoverable collision into a hard failure that needs a human.
+
+**Clients MUST persist a rotated refresh token before using the new access
+token**, at mode `0600`. The server commits the rotation when it answers, so
+a token that is used but not persisted is simply lost.
+
+**Clients MUST NOT re-run an interactive grant automatically.** Approving an
+app again causes the server to replace its client registration and delete the
+old one — which severs every other process sharing that credential. Automatic
+recovery is only safe for non-interactive grants (redeem).
+
+**Multi-process deployments SHOULD share one cache** and let the loser of a
+rotation race adopt the winner's credential, rather than each re-authorizing.
+
+### Transport
+
+Plain HTTP against a **loopback** host is always acceptable, and needs no
+configuration on either side. Plain HTTP against a **network** host is a
+supported deployment mode, but since v2 puts a rotating refresh token on the
+wire it must be opted into explicitly on both ends — clients via
+`allow_insecure_transport` (or `FAKTS_ALLOW_INSECURE_TRANSPORT=1`), servers
+via whatever their OAuth library requires.
 
 ## Design notes
 
@@ -351,14 +462,19 @@ the result. When you genuinely don't need negotiation (config injected by a
 container, or hardcoded in a test) the static path is still there: see
 [`EnvGrant` and `HardFaktsGrant`](#containers-configuration-from-the-environment).
 
-**`RemoteGrant` is three pluggable parts, not one.** The remote flow could be a
-single object, but its three questions vary independently: *where is the server*
-(well-known URL, UDP beacon, Qt picker, static), *how do we get approved*
-(device-code browser flow, pre-issued redeem token, static), and *how do we
-fetch the config* (claim endpoint, static). Splitting Discovery / Demander /
-Claimer into runtime-checkable protocols lets you compose new combinations — and
-implement a part in your own code — without touching the orchestration. See
-[discover → demand → claim](#the-remote-protocol-discover--demand--claim).
+**`RemoteGrant` is two pluggable parts, not one.** The remote flow could be a
+single object, but its two questions vary independently: *where is the server*
+(well-known URL, UDP beacon, Qt picker, static) and *how do we get a session*
+(device-code browser flow, pre-issued redeem token, an existing credential).
+Splitting Discovery / Authorizer into runtime-checkable protocols lets you
+compose new combinations — and implement a part in your own code — without
+touching the orchestration. See
+[discover → authorize](#the-remote-protocol-discover--authorize).
+
+It used to be three parts: protocol v1 separated *getting approved* from
+*fetching the config*, because approval yielded a claim token that a second
+request exchanged. Adopting the OAuth device grant collapsed both into the
+token endpoint, and the third part had nothing left to do.
 
 **Challenge once, then stick.** Two tempting extremes are both wrong: re-probing
 every alias on every `aget_alias` is slow (each probe carries a timeout) and
@@ -470,13 +586,13 @@ code and (truncated) response body where applicable:
 | `CompositionError` | One or more *required* services could not be resolved to a working alias |
 | `AliasNotFoundError` | `aget_alias(key)` for a key that is not resolvable (not in the manifest, or its challenges failed) |
 | `ServiceNotGrantedError` | Subclass of `AliasNotFoundError`: the key *is* declared, but the server granted no instance (user declined, or service unavailable) — catch it (or use `aget_alias_or_none`) to degrade gracefully |
+| `NeedsReauthenticationError` | The session can only be recovered by a human — call `alogin()` where prompting is appropriate |
 | `NoFaktsFound` | `get_current_fakts_next()` outside any fakts context |
 
 ## Fakts options
 
 | Option | Default | Effect |
 |---|---|---|
-| `load_on_enter` | `False` | Run the grant eagerly when entering the context (front-loads the interactive flow) |
 | `delete_on_exit` | `False` | Reset the cache and loaded state on exit |
 | `allow_auto_load` | `True` | If `False`, `aget_*` raises instead of loading implicitly — call `aload()` yourself |
 | `refetch_on_alias_failure` | `True` | Reload from the grant once when aliases from a *cached* config fail their challenges |

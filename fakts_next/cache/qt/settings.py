@@ -4,6 +4,8 @@ from qtpy import QtCore
 
 from typing import Optional
 import datetime
+import logging
+import os
 from fakts_next.models import ActiveFakts
 from pydantic import BaseModel, ConfigDict, Field
 from fakts_next.cache.model import CacheModel
@@ -36,6 +38,24 @@ class QtSettingsCache(BaseModel):
         cache = CacheModel(config=value.model_dump(), created=datetime.datetime.now(), hash=self.hash)
 
         self.settings.setValue(self.save_key, cache.model_dump_json())  # type: ignore #
+
+        # Flush first. QSettings buffers, so on the very first write the ini
+        # file does not exist yet — the chmod below would silently skip, and
+        # the later flush would create it at the process umask with a live
+        # refresh token inside.
+        self.settings.sync()  # type: ignore[attr-defined]
+
+        # This now stores a live refresh token. QSettings writes its ini
+        # file at the process umask, so tighten it best-effort. On Windows
+        # the backend is the registry, where this does nothing and the
+        # secret is stored unencrypted — implement FaktsCache over `keyring`
+        # if that matters for your deployment.
+        try:
+            filename = self.settings.fileName()  # type: ignore[attr-defined]
+            if filename and os.path.exists(filename):
+                os.chmod(filename, 0o600)
+        except Exception:
+            logger.debug("Could not tighten permissions on the Qt settings cache.", exc_info=True)
 
     async def aload(self) -> Optional[ActiveFakts]:
         """Loads the value from the settings

@@ -44,6 +44,10 @@ class Alias(BaseModel):
         default="",
         description="""The challenge is a string that is used to verify the alias. It should be """,
     )
+    public: bool = False
+    """Whether this alias is reachable from outside the deployment's own
+    network. Informational: the server decides which aliases to hand out,
+    the client just tries them in order."""
 
     @property
     def challenge_path(self) -> str:
@@ -134,17 +138,57 @@ class Instance(BaseModel):
 
 
 class AuthFakt(BaseModel):
-    """AuthFakt is a special kind of Fakt that is used to authenticate the user with"""
+    """The OAuth2 credentials this client holds for a deployment.
 
-    client_token: str
+    Protocol v2 is refresh-token based: the interactive flows (device code,
+    redeem) end at the token endpoint, which hands back an access token *and*
+    a rotating refresh token. There is no ``client_secret`` — fakts clients
+    are public OAuth2 clients (the server sets
+    ``token_endpoint_auth_method="none"``), so the refresh chain *is* the
+    credential.
+
+    Both ``client_id`` and ``refresh_token`` are required on every renewal:
+    the token endpoint authenticates the client before it looks at the
+    refresh token, and then checks the token actually belongs to it.
+    """
+
     client_id: str
-    client_secret: str
-    token_url: str
-    report_url: Optional[str] = None
-    """Where to report the alias resolution outcome. Endpoints that do not
-    support reporting simply omit it, and the client skips the report."""
+    """Server-minted client identifier. It comes from the device
+    authorization response and is echoed by every token response — it is
+    never derived from the manifest. Re-approval rotates it, so always
+    persist whatever the latest response carried."""
+    token_endpoint: str
+    """Absolute URL of the OAuth2 token endpoint, taken from discovery."""
+    report_endpoint: Optional[str] = None
+    """Where to report the alias resolution outcome. Derived from the
+    endpoint's ``base_url`` (the server does not publish it). Endpoints that
+    do not support reporting simply omit it, and the client skips the report."""
     scopes: List[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
-    """Scopes that this Fakt should request from the user"""
+    """The *granted* scopes, as returned by the token endpoint. Under
+    per-requirement consent this legitimately differs from what was asked
+    for, so it must never be validated against the request."""
+
+    refresh_token: str
+    """The live rotating secret. Every use invalidates the previous value, so
+    a rotated token must be persisted before the new access token is used."""
+    access_token: Optional[str] = None
+    """The current access token. Persisted so that sibling processes sharing
+    a cache can reuse it instead of each racing to refresh; may be stale on
+    load, which is what ``expires_at`` is for."""
+    expires_at: Optional[float] = None
+    """Absolute unix timestamp at which ``access_token`` expires. ``None``
+    means the server declared no lifetime: treat the token as opaque and
+    refresh only when it is actually rejected."""
+    refresh_issued_at: Optional[float] = None
+    """When the current refresh token was issued (unix ts). Lets the client
+    recognise a blown sliding window locally instead of guessing at an
+    ``invalid_grant``."""
+    chain_started_at: Optional[float] = None
+    """When this refresh chain began (unix ts), carried across rotations.
+    Servers cap the absolute lifetime of a chain independently of the
+    sliding window, so this is what detects "this authorization is simply
+    too old"."""
+    token_type: str = "Bearer"
 
 
 class SelfFakt(BaseModel):
@@ -254,12 +298,20 @@ class Manifest(BaseModel):
 
         unsorted_dict = self.model_dump()
 
-        # sort the requirements
+        # Order must not affect the hash: the hash gates the cache, so a
+        # manifest that is merely written differently would otherwise
+        # invalidate it and force the user through the grant again.
+        # `requirements` and `public_sources` are both Optional, so normalise
+        # to a list before sorting rather than assuming one is there.
         unsorted_dict["requirements"] = sorted(
-            unsorted_dict["requirements"], key=lambda x: x["key"]
+            unsorted_dict.get("requirements") or [],
+            key=lambda x: (x["key"], x["service"]),
         )
-        # sort the scopes
-        unsorted_dict["scopes"] = sorted(unsorted_dict["scopes"])
+        unsorted_dict["public_sources"] = sorted(
+            unsorted_dict.get("public_sources") or [],
+            key=lambda x: (x["kind"], x["url"]),
+        )
+        unsorted_dict["scopes"] = sorted(unsorted_dict.get("scopes") or [])
 
         # JSON encode the dictionary
         json_dd = json.dumps(unsorted_dict, sort_keys=True)

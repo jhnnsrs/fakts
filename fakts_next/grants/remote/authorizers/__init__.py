@@ -1,11 +1,19 @@
-"""Remote Demanders mechanisms
+"""Authorizers turn a discovered endpoint into a live OAuth2 session.
 
-This module contains the different demanders mechanisms
-that can be used to demand a TOKEN from a previously
-discovered endpoint.
-
-
-These are NOT grants, and are used by the remote grants
-to discover the endpoint to connect to.
-
+Each one drives a different grant at the same token endpoint: the device
+code grant for interactive first-time approval, the redeem grant for
+headless provisioning, and a plain refresh for a credential handed in from
+outside.
 """
+
+from .device_code import ClientKind, ClientRole, DeviceCodeAuthorizer
+from .redeem import RedeemAuthorizer
+from .static import StaticAuthorizer
+
+__all__ = [
+    "ClientKind",
+    "ClientRole",
+    "DeviceCodeAuthorizer",
+    "RedeemAuthorizer",
+    "StaticAuthorizer",
+]

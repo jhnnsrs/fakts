@@ -1,43 +1,72 @@
-from fakts_next.grants.remote.models import FaktsEndpoint
-from pydantic import BaseModel
+"""The pre-issued-credential grant: skip negotiation entirely.
+
+For callers that already hold a credential from an earlier session and just
+want to resume it — the deployer path, and tests.
+
+A refresh token alone is *not* a usable credential. The token endpoint
+authenticates the client before it looks at the refresh token, and then
+checks the token actually belongs to that client, so the ``client_id`` has
+to travel with it. Hence the compound ``client_id:refresh_token`` form.
+"""
+
+from typing import Tuple
+
+from fakts_next import oauth2
+from fakts_next.grants.remote.errors import RetrieveError
+from fakts_next.grants.remote.models import FaktsEndpoint, SSLContextModel
+from fakts_next.oauth2 import TokenResponse
 
 
-class StaticDemander(BaseModel):
-    """Static Grant
+def split_credential(value: str) -> Tuple[str, str]:
+    """Split a ``client_id:refresh_token`` pair.
 
-    A static demander is a remote grant that has a static token. This token can
-    for example have been retrieved from a configuration file beforehand and uniquely
-    identifies the application on the fakts_next server. When using the static grant make
-    sure that the token is not shared with other applications. As they can then mimik
-    your application.
-
-    Attention: If you are using the static grant, make sure that the token is not
-    shared with other applications. As they can then mimik your application, especially
-    when this static token maps to an client-credentials (user) application on the fakts_next
-    server, as this application will then be able to access the data of the user that
-    granted the application in the first place.
-
+    Split once from the left: refresh tokens are URL-safe base64 and never
+    contain a colon, so the first one is unambiguously the separator.
     """
+    client_id, separator, refresh_token = value.partition(":")
+    if not separator or not client_id or not refresh_token:
+        raise RetrieveError(
+            "Expected a credential of the form 'client_id:refresh_token', got "
+            f"{value[:12]!r}... A bare refresh token is not enough: the token "
+            "endpoint authenticates the client before it validates the token."
+        )
+    return client_id, refresh_token
+
+
+class StaticAuthorizer(SSLContextModel):
+    """Resumes a session from a credential handed in from outside."""
 
     token: str
-    """ The token (secret) that uniquely identifies this application on the fakts_next server."""
+    """A ``client_id:refresh_token`` pair."""
+    allow_insecure_transport: bool = False
 
-    async def ademand(self, endpoint: FaktsEndpoint) -> str:
-        """Demand a token from the endpoint
+    requires_user_interaction: bool = False
 
-        Retrieve the token that was provided to the demander
+    async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
+        if not endpoint.token_endpoint:
+            raise RetrieveError(
+                f"{endpoint.name} advertised no token_endpoint to refresh against."
+            )
 
-        Parameters
-        ----------
-        endpoint : FaktsEndpoint
-            The endpoint to demand the token from
+        client_id, refresh_token = split_credential(self.token)
 
-        request : FaktsRequest
-            The request to use for the demand
+        try:
+            data = await oauth2.apost_form(
+                endpoint.token_endpoint,
+                {
+                    "grant_type": oauth2.REFRESH_GRANT,
+                    "refresh_token": refresh_token,
+                    "client_id": client_id,
+                },
+                ssl_context=self.ssl_context,
+                allow_insecure_transport=self.allow_insecure_transport,
+            )
+        except oauth2.OAuth2ErrorResponse as e:
+            raise RetrieveError(
+                f"{endpoint.name} refused the supplied credential: {e}. Refresh "
+                f"tokens rotate on every use, so a credential captured from an "
+                f"earlier session may already have been superseded."
+            ) from e
 
-        Returns
-        -------
-        str
-            The token that was retrieved
-        """
-        return self.token
+        data.setdefault("client_id", client_id)
+        return TokenResponse(**data)
