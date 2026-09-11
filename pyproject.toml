@@ -1,6 +1,6 @@
 [project]
 name = "fakts"
-version = "2.0.0"
+dynamic = ["version"]
 description = "asynchronous service provider ( tailored to support dynamic client-server relations)"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
 requires-python = ">=3.11"
@@ -17,8 +17,6 @@ dependencies = [
 [project.optional-dependencies]
 rath = ["rath>=3.0"]
 crypto = ["cryptography>=42"]
-# Installed inside the semantic-release Docker action so build_command has uv.
-build = ["uv>=0.7.12"]
 
 [project.urls]
 Homepage = "https://github.com/jhnnsrs/fakts"
@@ -48,8 +46,14 @@ include = ["fakts"]
 include = ["fakts"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+# The version is derived from the nearest git tag (vX.Y.Z); nothing in the
+# tree is bumped on release. Shallow CI clones see no tag and get the fallback.
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
 
 [tool.pytest.ini_options]
 markers = [
@@ -60,18 +64,20 @@ markers = [
 
 
 [tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
+# No version_toml/version_variables: the release version lives only in the git
+# tag, which hatch-vcs reads at build time. CI runs the version command with
+# `commit: false`, so PSR tags HEAD and creates the GitHub Release without
+# pushing a bump commit to the branch.
+#
 # The semantic-release GitHub Action runs in a Docker container without uv, so
-# install it first (the `build` extra). After PSR bumps the version in
-# pyproject.toml, re-sync just this package's entry in uv.lock and stage it so
-# the release commit carries a consistent lock. $PACKAGE_NAME is injected by PSR.
+# install it first. PSR builds *before* it tags, so hatch-vcs is told the new
+# version explicitly ($NEW_VERSION is injected by PSR) instead of deriving a
+# `.devN+g...` local version that PyPI would reject.
 build_command = """
-    python -m pip install -e '.[build]'
-    uv lock --upgrade-package "$PACKAGE_NAME"
-    git add uv.lock
+    python -m pip install 'uv>=0.7.12'
+    export SETUPTOOLS_SCM_PRETEND_VERSION="$NEW_VERSION"
     uv build
 """
-commit_message = "chore(release): v{version} [skip ci]"
 
 # main -> stable X.Y.Z. next -> prereleases X.Y.Z-rc.N. N.x -> maintenance.
 [tool.semantic_release.branches.main]
