@@ -105,7 +105,10 @@ kommunity_partners:
           - challenge: ht
             host: localhost
             id: local_rekuest
-            port: 6888
+            # Rendered by tests/conftest.py with rekuest's published host
+            # port. This address is handed to the client, which challenges it
+            # for real, so it must match the port compose actually published.
+            port: __REKUEST_HOST_PORT__
             kind: absolute
             name: demo.arkitekt.live
             scope: public

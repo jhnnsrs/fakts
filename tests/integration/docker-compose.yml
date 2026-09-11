@@ -16,8 +16,10 @@ services:
     image: jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-next}
     command: bash run-debug.sh
     stop_grace_period: 1s
+    # Host ports are picked per-run by tests/conftest.py so parallel or
+    # leftover stacks cannot collide on a fixed port.
     ports:
-    - 6888:80
+    - "${REKUEST_HOST_PORT}:80"
     volumes:
     - ./configs/rekuest.yaml:/workspace/config.yaml
   lok:
@@ -29,9 +31,11 @@ services:
     command: bash run-debug.sh
     stop_grace_period: 1s
     ports:
-    - 6999:80
+    - "${LOK_HOST_PORT}:80"
     volumes:
-    - ./configs/lok.yaml:/workspace/config.yaml
+    # Rendered by conftest.py: the advertised rekuest port is only known once
+    # the host ports have been picked.
+    - "${LOK_CONFIG_FILE}:/workspace/config.yaml"
   minio:
     command: server /data
     environment:
@@ -39,7 +43,7 @@ services:
       MINIO_ROOT_USER: crappygreysetter
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
     ports:
-    - 3092:9000
+    - "${MINIO_HOST_PORT}:9000"
   initc:
     depends_on:
       minio:
