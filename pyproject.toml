@@ -1,6 +1,6 @@
 [project]
 name = "fakts"
-version = "1.0.0"
+version = "2.0.0"
 description = "asynchronous service provider ( tailored to support dynamic client-server relations)"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
 requires-python = ">=3.11"
