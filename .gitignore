@@ -146,3 +146,6 @@ media
 export
 static_collected
 data
+
+
+.fakts_cache.json

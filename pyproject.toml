@@ -1,48 +1,59 @@
-[tool.poetry]
-name = "fakts"
-version = "1.0.0"
-description = "asynchronous configuration provider ( tailored to support dynamic client-server relations)"
-authors = ["jhnnsrs <jhnnsrs@gmail.com>"]
-license = "CC BY-NC 3.0"
+[project]
+name = "fakts-next"
+version = "4.1.0"
+description = "asynchronous service provider ( tailored to support dynamic client-server relations)"
+authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
+requires-python = ">=3.11"
 readme = "README.md"
-packages = [{ include = "fakts" }]
+license = "MIT"
+dependencies = [
+    "pydantic>2",
+    "koil>=3.3.1",
+    "certifi>=2025.4.26",
+    "aiohttp>=3.11.18",
+    "oauthlib>=3.3.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-pydantic = ">2"
-PyYAML = ">=6"
-QtPy = "^2.0.1"
-koil = ">=1.0.0"
-aiohttp = { version = "^3.8.2", optional = true }
-certifi = { version = ">2021", optional = true }
-rich_click = { version = ">=0.3", optional = true }
-netifaces = { version = "^0.11.0", optional = true }
+[project.optional-dependencies]
+qt = ["qtpy>=2.4.3"]
+rath = ["rath>=3.0"]
+crypto = ["cryptography>=42"]
+# Installed inside the semantic-release Docker action so build_command has uv.
+build = ["uv>=0.7.12"]
 
+[project.urls]
+Homepage = "https://github.com/jhnnsrs/fakts-next"
+Repository = "https://github.com/jhnnsrs/fakts-next"
+Documentation = "https://jhnnsrs.github.io/fakts-next"
 
-[tool.poetry.extras]
-remote = ["aiohttp", "certifi"]
-cli = ["rich_click","netifaces"]
+[tool.uv]
+dev-dependencies = [
+    "cryptography>=42",
+    "dokker>=2.5",
+    "pyqt5>=5.15.11",
+    "pytest-asyncio>=0.26.0",
+    "pytest-cov>=6.1.1",
+    "pytest-qt>=4.4.0",
+    "pytest>=8.3.5",
+    "python-semantic-release>=9.21.1",
+    "qtpy>=2.4.3",
+    "basedpyright>=1.21",
+]
 
+[tool.basedpyright]
+include = ["fakts_next"]
+exclude = ["**/__pycache__", "tests"]
+typeCheckingMode = "standard"
 
+[tool.hatch.build.targets.sdist]
+include = ["fakts_next"]
 
-[tool.poetry.group.dev.dependencies]
-httpx = "^0.23.0"
-autoflake = "^1.7.7"
-pytest = "^7.2.0"
-testcontainers = "^3.7.0"
-pytest-qt = "^4.2.0"
-pytest-asyncio = "^0.20.2"
-aiohttp = "^3.8.3"
-websockets = "^10.4"
-black = ">=22"
-pytest-cov = "^4.0.0"
-ruff = "^0.0.282"
-mypy = "^1.7.1"
-pydoc-markdown = "^4.8.2"
-types-toml = "^0.10.8.7"
-types-pyyaml = "^6.0.12.12"
-netifaces = "^0.11.0"
-rich-click = "^1.7.3"
+[tool.hatch.build.targets.wheel]
+include = ["fakts_next"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 qt_api = "pyqt5"
@@ -52,55 +63,54 @@ markers = [
     "network: marks tests that require a network connection",
 ]
 
-[tool.mypy]
-exclude = ["venv/", "tests/", "examples/"]
-ignore_missing_imports = true
-
-[tool.ruff]
-extend-select = ["ANN", "D1"]
-extend-ignore = ["ANN101", "ANN002", "ANN003", "D100", "ANN401"]
-
-# Exclude a variety of commonly ignored directories.
-exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
-    "venv",
-    "tests",
-    "examples",
-]
-
-# Same as Black.
-line-length = 300
 
 [[tool.pydoc-markdown.loaders]]
 type = "python"
-search_path = ["fakts"]
+search_path = ["fakts_next"]
 
 [tool.pydoc-markdown.renderer]
 type = "docusaurus"
 docs_base_path = "website/docs"
 
-[tool.poetry.scripts]
-fakts = "fakts.cli.main:cli"
 
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+# The semantic-release GitHub Action runs in a Docker container without uv, so
+# install it first (the `build` extra). After PSR bumps the version in
+# pyproject.toml, re-sync just this package's entry in uv.lock and stage it so
+# the release commit carries a consistent lock. $PACKAGE_NAME is injected by PSR.
+build_command = """
+    python -m pip install -e '.[build]'
+    uv lock --upgrade-package "$PACKAGE_NAME"
+    git add uv.lock
+    uv build
+"""
+commit_message = "chore(release): v{version} [skip ci]"
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+# main -> stable X.Y.Z. next -> prereleases X.Y.Z-rc.N. N.x -> maintenance.
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.next]
+match = "next"
+prerelease = true
+prerelease_token = "rc"
+
+# Maintenance branches (1.x, 2.x, ...) cut stable patch/minor releases for an
+# older major after a new major has shipped from main.
+[tool.semantic_release.branches.maintenance]
+match = '^\d+\.x$'
+prerelease = false
+
+# Keep the changelog focused on user-facing changes. These patterns only filter
+# what's rendered — they do not affect version bumps.
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    '^chore(?:\([^)]*\))?: ',
+    '^ci(?:\([^)]*\))?: ',
+    '^build(?:\([^)]*\))?: ',
+    '^style(?:\([^)]*\))?: ',
+    '^test(?:\([^)]*\))?: ',
+    '^Merge ',
+]

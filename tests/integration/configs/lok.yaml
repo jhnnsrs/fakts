@@ -1,0 +1,133 @@
+postgres:
+  db_name: lok
+  dependency: db
+  engine: django.db.backends.postgresql
+  host: db
+  password: hello_django
+  port: 5432
+  username: hello_django
+deployment:
+  name: default
+django:
+  admin:
+    email: admin@admin.com
+    password: admin
+    username: admin
+  debug: true
+  hosts:
+  - "*"
+  secret_key: c5d84589433e1d0b4198072c54ee0dd1
+  csrf_trusted_origins:
+  - http://jhnnsrs-lab.hyena-sole.ts.net
+  - https://jhnnsrs-lab.hyena-sole.ts.net
+  - http://jhnnsrs-server
+  - https://jhnnsrs-server
+  - http://localhost
+  - https://localhost
+  force_script_name: ""
+authentikate:
+  issuers:
+    - kind: rsa
+      iss: lok
+      kid: lok-key-1
+      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+redis:
+  dependency: redis
+  host: redis
+  port: 6379
+scopes:
+  kabinet_add_repo: Add repositories to the database
+  kabinet_deploy: Deploy containers
+  mikro_read: Read image from the database
+  mikro_write: Write image to the database
+  openid: The open id connect scope
+  read: A generic read access
+  read_image: Read image from the database
+  rekuest_agent: Act as an agent
+  rekuest_call: Call other apps with rekuest
+  write: A generic write access
+token_expire_seconds: 700000
+
+issuer:
+  oidc_issuer: "http://lok"
+
+oidc_issuer: "http://lok"
+lok:
+  issuer: lok
+  key_type: RS256
+  public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDXx/g7dyiwmfIQ\nvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUras\nQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmV\ncfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuq\nSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpY\nM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHF\nU3tiYQCpAgMBAAECggEAFfZyEydlOlho9YBPzeumTcuulJh3ebu27XH8p0mH3y27\nU6vDCitCPeTwHa5K46w+KPQm33NPjIlus2ixKRPTGKJwqcCg7nnv/ox++Sy++CzT\nf+iU2oZABnz7zlnfxiZXQ2b4L/nWyby7NMVVUCcomkG4fl2MN0w+YkdcWBnQWjRr\nj+KcG029zrhKI2uiXz2IysRPRAw58lWcvDO9H5q4eo9+qxV7UzbCvipOsjGFH6RJ\nIwUyCz3XFOdC84taz2+xT0umJeG4RGDdiL0ZM1BC89BqFtQiOJntqaV6FgczKRTH\nTcMuiYndX8QsZZ+zUZ2LjFRNi8u1TBkgczitBg0bQwKBgQDrMAe0xhCGP4n3zZoc\n2Dlz8XFc2XvhCfFdkfE6zzbva2444LQ2uRcbPG1m419z138SsnNN2hw1JAermMj3\nbcjMW2zsas2wkhTaLDkceHC1qFa55+TdkCNx5Min6n1Wnfr40j8Wvum9YstseuGk\nBQIlbMz0ImGnU3QQRg7kesAf/wKBgQDq4E11mR4gqKxmW4RWT9cJ+DM285APaGXf\n85fyjaVs1eVvZ5krY5vmemAOLk9v8F73Sn64zEtJVCQzD5YwihjmQ4dS+hn7f3j1\ncY1Fw+2hJJHi8o63uPtRmLV/Cc787F2iMqi/YK36f4sJX8h63CBYYPf7buN7+T9t\n4T3w0MnfVwKBgBUl03uQ18mKixhqN3Jiiv/+9OeZcscwgrCcP+m+2jy7F0UsB2ho\nSkibrWa0CVA8T2PaAf49H44zuDDY4zFEgOrHScsUa3x2FkPr+BK0TcY35dx/mpfF\nrzo9jUF0F2Mjf37CQQQFlLT/3jTZ89Iw1RmSZ/eH4+oM2gHgmtQ2qXH3AoGBAL9U\nHIUxR9N+04FGB5Vv0FI0tzOKUM3cUzCNdDeHnzv7Obz4fVNU/whOo7SpkNg0zIdR\nTc0nziRbwGk/xy6fMA1S8Qds6IFwo439BAHSyt47tgNTZ2LN8xvS8/YafVyXBuc7\nsS7EiLTH9PCb7+n1KvwTca6F9BVnQn41v4lN60RdAoGBAMwdn2xRp+Ywc8N9dvn8\nS0ozU3Vk2qbV5altixspOoWzuyFi1o/r5bgma71QjAsgvWwPhBTOsByrmEhrvWpu\nDDpLWRIGuAg5dG21Ddh8ZMaJhISmbvepUhm2fVLG3YzG0eE/KGJjX6AFGqLUOi1V\nqv9UsZQ7iutdI3MsfEU9PWEL\n-----END PRIVATE KEY-----\n"
+public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+
+datalayer:
+  access_key: mikro_access_key
+  secret_key: mikro_secret_key
+  host: minio
+  port: 9000
+  protocol: http
+  media:
+    bucket: media
+
+
+organizations:
+  - name: demo
+    identifier: demo
+    owner: demo
+    auto_configure: true
+
+users:
+  - name: demo
+    username: demo
+    password: demo
+
+memberships: 
+  - user: demo
+    organization: demo 
+    roles: ["demo"]
+
+redeem_tokens:
+  - token: Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI
+    user: demo
+    organization: demo
+    composition: localhost
+
+
+kommunity_partners:
+  - identifier: little_sidecar
+    name: "Sidecar Demo"
+    website_url: "https://sidecar.fake"
+    partner_kind: "preauthorized"
+    auto_configure: true
+    preconfigured_composition:
+        identifier: localhost
+        instances:
+        - aliases:
+          - challenge: ht
+            host: localhost
+            id: local_rekuest
+            port: 6888
+            kind: absolute
+            name: demo.arkitekt.live
+            scope: public
+            ssl: false
+          identifier: Rekuest Service
+          manifest:
+            description: Rekuest Service for Arkitekt Live
+            identifier: live.arkitekt.rekuest
+            name: Rekuest
+            node_id: 47de8b7327024c68820ea042d1bdb37b
+            public_sources:
+            - kind: github
+              url: https://github.com/arkitektio/rekuest-server-next
+            roles:
+            - description: Can assign to apps
+              key: Assigner
+            - description: Can review data
+              key: Reviewer
+            scopes:
+            - description: Read access to Rekuest data
+              key: read
+            - description: Write access to Rekuest data
+              key: write
+            version: 1.0.0
+        
