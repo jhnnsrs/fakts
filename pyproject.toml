@@ -15,7 +15,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-qt = ["qtpy>=2.4.3"]
 rath = ["rath>=3.0"]
 crypto = ["cryptography>=42"]
 # Installed inside the semantic-release Docker action so build_command has uv.
@@ -30,13 +29,10 @@ Documentation = "https://jhnnsrs.github.io/fakts"
 dev-dependencies = [
     "cryptography>=42",
     "dokker>=2.8",
-    "pyqt5>=5.15.11",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
-    "pytest-qt>=4.4.0",
     "pytest>=8.3.5",
     "python-semantic-release>=9.21.1",
-    "qtpy>=2.4.3",
     "basedpyright>=1.21",
 ]
 
@@ -56,10 +52,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-qt_api = "pyqt5"
 markers = [
     "integration: marks tests that require a running server",
-    "qt: marks tests that require a running qt application",
     "network: marks tests that require a network connection",
 ]
 

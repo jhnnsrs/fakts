@@ -59,8 +59,8 @@ class FaktsCache(Protocol):
     """FaktsCache
 
     A FaktsCache stores a loaded configuration so it can be reused across
-    runs without re-querying the grant. It can be backed by a file, by
-    Qt settings, or any other persistent store.
+    runs without re-querying the grant. It can be backed by a file or any
+    other persistent store.
 
     **Optional:** a cache that is genuinely shared between processes may also
     define ``atransaction()``, an async context manager giving the caller

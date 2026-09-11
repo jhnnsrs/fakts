@@ -28,11 +28,6 @@ jobs:
           version: "latest"
           python-version: ${{ matrix.python-version }}
 
-      # fakts has Qt-backed tests; give them a virtual display.
-      - uses: pyvista/setup-headless-display-action@v3
-        with:
-          qt: true
-
       - name: Install the project
         run: uv sync --all-extras --dev
 

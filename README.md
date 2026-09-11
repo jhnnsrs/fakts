@@ -29,7 +29,6 @@ pip install fakts
 Optional extras:
 
 ```bash
-pip install fakts[qt]      # Qt widgets (endpoint picker, settings cache)
 pip install fakts[rath]    # GraphQL transport links for rath
 pip install fakts[crypto]  # signed alias challenges (Ed25519 verification)
 ```
@@ -90,7 +89,7 @@ A `RemoteGrant` is composed of two pluggable parts:
 
 | Role | Question it answers | Implementations |
 |---|---|---|
-| **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `FirstAdvertisedDiscovery` (UDP beacons), `SelectBeaconWidget` (Qt picker), `StaticDiscovery` |
+| **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `FirstAdvertisedDiscovery` (UDP beacons), `StaticDiscovery` |
 | **Authorizer** | *How do we get a session?* | `DeviceCodeAuthorizer` (browser approval), `RedeemAuthorizer` (pre-issued provisioning token, headless), `StaticAuthorizer` (a credential from an earlier session) |
 
 Protocol v1 had a third role: a *claimer* that traded an approval artifact
@@ -464,7 +463,7 @@ container, or hardcoded in a test) the static path is still there: see
 
 **`RemoteGrant` is two pluggable parts, not one.** The remote flow could be a
 single object, but its two questions vary independently: *where is the server*
-(well-known URL, UDP beacon, Qt picker, static) and *how do we get a session*
+(well-known URL, UDP beacon, static) and *how do we get a session*
 (device-code browser flow, pre-issued redeem token, an existing credential).
 Splitting Discovery / Authorizer into runtime-checkable protocols lets you
 compose new combinations — and implement a part in your own code — without
@@ -558,13 +557,6 @@ fakts = Fakts(grant=HardFaktsGrant(fakts=my_active_fakts), manifest=manifest)
 
 (`fakts.grants.remote.builders.build_remote_testing` and
 `build_remote_testing_with_token` cover the remote-flavored variants.)
-
-### Qt apps
-
-With the `[qt]` extra, `fakts.grants.remote.discovery.qt.selectable_beacon`
-provides `SelectBeaconWidget` — a dialog that scans for advertised servers and
-lets the user pick or type one — and `fakts.cache.qt.settings.QtSettingsCache`
-persists the configuration in `QSettings` instead of a file.
 
 ### GraphQL via rath
 

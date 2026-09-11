@@ -1,1 +1,0 @@
-"""Qt-backed cache storage."""

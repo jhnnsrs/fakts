@@ -858,7 +858,7 @@ class Fakts(KoiledModel):
         """The cache's cross-process transaction, or a no-op.
 
         ``atransaction`` is optional on :class:`FaktsCache` so that caches with
-        nothing to serialize — NoCache, in-memory ones, QSettings — need not
+        nothing to serialize — NoCache, in-memory ones — need not
         implement it.
         """
         transaction = getattr(self.cache, "atransaction", None)
