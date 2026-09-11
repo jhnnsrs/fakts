@@ -24,10 +24,9 @@ def test_cache():
             self=SelfFakt(deployment_name="test_deployment", alias=Alias(id="test", host="localhost", port=8000, path="/test")),
             auth=AuthFakt(
                 client_id="test_client_id",
-                client_secret="test_client",
-                client_token="test_client_token",
-                token_url="http://localhost:8000/token",
-                report_url="http://localhost:8000/report",
+                refresh_token="test_refresh_token",
+                token_endpoint="http://localhost:8000/token",
+                report_endpoint="http://localhost:8000/report",
             ),
             instances={
                 "test": Instance(

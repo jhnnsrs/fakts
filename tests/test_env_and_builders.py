@@ -13,8 +13,8 @@ from fakts_next import (
     build_device_code_fakts,
     build_redeem_fakts,
 )
-from fakts_next.grants.remote.demanders.device_code import DeviceCodeDemander
-from fakts_next.grants.remote.demanders.redeem import RedeemDemander
+from fakts_next.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
+from fakts_next.grants.remote.authorizers.redeem import RedeemAuthorizer
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 
@@ -59,13 +59,49 @@ async def test_env_grant_errors_are_verbose(
         await grant.aload()
 
     monkeypatch.setenv("FAKTS", "{not valid json")
-    with pytest.raises(GrantError, match=r"(?s)\$FAKTS is set.*not valid json"):
+    with pytest.raises(GrantError, match=r"(?s)\$FAKTS is set.*json_invalid"):
         await grant.aload()
 
     monkeypatch.delenv("FAKTS")
     monkeypatch.setenv("FAKTS_FILE", str(tmp_path / "missing.json"))
     with pytest.raises(GrantError, match=r"missing\.json.*does not exist"):
         await grant.aload()
+
+
+async def test_env_grant_errors_never_echo_the_credential(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A malformed FAKTS blob must not put the refresh token in the error.
+
+    This is the whole failure mode: no attacker is involved, just a typo in a
+    deployment, and the traceback goes wherever logs go.
+    """
+    import json
+
+    secret = "v1.SUPERSECRET_REFRESH_TOKEN_ABCDEFGHIJKLMNOP"
+    broken = json.dumps(
+        {
+            "self": {"deployment_name": "d", "alias": {"id": "a", "host": "h"}},
+            "auth": {"client_id": "CID", "refresh_token": secret},  # no token_endpoint
+        }
+    )
+
+    grant = EnvGrant()
+
+    monkeypatch.delenv("FAKTS_FILE", raising=False)
+    monkeypatch.setenv("FAKTS", broken)
+    with pytest.raises(GrantError) as inline:
+        await grant.aload()
+    assert secret not in str(inline.value)
+    assert "token_endpoint" in str(inline.value), "the error must still be actionable"
+
+    monkeypatch.delenv("FAKTS")
+    path = tmp_path / "fakts.json"
+    path.write_text(broken)
+    monkeypatch.setenv("FAKTS_FILE", str(path))
+    with pytest.raises(GrantError) as from_file:
+        await grant.aload()
+    assert secret not in str(from_file.value)
 
 
 async def test_build_device_code_fakts_wiring(tmp_path: Path):
@@ -77,10 +113,10 @@ async def test_build_device_code_fakts_wiring(tmp_path: Path):
         headless=True,
     )
 
-    assert isinstance(fakts.grant.demander, DeviceCodeDemander)
-    assert fakts.grant.demander.manifest is manifest
+    assert isinstance(fakts.grant.authorizer, DeviceCodeAuthorizer)
+    assert fakts.grant.authorizer.manifest is manifest
     assert fakts.manifest is manifest
-    assert fakts.grant.demander.open_browser is False
+    assert fakts.grant.authorizer.open_browser is False
     assert isinstance(fakts.cache, FileCache)
     assert fakts.cache.hash, (
         "The builder should bind a hash so manifest/server changes invalidate the cache"
@@ -123,6 +159,6 @@ async def test_build_redeem_fakts_wiring():
         no_cache=True,
     )
 
-    assert isinstance(fakts.grant.demander, RedeemDemander)
-    assert fakts.grant.demander.token == "redeem-me"
+    assert isinstance(fakts.grant.authorizer, RedeemAuthorizer)
+    assert fakts.grant.authorizer.token == "redeem-me"
     assert isinstance(fakts.cache, NoCache)

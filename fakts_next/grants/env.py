@@ -5,9 +5,23 @@ from pydantic import BaseModel, ValidationError
 
 from fakts_next.grants.errors import GrantError
 from fakts_next.models import ActiveFakts
-from fakts_next.utils import truncate
 
 logger = logging.getLogger(__name__)
+
+
+def _describe(error: ValidationError) -> str:
+    """Summarise a validation failure without echoing the document.
+
+    The document being validated is the app's credential. Both pydantic's
+    ``str(e)`` and the raw source render the offending values, so a single
+    malformed ``$FAKTS`` would otherwise put a live refresh token into
+    stdout — and from there into whatever collects the logs. Report only
+    where the problem is and what kind it was.
+    """
+    return "; ".join(
+        f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}"
+        for problem in error.errors()
+    )
 
 
 class EnvGrant(BaseModel):
@@ -24,9 +38,18 @@ class EnvGrant(BaseModel):
     2. ``file_var`` (default ``FAKTS_FILE``): a path to a JSON file
        containing the configuration (e.g. a mounted secret).
 
+    The injected ``auth`` block must be a protocol-v2 credential — a
+    ``client_id`` and a ``refresh_token``, not a client secret. Servers no
+    longer issue client credentials to fakts apps.
+
+    Note that refresh tokens rotate: the injected one is spent the first
+    time it is used, and the replacement lives only in the cache. Give such
+    a deployment a writable cache path, or provision it with a redeem token
+    instead so it can re-authorize itself unattended.
+
     Example:
         ```bash
-        export FAKTS='{"self": {...}, "auth": {...}, "instances": {...}}'
+        export FAKTS='{"self": {...}, "auth": {"client_id": "...", "refresh_token": "...", "token_endpoint": "https://.../o/token/"}, "instances": {...}}'
         # or
         export FAKTS_FILE=/run/secrets/fakts.json
         ```
@@ -42,6 +65,12 @@ class EnvGrant(BaseModel):
 
     file_var: str = "FAKTS_FILE"
     """The environment variable holding a path to a JSON configuration file"""
+
+    requires_user_interaction: bool = False
+    """Re-reading the environment costs nothing and needs nobody, so the
+    client may do it unattended when a session can no longer be renewed.
+    Without this a container would raise "needs someone at a browser" for a
+    credential it could simply have re-read."""
 
     async def aload(self) -> ActiveFakts:
         """Loads the active fakts from the environment.
@@ -64,7 +93,7 @@ class EnvGrant(BaseModel):
             except ValidationError as e:
                 raise GrantError(
                     f"${self.json_var} is set, but its content is not a valid "
-                    f"fakts configuration: {e}. Content: {truncate(raw)}"
+                    f"fakts configuration. Problems: {_describe(e)}"
                 ) from e
 
         path = os.environ.get(self.file_var)
@@ -86,7 +115,7 @@ class EnvGrant(BaseModel):
             except ValidationError as e:
                 raise GrantError(
                     f"The file '{path}' (from ${self.file_var}) does not contain "
-                    f"a valid fakts configuration: {e}. Content: {truncate(content)}"
+                    f"a valid fakts configuration. Problems: {_describe(e)}"
                 ) from e
 
         raise GrantError(

@@ -63,6 +63,25 @@ async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout: int = 
                         f"really running at this address? Received: {truncate(str(data))}"
                     )
 
+                # A v1 server omits protocol_version entirely. Name that
+                # explicitly: a missing token_endpoint further down is a
+                # baffling symptom for what is really a version mismatch.
+                protocol_version = str(data.get("protocol_version", "1"))
+                if protocol_version != "2":
+                    raise DiscoveryError(
+                        f"{url} speaks fakts protocol version {protocol_version}, but "
+                        f"fakts-next >= 5 requires version 2. The v2 protocol is an "
+                        f"OAuth 2.0 extension and shares no endpoints with v1, so there "
+                        f"is no compatibility mode. Upgrade the server, or pin "
+                        f"fakts-next < 5 to keep talking to this one."
+                    )
+
+                if "token_endpoint" not in data:
+                    raise DiscoveryError(
+                        f"{url} claims fakts protocol version 2 but advertises no "
+                        f"'token_endpoint'. Received: {truncate(str(data))}"
+                    )
+
                 return FaktsEndpoint(**data)
 
             else:

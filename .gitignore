@@ -149,3 +149,4 @@ data
 
 
 .fakts_cache.json
+.fakts_cache.json.lock

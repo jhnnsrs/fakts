@@ -75,3 +75,20 @@ class ServiceNotGrantedError(AliasNotFoundError):
     gracefully) from "the key is unknown or the service is unreachable"
     (likely a bug or an infrastructure problem).
     """
+
+
+class NeedsReauthenticationError(FaktsError):
+    """Raised when the session can only be recovered by a human.
+
+    Refresh tokens do not live forever: servers cap both how long an
+    individual token stays valid and how long a whole refresh chain may be
+    renewed for. When either cap is reached — or the authorization was
+    revoked, or superseded by a fresh approval elsewhere — there is nothing
+    the client can do unattended.
+
+    This is deliberately *not* handled by re-running the grant behind the
+    user's back. An interactive grant opens a browser and causes the server
+    to replace the app's client registration, which would kill every other
+    process sharing the same credential. Catch this error and call
+    :meth:`Fakts.alogin` at a moment when prompting is appropriate.
+    """

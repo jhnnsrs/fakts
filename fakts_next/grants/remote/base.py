@@ -1,63 +1,45 @@
-from fakts_next.models import ActiveFakts
-from .errors import RemoteGrantError
 import logging
 
-from .models import Demander, Discovery, Claimer
 from pydantic import BaseModel, ConfigDict
+
+from fakts_next.models import ActiveFakts
+from fakts_next.oauth2 import TOKEN_EXPIRY_SKEW, merge_token_response
+
+from .errors import RemoteGrantError
+from .models import Authorizer, Discovery
 
 logger = logging.getLogger(__name__)
 
 
-Token = str
-EndpointUrl = str
-
-
 class RemoteGrant(BaseModel):
-    """Abstract base class for remote grants
+    """Obtains configuration by negotiating an OAuth2 session with a server.
 
-    A Remote grant is a grant that connects to a fakts_next server,
-    and tires to establishes a secure relationship with it.
-
-    This is a highly configurable grant, that can be used to
-    dynaimcially *discover* the endpoint, *demand* a token
-    to access a token, and then *claim* the configuration
-    from the endpoint.
-
-    This grant is highly configurable, and can be used to
-    implement any kind of remote grant.
-
-    You can use a specific builder to build a remote grant
-    that fits your needs.
+    Two steps under protocol v2, where v1 had three: *discover* the endpoint,
+    then *authorize* against it. The old "claim" step is gone — the token
+    endpoint returns the tokens and the configuration together, so there is
+    no separate artifact to trade.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
     discovery: Discovery
     """The discovery mechanism to use for finding the endpoint"""
 
-    demander: Demander
-    """The demander mechanism to use for demanding the token FROM the endpoint"""
+    authorizer: Authorizer
+    """The grant to run against the discovered endpoint."""
 
-    claimer: Claimer
-    """The claimer mechanism to use for claiming the token FROM the endpoint"""
+    @property
+    def requires_user_interaction(self) -> bool:
+        """Whether reloading this grant would put a browser in front of a user."""
+        return getattr(self.authorizer, "requires_user_interaction", True)
 
     async def aload(self) -> ActiveFakts:
-        """Load the configuration
+        """Discover an endpoint, authorize against it, assemble the config.
 
-        This function will first discover the endpoint, then demand a token from it,
-        and then claim the configuration from it.
-
-        Parameters
-        ----------
-        request : FaktsRequest
-            The request to use for the load
-
-        Returns
-        -------
-        Dict[str, FaktValue]
-            The configuration that was claimed from the endpoint
-
-
-
+        The client assembles :class:`ActiveFakts` itself now: the endpoint
+        metadata supplies the token and report URLs, and the token response
+        supplies the credentials and the service instances. The server no
+        longer sends an ``auth`` block at all.
         """
         try:
             endpoint = await self.discovery.adiscover()
@@ -67,6 +49,18 @@ class RemoteGrant(BaseModel):
                 f"{self.discovery.__class__.__name__}: {e}"
             ) from e
 
-        token = await self.demander.ademand(endpoint)
+        response = await self.authorizer.aauthorize(endpoint)
 
-        return await self.claimer.aclaim(token, endpoint)
+        if not endpoint.token_endpoint:
+            raise RemoteGrantError(
+                f"{endpoint.name} advertised no token_endpoint, so the session "
+                f"could not be renewed later."
+            )
+
+        return merge_token_response(
+            None,
+            response,
+            token_endpoint=endpoint.token_endpoint,
+            report_endpoint=endpoint.report_endpoint,
+            skew=TOKEN_EXPIRY_SKEW,
+        )

@@ -20,8 +20,15 @@ class EndpointDefaults(BaseModel):
 
 
 class QTSettingTokenStore(BaseModel):
-    """Retrieves and stores users matching the currently
-    active fakts_next grant"""
+    """Remembers a credential per endpoint in the Qt settings.
+
+    Under protocol v2 the stored value is a ``client_id:refresh_token``
+    pair, not a claim token — a bare refresh token cannot be redeemed on its
+    own. That makes this a secret store: QSettings writes an ini file at the
+    process umask on Unix and the registry (unencrypted) on Windows, so
+    implement :class:`~fakts_next.protocols.FaktsCache` over ``keyring`` if
+    the deployment needs better.
+    """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
     settings: QtCore.QSettings  # type: ignore
@@ -53,10 +60,11 @@ class QTSettingTokenStore(BaseModel):
                 logger.warning("Error loading token store, using default", e)
                 storage = EndpointDefaults()
 
-        if endpoint.base_url in storage.default_token:
-            del storage.default_token[endpoint.base_url]
-        else:
-            storage.default_token[endpoint.base_url] = token
+        # A put is a put. This used to delete the entry whenever one already
+        # existed, so the *second* store for an endpoint silently dropped the
+        # credential instead of updating it — and under v2 that entry holds a
+        # `client_id:refresh_token` pair, i.e. the whole session.
+        storage.default_token[endpoint.base_url] = token
 
         self.settings.setValue(self.save_key, storage.model_dump_json())  # type: ignore
 

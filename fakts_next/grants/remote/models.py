@@ -1,16 +1,17 @@
 import ssl
-from typing import Protocol, runtime_checkable, Optional
+from typing import List, Optional, Protocol, runtime_checkable
 
 import certifi
 from pydantic import BaseModel, ConfigDict, Field
-from fakts_next.models import ActiveFakts
+
+from fakts_next.oauth2 import TokenResponse
 
 
 class SSLContextModel(BaseModel):
     """Base model that carries an SSL context and allows arbitrary types.
 
-    Shared by the remote grant components (discovery, demanders, claimers)
-    that need to make TLS connections to a fakts_next server.
+    Shared by the remote grant components (discovery, authorizers) that need
+    to make TLS connections to a fakts_next server.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -23,53 +24,93 @@ class SSLContextModel(BaseModel):
 
 
 class FaktsEndpoint(BaseModel):
-    """FaktsEndpoint
+    """A discovered fakts server, as described by its well-known document.
 
-    A FaktsEndpoint is a remote endpoint that can be used to
-    retrieve the configuration. This class is used to represent
-    the endpoints that are discovered by the discovery mechanisms.
-    (For example, when accessing a well-known fakts_next URL)"""
+    Under protocol v2 this doubles as OAuth 2.0 authorization-server
+    metadata: the server publishes ``token_endpoint`` and
+    ``device_authorization_endpoint`` alongside the fakts-specific members,
+    unprefixed, in the same flat document.
+
+    Every endpoint URL is absolute — the server builds them with
+    ``build_absolute_uri`` and deployments commonly sit under a script-name
+    prefix such as ``/lok``. Never reconstruct one by concatenating onto
+    ``issuer``.
+
+    ``extra="allow"`` is deliberate: the document also carries ``mesh_*``
+    and ``hub_*`` members that this client does not model but other tools
+    read off the same fetch.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     base_url: str = "http://localhost:8000/f/"
-    """The base URL of the endpoint. Akin to the base URL of a Oauth2 """
+    """The base URL of the fakts app. The report endpoint is derived from
+    it, because the server does not publish one."""
     name: str = "Helper"
-    """ A human readable name for the endpoint"""
+    """A human readable name for the endpoint"""
     description: Optional[str] = None
-    """ A human readable description for the endpoint"""
-    retrieve_url: Optional[str] = None
-    claim_url: Optional[str] = None
-    configure_url: Optional[str] = None
-    """The user-facing page where a device code can be entered/approved.
-    If the server does not advertise it, clients fall back to deriving it
-    from the base_url."""
+    """A human readable description for the endpoint"""
+
+    issuer: Optional[str] = None
+    """The OAuth2 issuer identifier."""
+    token_endpoint: Optional[str] = None
+    """Absolute URL of the OAuth2 token endpoint. Every grant — device code,
+    redeem, refresh — is a POST here."""
+    device_authorization_endpoint: Optional[str] = None
+    """Absolute URL of the device authorization endpoint. Non-standard in
+    one respect: it takes a JSON body carrying the fakts manifest, and it
+    also performs the client registration."""
+    jwks_uri: Optional[str] = None
+    """Where the server publishes the keys its access tokens are signed with."""
+    grant_types_supported: List[str] = Field(default_factory=list)
+    token_endpoint_auth_methods_supported: List[str] = Field(default_factory=list)
+    configure: Optional[str] = None
+    """The user-facing approval page template, containing a literal
+    ``{code}`` placeholder. Informational — the device authorization
+    response carries a ready-made ``verification_uri_complete``."""
+
     version: Optional[str] = None
     """The version of the server software (informational)"""
     protocol_version: Optional[str] = None
     """The version of the fakts protocol the server speaks. Servers that
     do not advertise it are treated as speaking protocol version "1"."""
 
+    @property
+    def report_endpoint(self) -> str:
+        """Where to POST alias reports.
+
+        Derived rather than discovered: the server routes this at
+        ``{base_url}report/`` but does not advertise it in the well-known
+        document.
+        """
+        return self.base_url.rstrip("/") + "/report/"
+
 
 @runtime_checkable
-class Demander(Protocol):
-    """A demander takes a FaktsEndpoint and returns the Fakts
-    user input.
+class Authorizer(Protocol):
+    """Turns a discovered endpoint into a live OAuth2 session.
+
+    Replaces protocol v1's ``Demander`` + ``Claimer`` pair. There is no
+    longer a two-step "obtain an artifact, then trade it for configuration":
+    the token endpoint does both at once, returning the tokens *and* the
+    fakts configuration in a single response.
     """
 
-    async def ademand(self, endpoint: FaktsEndpoint) -> str:
-        """Demands a token for the given endpoint.
+    requires_user_interaction: bool
+    """Whether authorizing needs a human at a browser.
 
-        This method should return the token that can be used to retrieve
-        the configuration from the endpoint.
+    This is what makes unattended recovery safe to automate. Re-running an
+    *interactive* grant mints a new client and causes the server to delete
+    the previous one — which would kill every sibling process sharing the
+    cache — so it must never happen behind the user's back. Non-interactive
+    grants (redeem, static) have no such hazard and may re-run freely.
+    """
 
-        Args:
-            endpoint (FaktsEndpoint): The endpoint to demand the token for.
-            request (FaktsRequest): The request that is being processed.
+    async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
+        """Negotiate a session with the endpoint.
 
-        Returns:
-            str: The token that can be used to retrieve the configuration.
-
-
-
+        Returns the token response, including the fakts extension members
+        (``self``, ``instances``, ``statuses``) the server merged into it.
         """
         ...
 
@@ -93,47 +134,9 @@ class Discovery(Protocol):
         the configuration. If no endpoint can be found, it should raise
         a DiscoveryError.
 
-        Parameters
-        ----------
-        request : FaktsRequest
-            The request that is being processed.
-
         Returns
         -------
         FaktsEndpoint
             The endpoint that can be used to retrieve the configuration.
-        """
-        ...
-
-
-@runtime_checkable
-class Claimer(Protocol):
-    """Claimer is the abstract base class for claiming mechanisms
-
-    A claimer uses a token to claim (retrieve) the active configuration
-    from a previously discovered Fakts endpoint.
-
-    This class provides an asynchronous interface, as claiming can
-    involve lengthy operations such as network requests.
-    """
-
-    async def aclaim(self, token: str, endpoint: FaktsEndpoint) -> ActiveFakts:
-        """Claims the configuration from the endpoint.
-
-        This method should use the token to retrieve the active configuration
-        from the endpoint. If the configuration cannot be claimed, it should
-        raise a ClaimError.
-
-        Parameters
-        ----------
-        token : str
-            The token to use for claiming the configuration.
-        endpoint : FaktsEndpoint
-            The endpoint to claim the configuration from.
-
-        Returns
-        -------
-        ActiveFakts
-            The active configuration claimed from the endpoint.
         """
         ...
