@@ -89,7 +89,7 @@ redeem_tokens:
   - token: Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI
     user: demo
     organization: demo
-    composition: localhost
+    hub: localhost
 
 
 kommunity_partners:
@@ -98,7 +98,7 @@ kommunity_partners:
     website_url: "https://sidecar.fake"
     partner_kind: "preauthorized"
     auto_configure: true
-    preconfigured_composition:
+    preconfigured_hub:
         identifier: localhost
         instances:
         - aliases:

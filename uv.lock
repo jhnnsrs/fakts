@@ -406,7 +406,7 @@ wheels = [
 
 [[package]]
 name = "dokker"
-version = "2.5.0"
+version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -414,9 +414,9 @@ dependencies = [
     { name = "koil" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/50/eb/95a55ae2346a4f71f164bc3fcccce2bb7c4c5655270e5c4d9f579f2d1b2e/dokker-2.5.0.tar.gz", hash = "sha256:cc2a677d4ad36a087f98a4d4992468a1334dc9d3feffa2c871bbcabaac90dc59", size = 23278, upload-time = "2026-06-11T21:53:21.01Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/cd/c2f2bce83499b97cd5490eb7f68b4e4991d7851baed4e4266fedce2450b7/dokker-2.8.0.tar.gz", hash = "sha256:7b7b5b45590e558bb7f681ca8c374b3551d448cf2fdb682ad36b554b5328fd0e", size = 62482, upload-time = "2026-09-05T15:33:31.614Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/a7/54e5720169b9c6356f46f8d9eecee39f9a40b262ab04142a3def4a924aa7/dokker-2.5.0-py3-none-any.whl", hash = "sha256:e9b89b4284494f5c050a47714954ab81a3156f7277d72fb2e3c83d5f88599aba", size = 29038, upload-time = "2026-06-11T21:53:20.17Z" },
+    { url = "https://files.pythonhosted.org/packages/20/b5/71ca0fdaa6db0e867b9aa3f0d92718491136e1d5f6b208dd427bf6065c8e/dokker-2.8.0-py3-none-any.whl", hash = "sha256:9644f3e6f568c1fd0e6cdda2d77a055425c3b4008cba50094677ff7eacbac1a7", size = 71949, upload-time = "2026-09-05T15:33:30.537Z" },
 ]
 
 [[package]]
@@ -472,7 +472,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
     { name = "certifi", specifier = ">=2025.4.26" },
     { name = "cryptography", marker = "extra == 'crypto'", specifier = ">=42" },
-    { name = "koil", specifier = ">=3.3.1" },
+    { name = "koil", specifier = ">=3.3.2" },
     { name = "pydantic", specifier = ">2" },
     { name = "qtpy", marker = "extra == 'qt'", specifier = ">=2.4.3" },
     { name = "rath", marker = "extra == 'rath'", specifier = ">=3.0" },
@@ -484,7 +484,7 @@ provides-extras = ["qt", "rath", "crypto", "build"]
 dev = [
     { name = "basedpyright", specifier = ">=1.21" },
     { name = "cryptography", specifier = ">=42" },
-    { name = "dokker", specifier = ">=2.5" },
+    { name = "dokker", specifier = ">=2.8" },
     { name = "pyqt5", specifier = ">=5.15.11" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
@@ -645,14 +645,14 @@ wheels = [
 
 [[package]]
 name = "koil"
-version = "3.3.1"
+version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/f2/c803075854fda0c08201a280358a694206b4dcbc1c1f19981eec73b0f107/koil-3.3.1.tar.gz", hash = "sha256:18415e55b9f87651127db9aed284fca5bdfdd8d9c5fa9e44b0acdfdccf7fccf6", size = 40936, upload-time = "2026-06-11T14:59:26.835Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c3/15/5f88e495d03f4a75a4b20ee174c34ebb4deba9c3431e8103164fa6e6683d/koil-3.3.2.tar.gz", hash = "sha256:0d8cdb2f96264d105376924a0ede2976f1c03750cef1a24519662e8f579a5257", size = 41955, upload-time = "2026-07-07T11:40:06.151Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/0b/af9f50f28c16a5378f23096766a7983b0904026fad24eee09a1b1eb17265/koil-3.3.1-py3-none-any.whl", hash = "sha256:603bb640c85bb70e9c9f08bbb90b2bf3196c8e15a3f287d79525539d5e34c3ab", size = 47270, upload-time = "2026-06-11T14:59:27.885Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/ad/9c2553d38abcf601aa2a42c55659b84122263fc20401478407132ee89bd3/koil-3.3.2-py3-none-any.whl", hash = "sha256:4cbbebea4cf2357728ee81efd894cf63dddfb66d15805fb92f5cda8294b0cb2e", size = 48268, upload-time = "2026-07-07T11:40:05.217Z" },
 ]
 
 [[package]]

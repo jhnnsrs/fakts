@@ -9,7 +9,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "pydantic>2",
-    "koil>=3.3.1",
+    "koil>=3.3.2",
     "certifi>=2025.4.26",
     "aiohttp>=3.11.18",
 ]
@@ -29,7 +29,7 @@ Documentation = "https://jhnnsrs.github.io/fakts"
 [tool.uv]
 dev-dependencies = [
     "cryptography>=42",
-    "dokker>=2.5",
+    "dokker>=2.8",
     "pyqt5>=5.15.11",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
