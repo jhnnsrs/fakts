@@ -64,14 +64,6 @@ markers = [
 ]
 
 
-[[tool.pydoc-markdown.loaders]]
-type = "python"
-search_path = ["fakts"]
-
-[tool.pydoc-markdown.renderer]
-type = "docusaurus"
-docs_base_path = "website/docs"
-
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

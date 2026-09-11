@@ -606,6 +606,3 @@ uv run pytest -m "not integration"                 # unit tests
 uv run pytest -m integration                       # needs docker (spins up a Fakts server)
 uv run ruff check fakts/
 ```
-
-The documentation site lives in `website/` (Docusaurus; API reference
-generated with pydoc-markdown).

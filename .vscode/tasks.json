@@ -15,11 +15,6 @@
       "command": "source venv/bin/activate && poetry publish"
     },
     {
-      "label": "Generate Docs",
-      "type": "shell",
-      "command": "source venv/bin/activate; pydoc-markdown"
-    },
-    {
       "type": "shell",
       "label": "Autoflake",
       "command": "${command:python.interpreterPath}",
