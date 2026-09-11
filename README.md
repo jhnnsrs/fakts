@@ -8,6 +8,10 @@
 [![PyPI status](https://img.shields.io/pypi/status/fakts.svg)](https://pypi.python.org/pypi/fakts/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
+> **Renamed.** This client was published as `fakts-next` up to 4.x. From 2.0.0 it is
+> published as `fakts` again, and the import root is `fakts` (`fakts_next` is gone).
+> Install `fakts>=2` and update imports.
+
 Fakts is an **asynchronous app configuration and service-discovery client** for
 dynamic client-server deployments. An app declares *what* it needs (a
 manifest with required services); fakts negotiates *where and how* to get it:
