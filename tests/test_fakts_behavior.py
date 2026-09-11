@@ -9,11 +9,11 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel
 
-from fakts_next import Fakts
-from fakts_next.cache.file import FileCache
-from fakts_next.errors import AliasNotFoundError, ServiceNotGrantedError
-from fakts_next.fakts import Fakts as FaktsClass
-from fakts_next.models import (
+from fakts import Fakts
+from fakts.cache.file import FileCache
+from fakts.errors import AliasNotFoundError, ServiceNotGrantedError
+from fakts.fakts import Fakts as FaktsClass
+from fakts.models import (
     ActiveFakts,
     Alias,
     AuthFakt,

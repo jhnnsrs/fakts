@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from fakts_next import Fakts
-from fakts_next.cache.file import CacheFile, FileCache
-from fakts_next.cache.nocache import NoCache
+from fakts import Fakts
+from fakts.cache.file import CacheFile, FileCache
+from fakts.cache.nocache import NoCache
 
-from fakts_next.grants.hard import HardFaktsGrant
-from fakts_next.models import ActiveFakts, AuthFakt, Instance, Manifest, SelfFakt, Alias, Requirement
+from fakts.grants.hard import HardFaktsGrant
+from fakts.models import ActiveFakts, AuthFakt, Instance, Manifest, SelfFakt, Alias, Requirement
 
 from .test_fakts_behavior import make_fakts_value
 
@@ -45,7 +45,7 @@ def test_cache():
         )
     )
 
-    fakts_next = Fakts(
+    fakts = Fakts(
         grant=grant,
         cache=FileCache(),
         manifest=Manifest(
@@ -57,8 +57,8 @@ def test_cache():
         ),
     )
 
-    with fakts_next:
-        alias = fakts_next.get_alias("test", omit_challenge=True, omit_report=True)
+    with fakts:
+        alias = fakts.get_alias("test", omit_challenge=True, omit_report=True)
         assert alias is not None
 
 

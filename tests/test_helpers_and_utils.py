@@ -3,13 +3,13 @@ helpers (``helpers.py``)."""
 
 import pytest
 
-from fakts_next import Fakts
-from fakts_next.errors import NoFaktsFound
-from fakts_next.fakts import Fakts as FaktsClass
-from fakts_next.grants.hard import HardFaktsGrant
-from fakts_next.helpers import afakt, fakt
-from fakts_next.models import Alias
-from fakts_next.utils import truncate, update_nested
+from fakts import Fakts
+from fakts.errors import NoFaktsFound
+from fakts.fakts import Fakts as FaktsClass
+from fakts.grants.hard import HardFaktsGrant
+from fakts.helpers import afakt, fakt
+from fakts.models import Alias
+from fakts.utils import truncate, update_nested
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 

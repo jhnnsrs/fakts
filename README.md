@@ -1,11 +1,11 @@
-# fakts-next
+# fakts
 
-[![codecov](https://codecov.io/gh/jhnnsrs/fakts-next/branch/main/graph/badge.svg?token=UGXEA2THBV)](https://codecov.io/gh/jhnnsrs/fakts-next)
-[![PyPI version](https://badge.fury.io/py/fakts-next.svg)](https://pypi.org/project/fakts-next/)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://pypi.org/project/fakts-next/)
+[![codecov](https://codecov.io/gh/jhnnsrs/fakts/branch/main/graph/badge.svg?token=UGXEA2THBV)](https://codecov.io/gh/jhnnsrs/fakts)
+[![PyPI version](https://badge.fury.io/py/fakts.svg)](https://pypi.org/project/fakts/)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://pypi.org/project/fakts/)
 ![Maintainer](https://img.shields.io/badge/maintainer-jhnnsrs-blue)
-[![PyPI pyversions](https://img.shields.io/pypi/pyversions/fakts-next.svg)](https://pypi.python.org/pypi/fakts-next/)
-[![PyPI status](https://img.shields.io/pypi/status/fakts-next.svg)](https://pypi.python.org/pypi/fakts-next/)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/fakts.svg)](https://pypi.python.org/pypi/fakts/)
+[![PyPI status](https://img.shields.io/pypi/status/fakts.svg)](https://pypi.python.org/pypi/fakts/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Fakts is an **asynchronous app configuration and service-discovery client** for
@@ -23,21 +23,21 @@ documented HTTP protocol that any server can implement.
 ## Install
 
 ```bash
-pip install fakts-next
+pip install fakts
 ```
 
 Optional extras:
 
 ```bash
-pip install fakts-next[qt]      # Qt widgets (endpoint picker, settings cache)
-pip install fakts-next[rath]    # GraphQL transport links for rath
-pip install fakts-next[crypto]  # signed alias challenges (Ed25519 verification)
+pip install fakts[qt]      # Qt widgets (endpoint picker, settings cache)
+pip install fakts[rath]    # GraphQL transport links for rath
+pip install fakts[crypto]  # signed alias challenges (Ed25519 verification)
 ```
 
 ## Quickstart
 
 ```python
-from fakts_next import build_device_code_fakts, Manifest, Requirement
+from fakts import build_device_code_fakts, Manifest, Requirement
 
 fakts = build_device_code_fakts(
     url="http://localhost:8000",
@@ -526,7 +526,7 @@ so both surfaces share a single implementation and a single event loop.
 No browser available? Have the server issue a redeem token and use:
 
 ```python
-from fakts_next import build_redeem_fakts
+from fakts import build_redeem_fakts
 
 fakts = build_redeem_fakts(
     url="http://localhost:8000",
@@ -541,7 +541,7 @@ When the configuration is provisioned from the outside (compose files,
 mounted secrets), skip the server negotiation entirely:
 
 ```python
-from fakts_next import Fakts, EnvGrant
+from fakts import Fakts, EnvGrant
 
 # reads $FAKTS (inline JSON) or $FAKTS_FILE (path to a JSON file)
 fakts = Fakts(grant=EnvGrant(), manifest=manifest)
@@ -550,25 +550,25 @@ fakts = Fakts(grant=EnvGrant(), manifest=manifest)
 ### Testing: hardcoded fakts
 
 ```python
-from fakts_next import Fakts
-from fakts_next.grants.hard import HardFaktsGrant
+from fakts import Fakts
+from fakts.grants.hard import HardFaktsGrant
 
 fakts = Fakts(grant=HardFaktsGrant(fakts=my_active_fakts), manifest=manifest)
 ```
 
-(`fakts_next.grants.remote.builders.build_remote_testing` and
+(`fakts.grants.remote.builders.build_remote_testing` and
 `build_remote_testing_with_token` cover the remote-flavored variants.)
 
 ### Qt apps
 
-With the `[qt]` extra, `fakts_next.grants.remote.discovery.qt.selectable_beacon`
+With the `[qt]` extra, `fakts.grants.remote.discovery.qt.selectable_beacon`
 provides `SelectBeaconWidget` — a dialog that scans for advertised servers and
-lets the user pick or type one — and `fakts_next.cache.qt.settings.QtSettingsCache`
+lets the user pick or type one — and `fakts.cache.qt.settings.QtSettingsCache`
 persists the configuration in `QSettings` instead of a file.
 
 ### GraphQL via rath
 
-With the `[rath]` extra, `fakts_next.contrib.rath` provides drop-in rath
+With the `[rath]` extra, `fakts.contrib.rath` provides drop-in rath
 links that configure themselves from a fakts context: `FaktsAIOHttpLink`,
 `FaktsHttpXLink`, `FaktsGraphQLWSLink`, `FaktsWebsocketLink` (all resolving
 their endpoint through `aget_alias`) and `FaktsAuthLink` (token loading and
@@ -587,7 +587,7 @@ code and (truncated) response body where applicable:
 | `AliasNotFoundError` | `aget_alias(key)` for a key that is not resolvable (not in the manifest, or its challenges failed) |
 | `ServiceNotGrantedError` | Subclass of `AliasNotFoundError`: the key *is* declared, but the server granted no instance (user declined, or service unavailable) — catch it (or use `aget_alias_or_none`) to degrade gracefully |
 | `NeedsReauthenticationError` | The session can only be recovered by a human — call `alogin()` where prompting is appropriate |
-| `NoFaktsFound` | `get_current_fakts_next()` outside any fakts context |
+| `NoFaktsFound` | `get_current_fakts()` outside any fakts context |
 
 ## Fakts options
 
@@ -604,7 +604,7 @@ code and (truncated) response body where applicable:
 uv sync                                            # install (Python >= 3.11)
 uv run pytest -m "not integration"                 # unit tests
 uv run pytest -m integration                       # needs docker (spins up a Fakts server)
-uv run ruff check fakts_next/
+uv run ruff check fakts/
 ```
 
 The documentation site lives in `website/` (Docusaurus; API reference

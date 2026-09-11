@@ -32,7 +32,7 @@ in the README, "protocol version 1"): a bespoke discovery document, a `start/` +
 `challenge/` polling pair that mints a *claim token*, and a `claim/` endpoint that
 exchanges that claim token for the whole configuration — including OAuth2 `client_id` /
 `client_secret`, which the client then uses in a **client_credentials** flow
-(`fakts_next/fakts.py:244-321`) to get runtime access tokens.
+(`fakts/fakts.py:244-321`) to get runtime access tokens.
 
 Every one of those steps re-invents something OAuth already standardises: device-code
 approval is RFC 8628, endpoint discovery is RFC 8414 / OIDC discovery, and "exchange an
@@ -138,8 +138,8 @@ OIDC-style appended form) and take the first 200.
 if "issuer" not in data and "name" in data:
     raise DiscoveryError(
         f"{url} speaks fakts protocol v1 (it answered a v1 descriptor with "
-        f"name='{data['name']}'). fakts-next >= 5 requires protocol v2. "
-        f"Pin fakts-next < 5 or upgrade the server."
+        f"name='{data['name']}'). fakts >= 5 requires protocol v2. "
+        f"Pin fakts < 5 or upgrade the server."
     )
 ```
 
@@ -307,7 +307,7 @@ Confirmed against lok's source, not assumed.
 
 ## Implementation
 
-### Models — `fakts_next/models.py`
+### Models — `fakts/models.py`
 
 `ActiveFakts` keeps its shape (`self`, `auth`, `instances`, `statuses`) so the cache,
 `EnvGrant`, `HardFaktsGrant` and every consumer keep working. Only `AuthFakt` is reshaped —
@@ -359,7 +359,7 @@ the remote path. `Alias`, `Instance`, `ChallengeKey`, `GrantStatus`, `SelfFakt`,
 `Requirement`, `Manifest` (incl. `hash()`) are **unchanged**. None of `AuthFakt` /
 `SelfFakt` / `Instance` are in `__all__` (`__init__.py:59-83`), so the rename is internal.
 
-### Protocol interfaces — `fakts_next/grants/remote/models.py`
+### Protocol interfaces — `fakts/grants/remote/models.py`
 
 - `Discovery.adiscover() -> FaktsEndpoint` — **role unchanged**; the UDP beacon
   (`discovery/advertised.py`) and Qt picker (`discovery/qt/selectable_beacon.py`) keep
@@ -390,9 +390,9 @@ the remote path. `Alias`, `Instance`, `ChallengeKey`, `GrantStatus`, `SelfFakt`,
 | `grants/remote/claimers/*` | **deleted** |
 | `grants/remote/base.py:15-72` | `RemoteGrant` = discover → authorize → assemble `ActiveFakts` |
 | `grants/remote/errors.py` | drop `ClaimError`; add `UserDeniedError` |
-| `fakts_next/fakts.py:244-321` | `_afetch_token` → refresh-token grant via aiohttp; on success update `auth.*` **and write back to the cache**; adopt `instances`/`self`/`statuses` if the response repeats them |
-| `fakts_next/fakts.py:323-368` | `_aadopt_newer_cached_fakts` repurposed: on `invalid_grant`, re-read the cache and retry once if it holds a *different* `refresh_token`; only then `aload(reload=True)` |
-| `fakts_next/fakts.py:55-59,683-737` | report: drop `ReportRequest.token`, send `Authorization: Bearer` |
+| `fakts/fakts.py:244-321` | `_afetch_token` → refresh-token grant via aiohttp; on success update `auth.*` **and write back to the cache**; adopt `instances`/`self`/`statuses` if the response repeats them |
+| `fakts/fakts.py:323-368` | `_aadopt_newer_cached_fakts` repurposed: on `invalid_grant`, re-read the cache and retry once if it holds a *different* `refresh_token`; only then `aload(reload=True)` |
+| `fakts/fakts.py:55-59,683-737` | report: drop `ReportRequest.token`, send `Authorization: Bearer` |
 | `cache/file.py:112-129` | create the temp file with `os.open(..., O_CREAT\|O_WRONLY, 0o600)` **before** writing, plus `fsync` before `os.replace`. Order matters: `os.replace` preserves the *tmp file's* mode, so a `chmod` after the replace is both wrong-ordered and racy. `aset` is now on the hot path (every refresh) |
 | `cache/qt/settings.py:27-38` | same leak, weaker fix: `QSettings` writes `~/.config/<org>/<app>.conf` at the process umask. Best-effort `os.chmod(self.settings.fileName(), 0o600)` after `aset`, and document that the Windows registry backend stores the secret unencrypted (users needing a keychain should implement `FaktsCache` over `keyring`) |
 | `grants/remote/builders.py:23-33` | cache hash → `sha256(f"v2:{url}:{manifest.hash()}")`; also **delete** `build_remote_testing_with_token` (its premise — a static v1 claim token traded at `{base}claim/` — has no v2 equivalent; not exported) and switch `build_redeem_grant` from `StaticDiscovery` to `WellKnownDiscovery`, since a static endpoint would now have to guess `token_endpoint` |
@@ -422,10 +422,10 @@ the installed oauthlib rather than assumed, and it is not a close call:
 Today's code sidesteps all of this because `fakts.py:262` only uses `prepare_request_body`
 plus a manual `session.post` — it is already 90% hand-rolled. The residual value (parsing
 `expires_in` → `expires_at`) is four lines. Verified safe to drop:
-`grep -rn oauthlib fakts_next/ tests/` returns exactly the three imports at `fakts.py:11-13`,
+`grep -rn oauthlib fakts/ tests/` returns exactly the three imports at `fakts.py:11-13`,
 all inside the code being replaced.
 
-Introduce a shared `fakts_next/oauth2.py` (`apost_form`, `OAuth2ErrorResponse`,
+Introduce a shared `fakts/oauth2.py` (`apost_form`, `OAuth2ErrorResponse`,
 `TokenResponse`, `to_active_fakts`, grant-type constants) imported by *both* `fakts.py`
 (runtime refresh) and the authorizers — this keeps `fakts.py` from importing
 `grants.remote.*`.

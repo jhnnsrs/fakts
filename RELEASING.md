@@ -1,6 +1,6 @@
-# Releasing fakts-next
+# Releasing fakts
 
-`fakts-next` ships as a PyPI package (`fakts-next`). Versioning is automated by
+`fakts` ships as a PyPI package (`fakts`). Versioning is automated by
 [python-semantic-release][psr] from [Conventional Commits][cc] — you never bump
 the version by hand. A push to a release branch runs
 `.github/workflows/release.yaml`, which:
@@ -26,16 +26,16 @@ a release on their own.
 
 | Branch | Releases | PyPI |
 | --- | --- | --- |
-| `main` | stable `X.Y.Z` | the default install (`pip install fakts-next`) |
-| `next` | prereleases `X.Y.Z-rc.N` | published as a **prerelease** — only reached via `pip install fakts-next --pre` or an exact pin |
+| `main` | stable `X.Y.Z` | the default install (`pip install fakts`) |
+| `next` | prereleases `X.Y.Z-rc.N` | published as a **prerelease** — only reached via `pip install fakts --pre` or an exact pin |
 | `N.x` (e.g. `4.x`) | maintenance `X.Y.Z` | published stable for an older major |
 
-PyPI marks `…-rc.N` versions as prereleases, so a plain `pip install fakts-next`
+PyPI marks `…-rc.N` versions as prereleases, so a plain `pip install fakts`
 never picks them up — `next` is a safe soak channel.
 
 ## Tag-based integration backends
 
-`fakts-next` has no backend image of its own — its integration stack stands up
+`fakts` has no backend image of its own — its integration stack stands up
 the **lok** auth server and a **rekuest** backend. `integration.yaml` runs on
 `main` and `next` and sets `LOK_SERVICE_TAG` and `REKUEST_SERVICE_TAG` (both
 `latest` on `main`, `next` elsewhere). `tests/integration/docker-compose.yml`
@@ -83,11 +83,11 @@ also applies there.
 ## Consuming the next channel
 
 ```sh
-pip install fakts-next --pre          # latest rc (or stable, whichever is newer)
-pip install 'fakts-next==5.0.0-rc.1'  # pin a specific rc
+pip install fakts --pre          # latest rc (or stable, whichever is newer)
+pip install 'fakts==5.0.0-rc.1'  # pin a specific rc
 ```
 
-Stable consumers (`pip install fakts-next`) are unaffected by the `next` channel.
+Stable consumers (`pip install fakts`) are unaffected by the `next` channel.
 
 ## Dry-running locally
 

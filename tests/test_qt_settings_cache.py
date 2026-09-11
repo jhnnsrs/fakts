@@ -9,8 +9,8 @@ pytest.importorskip("qtpy")
 
 from qtpy import QtCore
 
-from fakts_next.cache.model import CacheModel
-from fakts_next.cache.qt.settings import QtSettingsCache
+from fakts.cache.model import CacheModel
+from fakts.cache.qt.settings import QtSettingsCache
 
 from .test_fakts_behavior import make_fakts_value
 

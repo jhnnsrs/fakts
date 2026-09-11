@@ -17,13 +17,13 @@ import pytest_asyncio
 from aiohttp import web
 from pydantic import BaseModel
 
-from fakts_next import Fakts
-from fakts_next.cache.file import FileCache
-from fakts_next.errors import NeedsReauthenticationError
-from fakts_next.grants.env import EnvGrant
-from fakts_next.grants.hard import HardFaktsGrant
-from fakts_next.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
-from fakts_next.models import (
+from fakts import Fakts
+from fakts.cache.file import FileCache
+from fakts.errors import NeedsReauthenticationError
+from fakts.grants.env import EnvGrant
+from fakts.grants.hard import HardFaktsGrant
+from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
+from fakts.models import (
     ActiveFakts,
     Alias,
     AuthFakt,
@@ -34,7 +34,7 @@ from fakts_next.models import (
     Requirement,
     SelfFakt,
 )
-from fakts_next.oauth2 import InsecureTransportError, check_transport
+from fakts.oauth2 import InsecureTransportError, check_transport
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 
@@ -280,8 +280,8 @@ async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_ope
         {"/o/app-authorization/": authorize, "/o/token/": token}, method="POST"
     )
 
-    from fakts_next.grants.remote.errors import UserDeniedError
-    from fakts_next.grants.remote.models import FaktsEndpoint
+    from fakts.grants.remote.errors import UserDeniedError
+    from fakts.grants.remote.models import FaktsEndpoint
 
     endpoint = FaktsEndpoint(
         base_url=base + "/",
@@ -352,7 +352,7 @@ async def test_env_grant_recovers_unattended_when_credential_ages(
     raise — that is the whole headless story."""
     import json
 
-    from fakts_next.fakts import REFRESH_TOKEN_MAX_AGE
+    from fakts.fakts import REFRESH_TOKEN_MAX_AGE
 
     fresh = make_fakts_value(refresh_token="from_env")
     fresh.auth.refresh_issued_at = time.time()
@@ -387,7 +387,7 @@ async def test_env_grant_recovers_unattended_when_credential_ages(
 
 
 async def test_fakts_is_unusable_after_exit() -> None:
-    from fakts_next.errors import NotEnteredError
+    from fakts.errors import NotEnteredError
 
     fakts = Fakts(grant=Grant(fakts=make_fakts_value()), manifest=make_manifest())
     async with fakts:
@@ -398,8 +398,8 @@ async def test_fakts_is_unusable_after_exit() -> None:
 
 
 async def test_failed_enter_does_not_leak_the_context_variable() -> None:
-    from fakts_next import get_current_fakts_next
-    from fakts_next.errors import NoFaktsFound
+    from fakts import get_current_fakts
+    from fakts.errors import NoFaktsFound
 
     class StaticGrant(BaseModel):
         requires_user_interaction: bool = False
@@ -437,7 +437,7 @@ async def test_failed_enter_does_not_leak_the_context_variable() -> None:
             pass
 
     with pytest.raises(NoFaktsFound):
-        get_current_fakts_next()
+        get_current_fakts()
 
 
 # --------------------------------------------------------------------------- #

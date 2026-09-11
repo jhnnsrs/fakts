@@ -1,4 +1,4 @@
-"""Tests for ``fakts_next.testing`` — the hot-pluggable TestingFakts.
+"""Tests for ``fakts.testing`` — the hot-pluggable TestingFakts.
 
 No docker, no network: TestingFakts overrides only the alias-challenge and
 token-renewal seams, so everything else here (context publication, alias
@@ -8,17 +8,17 @@ machinery.
 
 import pytest
 
-from fakts_next import Alias, NoFaktsFound, get_current_fakts_next
-from fakts_next.testing import build_testing_fakts
+from fakts import Alias, NoFaktsFound, get_current_fakts
+from fakts.testing import build_testing_fakts
 
 
 @pytest.mark.asyncio
 async def test_hotplugs_into_current_context_and_resets_on_exit():
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     async with fakts:
-        assert get_current_fakts_next() is fakts
+        assert get_current_fakts() is fakts
     with pytest.raises(NoFaktsFound):
-        get_current_fakts_next()
+        get_current_fakts()
 
 
 @pytest.mark.asyncio
@@ -91,7 +91,7 @@ def test_sync_with_publishes_context_to_the_calling_thread():
     plain ``with`` hot-plugs for synchronous consumers too."""
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     with fakts:
-        assert get_current_fakts_next() is fakts
+        assert get_current_fakts() is fakts
         assert (
             fakts.get_alias("alpaka").to_http_path("/llm/v1")
             == "http://testserver/llm/v1"

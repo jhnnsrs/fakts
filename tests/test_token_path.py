@@ -16,12 +16,12 @@ import pytest_asyncio
 from aiohttp import web
 from pydantic import BaseModel
 
-from fakts_next import Fakts, ReauthPolicy
-from fakts_next.cache.file import FileCache
-from fakts_next.errors import NeedsReauthenticationError
-from fakts_next.fakts import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
-from fakts_next.models import ActiveFakts
-from fakts_next.oauth2 import resolve_expiry
+from fakts import Fakts, ReauthPolicy
+from fakts.cache.file import FileCache
+from fakts.errors import NeedsReauthenticationError
+from fakts.fakts import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
+from fakts.models import ActiveFakts
+from fakts.oauth2 import resolve_expiry
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 

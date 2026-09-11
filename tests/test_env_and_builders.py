@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from fakts_next import (
+from fakts import (
     EnvGrant,
     Fakts,
     FileCache,
@@ -13,8 +13,8 @@ from fakts_next import (
     build_device_code_fakts,
     build_redeem_fakts,
 )
-from fakts_next.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
-from fakts_next.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
+from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 

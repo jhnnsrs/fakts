@@ -17,10 +17,10 @@ import pytest_asyncio
 from aiohttp import web
 from pydantic import BaseModel
 
-from fakts_next import Fakts
-from fakts_next.cache.file import FileCache
-from fakts_next.errors import NeedsReauthenticationError, NotEnteredError
-from fakts_next.models import ActiveFakts
+from fakts import Fakts
+from fakts.cache.file import FileCache
+from fakts.errors import NeedsReauthenticationError, NotEnteredError
+from fakts.models import ActiveFakts
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 from .test_token_path import (

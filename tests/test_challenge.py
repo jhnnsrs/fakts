@@ -10,15 +10,15 @@ from aiohttp import web
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
-from fakts_next import Fakts
-from fakts_next.challenge import (
+from fakts import Fakts
+from fakts.challenge import (
     CHALLENGE_DOMAIN,
     build_challenge_message,
     generate_nonce,
     verify_challenge_signature,
 )
-from fakts_next.errors import CompositionError, FaktsError
-from fakts_next.models import ChallengeKey
+from fakts.errors import CompositionError, FaktsError
+from fakts.models import ChallengeKey
 
 from .test_fakts_behavior import CountingGrant, make_fakts_value, make_manifest
 

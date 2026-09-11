@@ -6,7 +6,7 @@ on:
     branches: [main, next]
 jobs:
   test_integration:
-    # fakts-next has no backend of its own — its integration stack runs the lok
+    # fakts has no backend of its own — its integration stack runs the lok
     # auth server and a rekuest backend. Test prerelease branches against the
     # prerelease backends (:next) and the stable line against :latest. base_ref
     # is set on PRs, ref_name on pushes.
@@ -28,7 +28,7 @@ jobs:
           version: "latest"
           python-version: ${{ matrix.python-version }}
 
-      # fakts-next has Qt-backed tests; give them a virtual display.
+      # fakts has Qt-backed tests; give them a virtual display.
       - uses: pyvista/setup-headless-display-action@v3
         with:
           qt: true

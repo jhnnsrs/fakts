@@ -1,15 +1,15 @@
 from dokker import Deployment
-from fakts_next import Fakts
+from fakts import Fakts
 import os
-from fakts_next.cache.nocache import NoCache
-from fakts_next.grants.remote.base import RemoteGrant
-from fakts_next.grants.remote.authorizers.device_code import (
+from fakts.cache.nocache import NoCache
+from fakts.grants.remote.base import RemoteGrant
+from fakts.grants.remote.authorizers.device_code import (
     ClientKind,
     DeviceCodeAuthorizer,
 )
-from fakts_next.grants.remote.discovery.well_known import WellKnownDiscovery
-from fakts_next.grants.remote.models import FaktsEndpoint
-from fakts_next.models import Manifest, Requirement
+from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
+from fakts.grants.remote.models import FaktsEndpoint
+from fakts.models import Manifest, Requirement
 import pytest
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
@@ -38,7 +38,7 @@ def test_device_code_grant(deployed_infra: Deployment):
             "lok", f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --hub localhost"
         )
 
-    fakts_next = Fakts(
+    fakts = Fakts(
         grant=RemoteGrant(
             discovery=WellKnownDiscovery(
                 url=f"http://localhost:{port_for_lok}",
@@ -54,7 +54,7 @@ def test_device_code_grant(deployed_infra: Deployment):
         manifest=manifest,
     )
 
-    with fakts_next:
-        alias = fakts_next.get_alias("rekuest", omit_challenge=False)
+    with fakts:
+        alias = fakts.get_alias("rekuest", omit_challenge=False)
         # The challenge should have resolved to the correct URL (which is reachable in the test environment)
         assert alias.challenge_path == "http://localhost:6888/ht"

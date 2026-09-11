@@ -1,11 +1,12 @@
 [project]
-name = "fakts-next"
+name = "fakts"
 version = "5.0.0-rc.1"
 description = "asynchronous service provider ( tailored to support dynamic client-server relations)"
 authors = [{ name = "jhnnsrs", email = "jhnnsrs@gmail.com" }]
 requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "pydantic>2",
     "koil>=3.3.1",
@@ -21,9 +22,9 @@ crypto = ["cryptography>=42"]
 build = ["uv>=0.7.12"]
 
 [project.urls]
-Homepage = "https://github.com/jhnnsrs/fakts-next"
-Repository = "https://github.com/jhnnsrs/fakts-next"
-Documentation = "https://jhnnsrs.github.io/fakts-next"
+Homepage = "https://github.com/jhnnsrs/fakts"
+Repository = "https://github.com/jhnnsrs/fakts"
+Documentation = "https://jhnnsrs.github.io/fakts"
 
 [tool.uv]
 dev-dependencies = [
@@ -40,15 +41,15 @@ dev-dependencies = [
 ]
 
 [tool.basedpyright]
-include = ["fakts_next"]
+include = ["fakts"]
 exclude = ["**/__pycache__", "tests"]
 typeCheckingMode = "standard"
 
 [tool.hatch.build.targets.sdist]
-include = ["fakts_next"]
+include = ["fakts"]
 
 [tool.hatch.build.targets.wheel]
-include = ["fakts_next"]
+include = ["fakts"]
 
 [build-system]
 requires = ["hatchling"]
@@ -65,7 +66,7 @@ markers = [
 
 [[tool.pydoc-markdown.loaders]]
 type = "python"
-search_path = ["fakts_next"]
+search_path = ["fakts"]
 
 [tool.pydoc-markdown.renderer]
 type = "docusaurus"

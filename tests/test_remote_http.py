@@ -13,22 +13,22 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 
-from fakts_next.grants.remote.authorizers.device_code import (
+from fakts.grants.remote.authorizers.device_code import (
     ClientKind,
     DeviceCodeAuthorizer,
 )
-from fakts_next.grants.remote.authorizers.redeem import RedeemAuthorizer
-from fakts_next.grants.remote.authorizers.static import StaticAuthorizer
-from fakts_next.grants.remote.discovery.utils import check_wellknown, discover_url
-from fakts_next.grants.remote.errors import (
+from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.static import StaticAuthorizer
+from fakts.grants.remote.discovery.utils import check_wellknown, discover_url
+from fakts.grants.remote.errors import (
     DeviceCodeExpiredError,
     DeviceCodeTimeoutError,
     DiscoveryError,
     RetrieveError,
     UserDeniedError,
 )
-from fakts_next.grants.remote.models import FaktsEndpoint
-from fakts_next.oauth2 import InsecureTransportError
+from fakts.grants.remote.models import FaktsEndpoint
+from fakts.oauth2 import InsecureTransportError
 
 from .test_fakts_behavior import make_manifest
 
@@ -510,7 +510,7 @@ async def test_plain_http_to_loopback_needs_no_opt_in(local_server) -> None:
 
 async def test_insecure_transport_env_var_opts_in(monkeypatch) -> None:
     """Containers that cannot pass a keyword argument use the env var."""
-    from fakts_next import oauth2
+    from fakts import oauth2
 
     monkeypatch.setenv("FAKTS_ALLOW_INSECURE_TRANSPORT", "1")
     # Must not raise.

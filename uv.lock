@@ -429,7 +429,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fakts-next"
+name = "fakts"
 version = "5.0.0rc1"
 source = { editable = "." }
 dependencies = [
