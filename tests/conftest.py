@@ -54,7 +54,13 @@ def integration_ports() -> Iterator[dict[str, int]]:
         "lok.yaml lost its __REKUEST_HOST_PORT__ placeholder; the client would "
         "be handed an address that nothing is listening on."
     )
-    rendered = template.replace("__REKUEST_HOST_PORT__", str(rekuest_port))
+    assert "__LOK_HOST_PORT__" in template, (
+        "lok.yaml lost its __LOK_HOST_PORT__ placeholder; lok would advertise "
+        "endpoints (and mint an `iss`) for a host the tests cannot reach."
+    )
+    rendered = template.replace("__REKUEST_HOST_PORT__", str(rekuest_port)).replace(
+        "__LOK_HOST_PORT__", str(lok_port)
+    )
 
     with tempfile.TemporaryDirectory(prefix="fakts-integration-") as tmpdir:
         # Readable by the docker daemon, which mounts it into the container.

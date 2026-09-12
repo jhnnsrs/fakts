@@ -1,3 +1,6 @@
+# Throwaway key material for the integration stack only: generated for this
+# file, never used by a deployment. lok refuses to boot on the key and secret
+# that used to be copied here from the server repository's committed config.
 postgres:
   db_name: lok
   dependency: db
@@ -16,7 +19,7 @@ django:
   debug: true
   hosts:
   - "*"
-  secret_key: c5d84589433e1d0b4198072c54ee0dd1
+  secret_key: 7395712029f31c489694c333a7144872b46d4721a22ed94c6a79a5d756a34f33
   csrf_trusted_origins:
   - http://jhnnsrs-lab.hyena-sole.ts.net
   - https://jhnnsrs-lab.hyena-sole.ts.net
@@ -26,11 +29,17 @@ django:
   - https://localhost
   force_script_name: ""
 authentikate:
+  # authentikate 4.0 requires an audience; "*" accepts any.
+  audience: "*"
   issuers:
     - kind: rsa
-      iss: lok
+      # lok anchors its discovery endpoints and the `iss` claim of the tokens it
+      # mints to `oidc_issuer`, and authentikate looks the verifying key up by
+      # that exact string, so both carry the run's host port (rendered by
+      # tests/conftest.py, like the rekuest port below).
+      iss: http://localhost:__LOK_HOST_PORT__
       kid: lok-key-1
-      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+      public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsPZdNXnWMbEs1FrNwx5H9sye5ptMN8IoFCmDk3cB70TXh+JP+kyFLNCxJrofYb+Ydgr6NLtaWSCqUBX2qLzUB1aKz5megYszRBZVq4jvsAHnNE+yfwFbQlOQCMLHYhQZ5TBhUDBMkwxWyS6UA+Ox7NXjxC4GrEGbJxxm6cGMOZ6+z36j260VHKYo9Dgaaac1Q0bcOzpS8Em8wmqyyUP5YTDZSujzHwp+7sLronV7OmYa7YktHcRAVnKn0YFwn081iV9fYsfwoecYE4uLAT+JdI3V1fkC0clC0JRzt/EYz664Vw+kBTG94vzTi+NTLAkeR+AkYWpYPwoy42mZF7Ho/
 redis:
   dependency: redis
   host: redis
@@ -49,15 +58,43 @@ scopes:
 token_expire_seconds: 700000
 
 issuer:
-  oidc_issuer: "http://lok"
+  oidc_issuer: "http://localhost:__LOK_HOST_PORT__"
 
-oidc_issuer: "http://lok"
+oidc_issuer: "http://localhost:__LOK_HOST_PORT__"
 lok:
   issuer: lok
   key_type: RS256
-  public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
-private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDXx/g7dyiwmfIQ\nvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUras\nQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmV\ncfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuq\nSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpY\nM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHF\nU3tiYQCpAgMBAAECggEAFfZyEydlOlho9YBPzeumTcuulJh3ebu27XH8p0mH3y27\nU6vDCitCPeTwHa5K46w+KPQm33NPjIlus2ixKRPTGKJwqcCg7nnv/ox++Sy++CzT\nf+iU2oZABnz7zlnfxiZXQ2b4L/nWyby7NMVVUCcomkG4fl2MN0w+YkdcWBnQWjRr\nj+KcG029zrhKI2uiXz2IysRPRAw58lWcvDO9H5q4eo9+qxV7UzbCvipOsjGFH6RJ\nIwUyCz3XFOdC84taz2+xT0umJeG4RGDdiL0ZM1BC89BqFtQiOJntqaV6FgczKRTH\nTcMuiYndX8QsZZ+zUZ2LjFRNi8u1TBkgczitBg0bQwKBgQDrMAe0xhCGP4n3zZoc\n2Dlz8XFc2XvhCfFdkfE6zzbva2444LQ2uRcbPG1m419z138SsnNN2hw1JAermMj3\nbcjMW2zsas2wkhTaLDkceHC1qFa55+TdkCNx5Min6n1Wnfr40j8Wvum9YstseuGk\nBQIlbMz0ImGnU3QQRg7kesAf/wKBgQDq4E11mR4gqKxmW4RWT9cJ+DM285APaGXf\n85fyjaVs1eVvZ5krY5vmemAOLk9v8F73Sn64zEtJVCQzD5YwihjmQ4dS+hn7f3j1\ncY1Fw+2hJJHi8o63uPtRmLV/Cc787F2iMqi/YK36f4sJX8h63CBYYPf7buN7+T9t\n4T3w0MnfVwKBgBUl03uQ18mKixhqN3Jiiv/+9OeZcscwgrCcP+m+2jy7F0UsB2ho\nSkibrWa0CVA8T2PaAf49H44zuDDY4zFEgOrHScsUa3x2FkPr+BK0TcY35dx/mpfF\nrzo9jUF0F2Mjf37CQQQFlLT/3jTZ89Iw1RmSZ/eH4+oM2gHgmtQ2qXH3AoGBAL9U\nHIUxR9N+04FGB5Vv0FI0tzOKUM3cUzCNdDeHnzv7Obz4fVNU/whOo7SpkNg0zIdR\nTc0nziRbwGk/xy6fMA1S8Qds6IFwo439BAHSyt47tgNTZ2LN8xvS8/YafVyXBuc7\nsS7EiLTH9PCb7+n1KvwTca6F9BVnQn41v4lN60RdAoGBAMwdn2xRp+Ywc8N9dvn8\nS0ozU3Vk2qbV5altixspOoWzuyFi1o/r5bgma71QjAsgvWwPhBTOsByrmEhrvWpu\nDDpLWRIGuAg5dG21Ddh8ZMaJhISmbvepUhm2fVLG3YzG0eE/KGJjX6AFGqLUOi1V\nqv9UsZQ7iutdI3MsfEU9PWEL\n-----END PRIVATE KEY-----\n"
-public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1KdvZfZMlYhbyrz9Auk2xao1gLYiQJ183joiXadUreL4BugUrasQVdR9JvBWXOBeqm2FD5Ehf9VvqXdzCOQ7/fUXkb9N8sqmz5YitQuheKGDh0weNmVcfdsCGU38sACEvFQg+5dv1tqLbm7EllT+vogntDVX16DmvpvFEX4HYHpT8qM/xuqSB6yQ8+wBuQd3K7WTFgUrUqQx6zFrSMUbSArPrrY5Z0GJAeDAHKp4+V+um4mSHpYM2nBJ5pn80wYpsf97KIL9P+UJzjb/indB8dCqpPkAk3HogBhj67Tp5JoqCMoaXHFU3tiYQCp
+  public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsPZdNXnWMbEs1FrNwx5H9sye5ptMN8IoFCmDk3cB70TXh+JP+kyFLNCxJrofYb+Ydgr6NLtaWSCqUBX2qLzUB1aKz5megYszRBZVq4jvsAHnNE+yfwFbQlOQCMLHYhQZ5TBhUDBMkwxWyS6UA+Ox7NXjxC4GrEGbJxxm6cGMOZ6+z36j260VHKYo9Dgaaac1Q0bcOzpS8Em8wmqyyUP5YTDZSujzHwp+7sLronV7OmYa7YktHcRAVnKn0YFwn081iV9fYsfwoecYE4uLAT+JdI3V1fkC0clC0JRzt/EYz664Vw+kBTG94vzTi+NTLAkeR+AkYWpYPwoy42mZF7Ho/
+private_key: "-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCsPZdNXnWMbEs1
+FrNwx5H9sye5ptMN8IoFCmDk3cB70TXh+JP+kyFLNCxJrofYb+Ydgr6NLtaWSCqU
+BX2qLzUB1aKz5megYszRBZVq4jvsAHnNE+yfwFbQlOQCMLHYhQZ5TBhUDBMkwxWy
+S6UA+Ox7NXjxC4GrEGbJxxm6cGMOZ6+z36j260VHKYo9Dgaaac1Q0bcOzpS8Em8w
+mqyyUP5YTDZSujzHwp+7sLronV7OmYa7YktHcRAVnKn0YFwn081iV9fYsfwoecYE
+4uLAT+JdI3V1fkC0clC0JRzt/EYz664Vw+kBTG94vzTi+NTLAkeR+AkYWpYPwoy4
+2mZF7Ho/AgMBAAECggEAL1nrW5DJXiZzco/gGvQylX2IQUi0oxNqzkHxK1ovTZrR
+ZmMxRH5sW8FnH4aEwCLbL2e/PQ8QXVZPpkvwJTY/K1bxGOYRvQ0MY7ZWQoEZmiLz
+WUbN+YkmFMep+1QpwG2pvvUFhy2eoa+kKlUTcrX8RU8JBbN1HXMv3u8GirPU96Nj
+qZ6Vx7a7GbjG00CgX9+0heOv5KUtV6dR79/KB2aUpSgSP09UoDE2JMK1s/TDPdvj
+RCLe/Y5OeiQGecNL2fPROI4FQPMytXBWisGrGRSPxT4gKKqYTVpzU/r7hH823D3r
+K/01Wbu640dW/fe12Q7agEouAiQePK0x8JkXhk9QmQKBgQDn+orlyo4X2ypFtbja
+TvL/7PR6tE79ClS/2QYnwTdNUIFG0dqorQQel4eD2W55Z29jBht0PMW1CNso4EXz
+8r9bk3WnG+LJr+FR7Nx4Qql9booX3tempjbmIg5uRjt75MDhUaF7ZkmAlCJCG+3f
+BaCfsl7hyD0uz51GZ1gx/2ooywKBgQC+E3fd3g1P+KM6wKinsO2Ra6XLzQU2Wimm
+M/2xuanEpG9BLzUH++nSg/V1xHsb+//+kOLSi65abrfrMWBkEa0dnZ5CxNhaO4Le
+3yTsogA9F+Qu9UjwE5BcbUFF7foPlbsys4/GNmIxwnALcIs5vCoI2LKDFUKcXbGb
+NGiVgCRp3QKBgQCc0Uq6Ip7B07+U1k67DWnJxlZS6LcI6cX21vAJSd1nn4d054Io
+SqWhRJAwenjrCxhKWaOPhVGlmvIEhO/lBHGFp35+VCSQcRwhdLxpc67+Aw7JKjSg
+DHbKRbV5qHKnwzD8YGGIeNIxYHJ0PEsmW7iEnGD1wpZRobnRESWWzvHl1wKBgG2B
+j9ReArNpHrlRl5kM4MGgECPrGS6oIUikuWsz+O/WgFZAmT/hTWPALKFNslN8Co8h
+79u3J5roIMO6bbsZR/BBB5WWDMNnd81pJ7/A0XxhEFBRdlUCIHBvbWSZZzClZfUe
+6B0c5dOfHqgojb2Uf28bUTUeAYNOo200c3B2JARtAoGAagS6obIfzr1ca3bYSbhV
+4t7pySl1mypPe73Ma38hxzQoLgwyPGtU7qgbAKceWBX6Z9lIb6DpDntgE3tpzs/1
+TfxFzERhBGpvQ/DpIyoeL2i5J2e9xQrQPbYYmQ8j3AXZprGOspTWJ6fdh0I32BPE
+2pFwqmoFmGrNxFxYfCOZp5c=
+-----END PRIVATE KEY-----
+"
+public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsPZdNXnWMbEs1FrNwx5H9sye5ptMN8IoFCmDk3cB70TXh+JP+kyFLNCxJrofYb+Ydgr6NLtaWSCqUBX2qLzUB1aKz5megYszRBZVq4jvsAHnNE+yfwFbQlOQCMLHYhQZ5TBhUDBMkwxWyS6UA+Ox7NXjxC4GrEGbJxxm6cGMOZ6+z36j260VHKYo9Dgaaac1Q0bcOzpS8Em8wmqyyUP5YTDZSujzHwp+7sLronV7OmYa7YktHcRAVnKn0YFwn081iV9fYsfwoecYE4uLAT+JdI3V1fkC0clC0JRzt/EYz664Vw+kBTG94vzTi+NTLAkeR+AkYWpYPwoy42mZF7Ho/
 
 datalayer:
   access_key: mikro_access_key
