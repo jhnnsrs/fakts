@@ -62,7 +62,7 @@ public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDXx/g7dyiwmfIQvkBKvUAM+KBuL1Kd
 datalayer:
   access_key: mikro_access_key
   secret_key: mikro_secret_key
-  host: minio
+  host: rustfs
   port: 9000
   protocol: http
   media:
