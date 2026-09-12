@@ -43,7 +43,7 @@ from .errors import (
     NoFaktsFound,
     ServiceNotGrantedError,
 )
-from .cache.file import FileCache
+from .cache.file import FileCache, ensure_private_dir
 from .cache.nocache import NoCache
 from .grants import EnvGrant, GrantError, RemoteGrant
 from .grants.hard import HardFaktsGrant
@@ -82,6 +82,7 @@ __all__ = [
     "Manifest",
     "Requirement",
     "FileCache",
+    "ensure_private_dir",
     "NoCache",
     "build_device_code_fakts",
     "build_redeem_fakts",

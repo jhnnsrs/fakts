@@ -5,6 +5,7 @@ before the fix. They are grouped by what they protect, not by module.
 """
 
 import asyncio
+import logging
 import os
 import ssl
 import stat
@@ -18,6 +19,7 @@ from aiohttp import web
 from pydantic import BaseModel
 
 from fakts import Fakts
+from fakts.cache import file as file_cache
 from fakts.cache.file import FileCache
 from fakts.errors import NeedsReauthenticationError
 from fakts.grants.env import EnvGrant
@@ -309,18 +311,231 @@ async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_ope
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
-async def test_world_writable_cache_is_refused(tmp_path: Path) -> None:
-    """The cache names the token endpoint. Anything that can write it can
-    redirect the refresh token."""
-    cache_file = tmp_path / "cache.json"
-    cache = FileCache(cache_file=str(cache_file))
+_posix_only = pytest.mark.skipif(
+    os.name != "posix", reason="POSIX permission semantics"
+)
+
+
+def _loose_dir(tmp_path: Path, mode: int = 0o775) -> Path:
+    """A directory with permissions the suite would otherwise never produce.
+
+    pytest's own ``tmp_path`` is 0700, which is why a check that misfired on
+    every Linux desktop shipped green: no test ever sat in a loose directory.
+    """
+    d = tmp_path / "loose"
+    d.mkdir()
+    os.chmod(d, mode)
+    return d
+
+
+async def _seeded_cache(directory: Path) -> FileCache:
+    cache = FileCache(cache_file=str(directory / "cache.json"))
     await cache.aset(make_fakts_value())
+    return cache
 
-    assert await cache.aload() is not None, "a private cache must still load"
 
+def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+# --- the false alarm this whole area exists to have stopped emitting -------- #
+
+
+@_posix_only
+async def test_group_writable_dir_with_self_only_group_loads_silently(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reported bug. `umask 002` plus a user-private group makes every
+    directory an app creates 0775 with a single-member group, and the old
+    predicate called that "writable by other users" and refused to read."""
+    monkeypatch.setattr(file_cache, "_group_may_contain_others", lambda *_: False)
+    cache = await _seeded_cache(_loose_dir(tmp_path))
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert _warnings(caplog) == []
+
+
+@_posix_only
+async def test_group_writable_dir_with_populated_group_warns_but_loads(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A group with real other members is a real finding -- but a finding is
+    all it is now, because refusing re-runs the grant and hangs scripts."""
+    monkeypatch.setattr(file_cache, "_group_may_contain_others", lambda *_: True)
+    cache = await _seeded_cache(_loose_dir(tmp_path))
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    (message,) = _warnings(caplog)
+    assert "chmod g-w" in message
+
+
+@_posix_only
+async def test_unresolvable_gid_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A gid we cannot enumerate is assumed shared: on an LDAP box it may name
+    a real, populated group. Guessing loud costs one log line now."""
+
+    def explode(_: int) -> object:
+        raise KeyError("no such gid")
+
+    monkeypatch.setattr(file_cache.grp, "getgrgid", explode)
+    cache = await _seeded_cache(_loose_dir(tmp_path))
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert any("chmod g-w" in m for m in _warnings(caplog))
+
+
+async def test_self_only_group_resolves_as_no_other_members(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`gr_mem` lists supplementary members only, so a user's primary group
+    reads as empty -- exactly the case that must not be a finding."""
+
+    class Group:
+        gr_name = "jhnnsrs"
+        gr_mem: list[str] = []
+
+    class User:
+        pw_name = "jhnnsrs"
+
+    monkeypatch.setattr(file_cache.grp, "getgrgid", lambda _: Group())
+    monkeypatch.setattr(file_cache.pwd, "getpwuid", lambda _: User())
+
+    assert file_cache._group_may_contain_others(1000, 1000) is False
+
+
+@_posix_only
+async def test_sticky_other_writable_dir_is_silent(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The /tmp case: with the sticky bit set, only the owner may replace an
+    entry, so world-writable says nothing about who can swap our cache."""
+    cache = await _seeded_cache(_loose_dir(tmp_path, 0o1777))
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert _warnings(caplog) == []
+
+
+@_posix_only
+async def test_other_writable_dir_without_sticky_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    cache = await _seeded_cache(_loose_dir(tmp_path, 0o777))
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert any("chmod o-w" in m for m in _warnings(caplog))
+
+
+# --- the posture change: permissions report, they do not gate -------------- #
+
+
+@_posix_only
+async def test_world_writable_cache_warns_loads_and_is_tightened(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Replaces `test_world_writable_cache_is_refused`.
+
+    A world-writable cache is still a genuine finding and still warns, but it
+    no longer denies the read -- a denial returns a cache miss, and a miss
+    re-runs the grant into a device-code prompt that hangs unattended
+    clients. It is healed back to 0600 instead, which is a fix rather than a
+    report. The order matters: tightening before the diagnostic would erase
+    the very finding it is meant to surface.
+    """
+    directory = _loose_dir(tmp_path, 0o700)
+    cache = await _seeded_cache(directory)
+    cache_file = directory / "cache.json"
     os.chmod(cache_file, 0o666)
-    assert await cache.aload() is None, "a world-writable cache must be refused"
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert any("chmod o-w" in m for m in _warnings(caplog))
+    assert stat.S_IMODE(cache_file.stat().st_mode) == 0o600
+
+
+@_posix_only
+async def test_foreign_owner_warns_but_loads(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cache owned by another uid is the one genuinely exploitable case --
+    whoever owns it picks the token endpoint. It is a deliberate decision that
+    it warns rather than refuses; the compensating control is that the cache
+    now lives in a private per-user directory. A foreign file is also not ours
+    to chmod, so the mode must be left alone."""
+    directory = _loose_dir(tmp_path, 0o700)
+    cache = await _seeded_cache(directory)
+    cache_file = directory / "cache.json"
+    os.chmod(cache_file, 0o640)
+    monkeypatch.setattr(os, "getuid", lambda: os.stat(cache_file).st_uid + 1)
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert any("not by this user" in m for m in _warnings(caplog))
+    assert stat.S_IMODE(cache_file.stat().st_mode) == 0o640
+
+
+@_posix_only
+async def test_group_writable_cache_file_is_tightened(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Benign group, so nothing to report -- but the file is still narrowed,
+    because the self-heal is now the strongest control left on an existing
+    file."""
+    monkeypatch.setattr(file_cache, "_group_may_contain_others", lambda *_: False)
+    directory = _loose_dir(tmp_path, 0o700)
+    cache = await _seeded_cache(directory)
+    cache_file = directory / "cache.json"
+    os.chmod(cache_file, 0o660)
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await cache.aload() is not None
+
+    assert _warnings(caplog) == []
+    assert stat.S_IMODE(cache_file.stat().st_mode) == 0o600
+
+
+@_posix_only
+async def test_symlinked_cache_is_reported_as_a_symlink(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """O_NOFOLLOW already makes this read fail; the point is that it now says
+    so, instead of surfacing as a generic "could not load"."""
+    real = await _seeded_cache(_loose_dir(tmp_path, 0o700))
+    link = tmp_path / "link.json"
+    link.symlink_to(real.cache_file)
+
+    with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
+        assert await FileCache(cache_file=str(link)).aload() is None
+
+    assert any("is a symlink" in m for m in _warnings(caplog))
+
+
+@_posix_only
+async def test_diagnostic_does_not_chmod_the_containing_directory(
+    tmp_path: Path,
+) -> None:
+    """`cache_file` is relative by default, so the containing directory is
+    routinely a project root or a source checkout -- fakts has no standing to
+    narrow it on a read. Narrowing belongs to whoever *creates* the directory
+    (`ensure_private_dir`)."""
+    directory = _loose_dir(tmp_path)
+    cache = await _seeded_cache(directory)
+
+    assert await cache.aload() is not None
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o775
 
 
 # --------------------------------------------------------------------------- #

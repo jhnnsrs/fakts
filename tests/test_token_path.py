@@ -7,9 +7,10 @@ these are about *not* losing or leaking it rather than about happy paths.
 
 import asyncio
 import os
+import stat
 import time
 from pathlib import Path
-from typing import AsyncIterator, Awaitable, Callable, Optional
+from typing import AsyncIterator, Awaitable, Callable, Iterator, Optional
 
 import pytest
 import pytest_asyncio
@@ -17,7 +18,7 @@ from aiohttp import web
 from pydantic import BaseModel
 
 from fakts import Fakts, ReauthPolicy
-from fakts.cache.file import FileCache
+from fakts.cache.file import FileCache, ensure_private_dir
 from fakts.errors import NeedsReauthenticationError
 from fakts.fakts import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
 from fakts.models import ActiveFakts
@@ -494,6 +495,72 @@ async def test_expiry_non_positive_is_already_expired() -> None:
 # --------------------------------------------------------------------------- #
 # Cache hygiene
 # --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def loose_umask() -> Iterator[None]:
+    """The layout that caused all of this: `umask 002`, as Debian and Ubuntu
+    ship it, which is what makes a bare `os.makedirs` produce 0775."""
+    previous = os.umask(0o002)
+    try:
+        yield
+    finally:
+        os.umask(previous)
+
+
+async def test_ensure_private_dir_creates_0700_under_loose_umask(
+    tmp_path: Path, loose_umask: None
+) -> None:
+    """`os.makedirs(mode=0o700)` would not be enough on its own: the mode
+    argument is masked by the umask, so it would land as 0700 & ~002."""
+    directory = tmp_path / "fresh"
+
+    ensure_private_dir(str(directory))
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+
+
+async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
+    tmp_path: Path, loose_umask: None
+) -> None:
+    """The other half of why a `mode=` argument would not do: with
+    `exist_ok=True` it is not applied at all to a directory that already
+    exists -- and an already-existing 0775 directory is the actual case here,
+    because an earlier version created it."""
+    directory = tmp_path / "existing"
+    directory.mkdir()
+    os.chmod(directory, 0o775)
+
+    ensure_private_dir(str(directory))
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+
+
+async def test_ensure_private_dir_leaves_a_foreign_dir_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """We have no standing to narrow someone else's directory; the load-time
+    diagnostic reports it instead."""
+    directory = tmp_path / "foreign"
+    directory.mkdir()
+    os.chmod(directory, 0o775)
+    monkeypatch.setattr(os, "getuid", lambda: os.stat(directory).st_uid + 1)
+
+    ensure_private_dir(str(directory))
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o775
+
+
+async def test_ensure_private_dir_is_idempotent(
+    tmp_path: Path, loose_umask: None
+) -> None:
+    """It runs on every folder creation, so it must not care how often."""
+    directory = tmp_path / "twice"
+
+    ensure_private_dir(str(directory))
+    ensure_private_dir(str(directory))
+
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
 
 
 async def test_cache_file_is_private(tmp_path: Path) -> None:
