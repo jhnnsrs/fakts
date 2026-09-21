@@ -155,7 +155,7 @@ kommunity_partners:
             description: Rekuest Service for Arkitekt Live
             identifier: live.arkitekt.rekuest
             name: Rekuest
-            node_id: 47de8b7327024c68820ea042d1bdb37b
+            device_id: 47de8b7327024c68820ea042d1bdb37b
             public_sources:
             - kind: github
               url: https://github.com/arkitektio/rekuest-server-next

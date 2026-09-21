@@ -1,24 +1,17 @@
 """Tests for ``fakts.testing`` — the hot-pluggable TestingFakts.
 
 No docker, no network: TestingFakts overrides only the alias-challenge and
-token-renewal seams, so everything else here (context publication, alias
+token-renewal seams, so everything else here (alias
 resolution, token caching/expiry/refresh semantics) runs the real Fakts
 machinery.
 """
 
 import pytest
 
-from fakts import Alias, NoFaktsFound, get_current_fakts
+from fakts import Alias
 from fakts.testing import build_testing_fakts
 
 
-@pytest.mark.asyncio
-async def test_hotplugs_into_current_context_and_resets_on_exit():
-    fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
-    async with fakts:
-        assert get_current_fakts() is fakts
-    with pytest.raises(NoFaktsFound):
-        get_current_fakts()
 
 
 @pytest.mark.asyncio
@@ -86,12 +79,10 @@ async def test_first_alias_resolution_spends_the_first_fetch():
         assert await fakts.aget_token() == "a"
 
 
-def test_sync_with_publishes_context_to_the_calling_thread():
-    """The koil bridge re-applies contextvars set in the loop thread, so a
-    plain ``with`` hot-plugs for synchronous consumers too."""
+def test_a_sync_with_works_for_synchronous_consumers():
+    """A plain ``with`` enters it for synchronous consumers too."""
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     with fakts:
-        assert get_current_fakts() is fakts
         assert (
             fakts.get_alias("alpaka").to_http_path("/llm/v1")
             == "http://testserver/llm/v1"

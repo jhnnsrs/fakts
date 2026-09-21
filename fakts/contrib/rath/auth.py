@@ -1,4 +1,4 @@
-from fakts import Fakts
+from fakts.handle import TokenLoader
 from rath.links.auth import AuthTokenLink
 from rath.operation import Operation
 
@@ -6,12 +6,13 @@ from rath.operation import Operation
 class FaktsAuthLink(AuthTokenLink):
     """faktsAuthLink is a link that retrieves a token from oauth2 and sends it to the next link."""
 
-    fakts: Fakts
+    token_loader: TokenLoader
+    """How this link gets and renews its token. Not the whole fakts client:
+    authentication is all a link needs once its address is resolved."""
 
     async def aload_token(self, operation: Operation) -> str:
-        """Retrieves the token from herre"""
-        fakts = self.fakts
-        return await fakts.aget_token()
+        """Get a valid token for this operation."""
+        return await self.token_loader.aget_token()
 
     async def arefresh_token(self, operation: Operation) -> str:
         """Renews the token after an operation was rejected.
@@ -25,7 +26,6 @@ class FaktsAuthLink(AuthTokenLink):
         This never prompts: :meth:`Fakts.arefresh_token` is non-interactive
         by contract, so a browser can never open in the middle of a request.
         """
-        fakts = self.fakts
         header = operation.context.headers.get("Authorization", "")
         stale = header[len("Bearer ") :] if header.startswith("Bearer ") else None
-        return await fakts.arefresh_token(stale_token=stale)
+        return await self.token_loader.arefresh_token(stale_token=stale)

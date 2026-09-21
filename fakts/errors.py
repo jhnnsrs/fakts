@@ -6,36 +6,12 @@ class FaktsError(Exception):
     """
 
 
-class NoFaktsFound(FaktsError):
-    """Raised when no fakts instance is found in the current context.
-
-    If this error is raised, it means that you are trying to access
-    the fakts instance from a context where it is not available. Online
-    places where it is available are:
-
-    ```python
-
-    with Fakts(grant=grant) as fakts:
-        # fakts is available here
-
-    async with Fakts(grant=grant) as fakts:
-        # fakts is available here
-
-    fake_fakts = Fakts(grant=grant)
-    # fakt is not available here
-
-    ```
-
-
-    """
-
-
 class NotEnteredError(FaktsError):
     """Raised when a Fakts method is called before entering the context
 
     Fakts needs to be used as a (async) context manager. This error is
-    raised when a method that requires the context (locks, context
-    variables) is called before `__aenter__` was run.
+    raised when a method that requires the context (its locks) is called
+    before `__aenter__` was run.
     """
 
 

@@ -27,7 +27,7 @@ services:
     - redis
     - db
     - rustfs
-    image: jhnnsrs/lok:${LOK_SERVICE_TAG:-next}
+    image: jhnnsrs/lok:${LOK_SERVICE_TAG:-latest}
     command: bash run-debug.sh
     stop_grace_period: 1s
     ports:

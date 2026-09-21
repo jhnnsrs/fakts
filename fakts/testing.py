@@ -1,11 +1,8 @@
 """In-process testing support: a Fakts you can hot-plug into the context.
 
-:class:`TestingFakts` is a real :class:`~fakts.fakts.Fakts` — entering it
-(``with`` or ``async with``) publishes it on the ``current_fakts``
-contextvar exactly like production, so code under test that calls
-:func:`~fakts.fakts.get_current_fakts` (or the ``fakt``/``afakt``
-helpers) sees it with **no monkeypatching**, and typed consumers holding a
-``Fakts`` field accept it. It differs from a production instance in exactly
+:class:`TestingFakts` is a real :class:`~fakts.fakts.Fakts`, so code under
+test is simply handed it (as a runtime hands over its own) with **no
+monkeypatching**, and typed consumers holding a ``Fakts`` field accept it. It differs from a production instance in exactly
 two seams:
 
 - alias challenges always pass (no live server needed), and
@@ -19,7 +16,7 @@ Build one with :func:`build_testing_fakts`::
     from fakts.testing import build_testing_fakts
 
     with build_testing_fakts(aliases={"alpaka": "http://testserver"}):
-        ...  # get_current_fakts() now resolves, aliases and tokens work
+        ...  # hand it to what needs it: aliases and tokens work
 
 Note that the first alias resolution itself fetches a token (the report
 token — real behavior), so ``token_fetches`` is typically 1 after the first

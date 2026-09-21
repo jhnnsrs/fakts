@@ -33,14 +33,13 @@ Quickstart:
     ```
 """
 
-from .fakts import Fakts, FaktsGrant, ReauthPolicy, get_current_fakts
+from .fakts import Fakts, FaktsGrant, ReauthPolicy
 from .errors import (
     AliasNotFoundError,
     CompositionError,
     FaktsError,
     NeedsReauthenticationError,
     NotEnteredError,
-    NoFaktsFound,
     ServiceNotGrantedError,
 )
 from .cache.file import FileCache, ensure_private_dir
@@ -48,7 +47,6 @@ from .cache.nocache import NoCache
 from .grants import EnvGrant, GrantError, RemoteGrant
 from .grants.hard import HardFaktsGrant
 from .grants.remote.builders import build_device_code_fakts, build_redeem_fakts
-from .helpers import afakt, fakt
 from .testing import TestingFakts, build_testing_fakts
 from .models import (
     ActiveFakts,
@@ -56,8 +54,11 @@ from .models import (
     ChallengeKey,
     GrantStatus,
     Manifest,
+    Own,
+    Require,
     Requirement,
 )
+from .handle import TokenLoader
 
 
 __all__ = [
@@ -67,20 +68,21 @@ __all__ = [
     "EnvGrant",
     "GrantError",
     "RemoteGrant",
-    "get_current_fakts",
     "FaktsError",
     "CompositionError",
     "AliasNotFoundError",
     "ServiceNotGrantedError",
     "NotEnteredError",
-    "NoFaktsFound",
     "NeedsReauthenticationError",
     "ActiveFakts",
     "Alias",
     "ChallengeKey",
     "GrantStatus",
     "Manifest",
+    "Own",
+    "Require",
     "Requirement",
+    "TokenLoader",
     "FileCache",
     "ensure_private_dir",
     "NoCache",
@@ -89,6 +91,4 @@ __all__ = [
     "build_testing_fakts",
     "HardFaktsGrant",
     "TestingFakts",
-    "afakt",
-    "fakt",
 ]

@@ -612,47 +612,6 @@ async def test_fakts_is_unusable_after_exit() -> None:
         await fakts.aget_alias("test", omit_challenge=True, omit_report=True)
 
 
-async def test_failed_enter_does_not_leak_the_context_variable() -> None:
-    from fakts import get_current_fakts
-    from fakts.errors import NoFaktsFound
-
-    class StaticGrant(BaseModel):
-        requires_user_interaction: bool = False
-
-        async def aload(self) -> ActiveFakts:
-            return make_fakts_value()
-
-    class ExplodingCache(BaseModel):
-        """Fails when __aenter__ binds the manifest hash to it.
-
-        The grant no longer runs on enter, so the cache-hash binding is the
-        remaining step that can fail after the contextvar is already set —
-        which is the condition this test exists to pin.
-        """
-
-        hash: str = ""
-
-        def __setattr__(self, name: str, value: object) -> None:
-            if name == "hash":
-                raise RuntimeError("cache exploded")
-            super().__setattr__(name, value)
-
-        async def aload(self) -> None:
-            return None
-
-        async def aset(self, value: ActiveFakts) -> None: ...
-
-        async def areset(self) -> None: ...
-
-    fakts = Fakts(
-        grant=StaticGrant(), cache=ExplodingCache(), manifest=make_manifest()
-    )
-    with pytest.raises(RuntimeError):
-        async with fakts:
-            pass
-
-    with pytest.raises(NoFaktsFound):
-        get_current_fakts()
 
 
 # --------------------------------------------------------------------------- #

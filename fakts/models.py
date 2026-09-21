@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from dataclasses import dataclass
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from typing import Any, List, Optional
 import json
 from enum import Enum
@@ -240,6 +242,53 @@ class Requirement(BaseModel):
     """ The description is a human readable description of the requirement. Will be show to the user when asking for the requirement."""
 
 
+@dataclass(frozen=True)
+class Own:
+    """Marks a parameter as the app's *own* fakts server, not a required service.
+
+    Written as ``Annotated[Alias, Own()]``. A service built on this declares no
+    requirement -- there is nothing for a deployment to provision, because the
+    address is the one the app already authenticated against. unlok is the only
+    service built this way.
+    """
+
+
+@dataclass(frozen=True)
+class Require:
+    """Marks a parameter as one of a service's requirements.
+
+    Written as ``Annotated[Fakt, Require("live.arkitekt.mikro")]``. The parameter
+    *name* becomes the requirement's key, so the thing a builder passes to a link
+    is the same thing that put the requirement in the manifest -- they cannot
+    drift.
+
+    Args:
+        service: The service that fills the key, in reverse domain naming.
+        description: What it is, shown to the user when access is asked for.
+        optional: Whether the client still works without it.
+    """
+
+    service: str
+    description: Optional[str] = None
+    optional: bool = False
+
+    def to_requirement(self, key: str) -> Requirement:
+        """Build the requirement this marks, keyed by the parameter's name.
+
+        Args:
+            key: The parameter name, which is the fakts key.
+
+        Returns:
+            The requirement, as it goes into the manifest.
+        """
+        return Requirement(
+            key=key,
+            service=self.service,
+            optional=self.optional,
+            description=self.description,
+        )
+
+
 class PublicSource(BaseModel):
     """A public source kind is a way to specify a kind of public source."""
 
@@ -249,16 +298,16 @@ class PublicSource(BaseModel):
 
 
 class Manifest(BaseModel):
-    """A manifest for an app that can be installed in ArkitektNext
+    """A manifest for an app that can be installed in Arkitekt
 
-    Manifests are used to describe apps that can be installed in ArkitektNext.
+    Manifests are used to describe apps that can be installed in Arkitekt.
     They provide information about the app, such as the
     its globally unique identifier, the version, the scopes it needs, etc.
 
     This Manifest is send to the Fakts server on initial app configuration,
     and is used to register the app with the Fakts server, which in turn
     will prompt the user to grant the app access to establish itself as
-    an ArkitektNext app (and therefore as an OAuth2 client) (see more in the
+    an Arkitekt app (and therefore as an OAuth2 client) (see more in the
     Fakts documentation).
 
     """
@@ -273,8 +322,11 @@ class Manifest(BaseModel):
     """ A URL to the logo of the app TODO: We should enforce this to be a http URL as local paths won't work """
     requirements: Optional[List[Requirement]] = Field(default_factory=lambda: [])
     """ Requirements that this app has TODO: What are the requirements? """
-    node_id: Optional[str] = None
-    """ The node ID of the app instance, will be set automatically to the current node ID """
+    device_id: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("device_id", "node_id")
+    )
+    """ The device this app instance runs on; the runtime sets it. ``node_id`` is the
+    deprecated spelling, still read from older configs and servers. """
     public_sources: Optional[List[PublicSource]] = Field(default_factory=lambda: [])
 
     description: Optional[str] = None

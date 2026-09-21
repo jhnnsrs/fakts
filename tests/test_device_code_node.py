@@ -15,7 +15,7 @@ import pytest
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 @pytest.mark.integration
-def test_device_code_grant_node_id(deployed_infra: Deployment):
+def test_device_code_grant_device_id(deployed_infra: Deployment):
     port_for_lok = deployed_infra.spec.find_service("lok").get_port_for_internal(80).published
 
     manifest = Manifest(
@@ -23,7 +23,7 @@ def test_device_code_grant_node_id(deployed_infra: Deployment):
         identifier="test_manifest",
         scopes=["openid", "profile", "email"],
         requirements=[Requirement(key="rekuest", service="live.arkitekt.rekuest")],
-        node_id="test_node",
+        device_id="test_node",
     )
 
     async def authorize_through_cmd(endpoint: FaktsEndpoint, device_code: str) -> None:

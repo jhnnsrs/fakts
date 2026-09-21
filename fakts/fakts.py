@@ -44,7 +44,6 @@ only deliberately:
 
 import asyncio
 import contextlib
-import contextvars
 import logging
 import random
 import ssl
@@ -64,7 +63,6 @@ from fakts.errors import (
     AliasNotFoundError,
     CompositionError,
     FaktsError,
-    NoFaktsFound,
     NotEnteredError,
     NeedsReauthenticationError,
     ServiceNotGrantedError,
@@ -86,9 +84,6 @@ from .protocols import FaktsCache, FaktsGrant
 from .utils import truncate
 
 logger = logging.getLogger(__name__)
-current_fakts: contextvars.ContextVar[Optional["Fakts"]] = contextvars.ContextVar(
-    "current_fakts", default=None
-)
 
 TOKEN_EXPIRY_SKEW = oauth2.TOKEN_EXPIRY_SKEW
 """Seconds before the actual expiry at which a token is considered expired.
@@ -205,9 +200,8 @@ class Fakts(KoiledModel):
     invalidated (e.g. by a changed manifest). Alias resolution challenges
     every requirement once and then sticks to the last working alias.
 
-    Entering the context also sets the current fakts context variable, so
-    `get_current_fakts()` (and the `fakt`/`afakt` helpers) work from
-    anywhere in your code.
+    Nothing makes an entered fakts "current": whoever needs it is handed it
+    (a runtime hands its own to the clients it builds).
     """
 
     cache: FaktsCache = Field(default_factory=NoCache, exclude=True)
@@ -291,7 +285,6 @@ class Fakts(KoiledModel):
     the probe — and, where the instance pins a key, the signature check with
     it — for the rest of the process."""
     _cache_write_failed: bool = False
-    _context_token: Optional[Any] = None
 
     def _ensure_entered(self) -> None:
         """Raise if the context manager was not entered yet"""
@@ -1744,14 +1737,13 @@ class Fakts(KoiledModel):
                 "silently drop the locks the outer scope is relying on."
             )
 
-        self._context_token = current_fakts.set(self)
         self._load_lock = asyncio.Lock()
         self._token_lock = asyncio.Lock()
         self._alias_lock = asyncio.Lock()
 
-        # Everything from here on runs with the contextvar already set, so it
-        # has to be unwound by hand on failure: Python does not call __aexit__
-        # when __aenter__ raises, and the contextvar and locks would leak.
+        # Everything from here on runs with the locks already set, so it has to
+        # be unwound by hand on failure: Python does not call __aexit__ when
+        # __aenter__ raises, and the locks would leak.
         try:
             # Bind the manifest hash to the cache (if the cache validates
             # against a hash and none was set explicitly), so that a changed
@@ -1791,11 +1783,9 @@ class Fakts(KoiledModel):
     ) -> None:
         """Exit the context manager and clean up.
 
-        The teardown runs in a ``finally`` because it must: leaving the
-        context variable pointing at an exited instance hands the next
-        ``get_current_fakts()`` a corpse whose locks belong to a
-        loop that no longer exists. A cache reset that fails (read-only
-        directory, sharing violation) must not be able to cause that.
+        The teardown runs in a ``finally`` because it must: locks left in place
+        belong to a loop that no longer exists. A cache reset that fails
+        (read-only directory, sharing violation) must not be able to cause that.
         """
         try:
             if self.delete_on_exit:
@@ -1806,7 +1796,7 @@ class Fakts(KoiledModel):
             self._teardown()
 
     def _teardown(self) -> None:
-        """Release the context variable and invalidate the locks.
+        """Invalidate the locks.
 
         Clearing the locks is what makes ``_ensure_entered`` mean something
         after the block ends. Left in place, a post-exit call either quietly
@@ -1819,36 +1809,6 @@ class Fakts(KoiledModel):
         self._loaded_from_cache = False
         self._cache_write_failed = False
 
-        if self._context_token is not None:
-            try:
-                current_fakts.reset(self._context_token)
-            except ValueError:
-                # The token was created in a different context (e.g. the
-                # koil loop thread): fall back to clearing the variable.
-                current_fakts.set(None)
-            self._context_token = None
-        else:
-            current_fakts.set(None)
-
     def _repr_html_inline_(self) -> str:
         """(Internal) HTML representation for jupyter"""
         return f"<table><tr><td>grant</td><td>{self.grant.__class__.__name__}</td></tr></table>"
-
-
-def get_current_fakts() -> Fakts:
-    """Get the current fakts instance
-
-    This method will return the current fakts instance, or raise an
-    exception if no fakts instance is set.
-
-    Returns
-    -------
-    Fakts
-        The current fakts instance
-    """
-    fakts = current_fakts.get()
-
-    if fakts is None:
-        raise NoFaktsFound("No fakts instance set in this context")
-
-    return fakts

@@ -4,10 +4,8 @@ helpers (``helpers.py``)."""
 import pytest
 
 from fakts import Fakts
-from fakts.errors import NoFaktsFound
 from fakts.fakts import Fakts as FaktsClass
 from fakts.grants.hard import HardFaktsGrant
-from fakts.helpers import afakt, fakt
 from fakts.models import Alias
 from fakts.utils import truncate, update_nested
 
@@ -60,42 +58,3 @@ def test_update_nested_is_inplace_and_returns_same_object():
     result = update_nested(d, {"b": 2})
     assert result is d
     assert d == {"a": 1, "b": 2}
-
-
-# --------------------------------------------------------------------------- #
-# helpers.afakt / helpers.fakt
-# --------------------------------------------------------------------------- #
-
-
-def _hard_fakts(monkeypatch: pytest.MonkeyPatch) -> Fakts:
-    async def fake_challenge(
-        self: FaktsClass, alias: Alias, challenge_key: object = None
-    ) -> bool:
-        return True
-
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
-    grant = HardFaktsGrant(fakts=make_fakts_value())
-    return Fakts(grant=grant, manifest=make_manifest())
-
-
-@pytest.mark.asyncio
-async def test_afakt_returns_alias_from_current_context(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    async with _hard_fakts(monkeypatch):
-        alias = await afakt("test", omit_challenge=True)
-    assert isinstance(alias, Alias)
-    assert alias.id == "primary"
-
-
-def test_fakt_sync_wrapper_returns_alias(monkeypatch: pytest.MonkeyPatch):
-    with _hard_fakts(monkeypatch):
-        alias = fakt("test", omit_challenge=True)
-    assert isinstance(alias, Alias)
-    assert alias.id == "primary"
-
-
-@pytest.mark.asyncio
-async def test_afakt_outside_context_raises():
-    with pytest.raises(NoFaktsFound):
-        await afakt("test", omit_challenge=True)
