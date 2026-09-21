@@ -39,10 +39,14 @@ never picks them up — `next` is a safe soak channel.
 the **lok** auth server and a **rekuest** backend. `integration.yaml` runs on
 `main` and `next` and sets `LOK_SERVICE_TAG` and `REKUEST_SERVICE_TAG` (both
 `latest` on `main`, `next` elsewhere). `tests/integration/docker-compose.yml`
-resolves them per service via `jhnnsrs/lok:${LOK_SERVICE_TAG:-next}` and
-`jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-next}`, so the prerelease line is tested
+resolves them per service via `jhnnsrs/lok:${LOK_SERVICE_TAG:-latest}` and
+`jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-latest}`, so the prerelease line is tested
 against the prerelease backends and the stable line against `:latest`. Keeping
 the tags split lets you pin one backend independently of the other.
+
+CI always sets the tag explicitly, so the `:-latest` fallback is what a bare local
+`pytest -m integration` gets: the released backend, not the prerelease one. Export the
+variable to override it.
 
 ## Day-to-day
 
