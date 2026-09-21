@@ -35,18 +35,16 @@ never picks them up — `next` is a safe soak channel.
 
 ## Tag-based integration backends
 
-`fakts` has no backend image of its own — its integration stack stands up
-the **lok** auth server and a **rekuest** backend. `integration.yaml` runs on
-`main` and `next` and sets `LOK_SERVICE_TAG` and `REKUEST_SERVICE_TAG` (both
-`latest` on `main`, `next` elsewhere). `tests/integration/docker-compose.yml`
-resolves them per service via `jhnnsrs/lok:${LOK_SERVICE_TAG:-latest}` and
-`jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-latest}`, so the prerelease line is tested
-against the prerelease backends and the stable line against `:latest`. Keeping
-the tags split lets you pin one backend independently of the other.
+`fakts` has no backend image of its own — its integration stack stands up the **lok**
+auth server and a **rekuest** backend. `tests/integration/docker-compose.yml` resolves
+them per service via `jhnnsrs/lok:${LOK_SERVICE_TAG:-latest}` and
+`jhnnsrs/rekuest:${REKUEST_SERVICE_TAG:-latest}`, and `integration.yaml` sets the same
+defaults. Every branch is therefore tested against `:latest`, the released line.
 
-CI always sets the tag explicitly, so the `:-latest` fallback is what a bare local
-`pytest -m integration` gets: the released backend, not the prerelease one. Export the
-variable to override it.
+To test against another published tag, set the repository variable `LOK_SERVICE_TAG` or
+`REKUEST_SERVICE_TAG` (Settings -> Secrets and variables -> Actions -> Variables) to
+e.g. `next`; no workflow edit is needed. Keeping the two split lets you pin one backend
+independently of the other. Locally, export the variable for the same effect.
 
 ## Day-to-day
 
