@@ -51,7 +51,7 @@ import time
 from enum import Enum
 from ssl import SSLContext
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, Set, Tuple, Type
+from typing import ClassVar, Any, Dict, List, Optional, Set, Tuple, Type
 
 import aiohttp
 import certifi
@@ -203,6 +203,10 @@ class Fakts(KoiledModel):
     Nothing makes an entered fakts "current": whoever needs it is handed it
     (a runtime hands its own to the clients it builds).
     """
+
+    #: arkitekt_spec.declare.wiring.FAKTS_MARKER: a service parameter typed with this
+    #: class is handed the whole client.
+    __arkitekt_fakts__: ClassVar[bool] = True
 
     cache: FaktsCache = Field(default_factory=NoCache, exclude=True)
 

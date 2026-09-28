@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from arkitekt_spec import AppManifest, Requirement
+from arkitekt_spec.declare.wiring import Alias, Own, Require
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from typing import Any, List, Optional
 import json
@@ -28,84 +29,6 @@ class GrantStatus(str, Enum):
     """The server did not report a (known) status for this requirement."""
 
 
-class Alias(BaseModel):
-    """An alias is a way of contacting a service instance in Fakts.
-
-    It contains the host, port, ssl flag, path and challenge.
-    """
-
-    id: str
-    """The unique identifier of the alias."""
-    host: str
-    port: Optional[int] = None
-    """The port is optional, if not set, the default port for the service will be"""
-    ssl: bool = False
-    """The ssl flag indicates if the service should be accessed via SSL or not. If set to True, the service will be accessed via HTTPS, otherwise it will be accessed via HTTP."""
-    path: Optional[str] = None
-    """The path is optional, if not set, the default path for the service will be used."""
-    challenge: str = Field(
-        default="",
-        description="""The challenge is a string that is used to verify the alias. It should be """,
-    )
-    public: bool = False
-    """Whether this alias is reachable from outside the deployment's own
-    network. Informational: the server decides which aliases to hand out,
-    the client just tries them in order."""
-
-    @property
-    def challenge_path(self) -> str:
-        """The challenge_path of the alias. Its a reachable http path that can be used to verify if the alias is accessible by the client."""
-        return self.to_http_path(self.challenge)
-
-    def to_http_path(self, append: Optional[str] = None) -> str:
-        """Convert the alias to a HTTP path
-
-        This method converts the alias to a HTTP path, which can be used to access the service.
-        If the port is not set, the default port for the service will be used.
-        If the ssl flag is set, the service will be accessed via HTTPS, otherwise it will be accessed via HTTP.
-
-        Args:
-            append (Optional[str], optional): An optional string to append to the path. Defaults to None.
-
-        Returns:
-            str: The HTTP path for the service
-        """
-        protocol = "https" if self.ssl else "http"
-
-        url = f"{protocol}://{self.host}"
-        if self.port:
-            url += f":{self.port}"
-        if self.path:
-            url += f"/{self.path.lstrip('/')}"
-        if append:
-            url += f"/{append.lstrip('/')}"
-
-        return url
-
-    def to_ws_path(self, append: Optional[str] = None) -> str:
-        """Convert the alias to a WebSocket path
-
-        This method converts the alias to a WebSocket path, which can be used to access the service.
-        If the port is not set, the default port for the service will be used.
-        If the ssl flag is set, the service will be accessed via wss, otherwise it will be accessed via ws.
-
-        Args:
-            append (Optional[str], optional): An optional string to append to the path. Defaults to None.
-
-        Returns:
-            str: The WebSocket path for the service
-        """
-        protocol = "wss" if self.ssl else "ws"
-
-        url = f"{protocol}://{self.host}"
-        if self.port:
-            url += f":{self.port}"
-        if self.path:
-            url += f"/{self.path.lstrip('/')}"
-        if append:
-            url += f"/{append.lstrip('/')}"
-
-        return url
 
 
 class ChallengeKey(BaseModel):
@@ -230,51 +153,8 @@ class ActiveFakts(BaseModel):
         return v
 
 
-@dataclass(frozen=True)
-class Own:
-    """Marks a parameter as the app's *own* fakts server, not a required service.
-
-    Written as ``Annotated[Alias, Own()]``. A service built on this declares no
-    requirement -- there is nothing for a deployment to provision, because the
-    address is the one the app already authenticated against. unlok is the only
-    service built this way.
-    """
 
 
-@dataclass(frozen=True)
-class Require:
-    """Marks a parameter as one of a service's requirements.
-
-    Written as ``Annotated[Fakt, Require("live.arkitekt.mikro")]``. The parameter
-    *name* becomes the requirement's key, so the thing a builder passes to a link
-    is the same thing that put the requirement in the manifest -- they cannot
-    drift.
-
-    Args:
-        service: The service that fills the key, in reverse domain naming.
-        description: What it is, shown to the user when access is asked for.
-        optional: Whether the client still works without it.
-    """
-
-    service: str
-    description: Optional[str] = None
-    optional: bool = False
-
-    def to_requirement(self, key: str) -> Requirement:
-        """Build the requirement this marks, keyed by the parameter's name.
-
-        Args:
-            key: The parameter name, which is the fakts key.
-
-        Returns:
-            The requirement, as it goes into the manifest.
-        """
-        return Requirement(
-            key=key,
-            service=self.service,
-            optional=self.optional,
-            description=self.description,
-        )
 
 
 class PublicSource(BaseModel):

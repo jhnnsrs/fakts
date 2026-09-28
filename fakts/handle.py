@@ -16,40 +16,11 @@ and a new one resolves afresh. A token, by contrast, must stay live: it expires,
 and rotating it is what :class:`TokenLoader` is for.
 """
 
-from typing import Optional, Protocol, runtime_checkable
+from typing import Optional
+
+from arkitekt_spec.declare.wiring import TokenLoader
 
 
-@runtime_checkable
-class TokenLoader(Protocol):
-    """A way to get, and renew, an access token.
-
-    The two operations :class:`~fakts.contrib.rath.auth.FaktsAuthLink` needs --
-    which is all any service needs of fakts once its addresses are resolved.
-    :class:`~fakts.Fakts` satisfies this structurally, so nothing has to adapt it.
-    """
-
-    async def aget_token(self) -> str:
-        """Get a valid access token, fetching or renewing one if needed.
-
-        Returns:
-            The token, without a ``Bearer`` prefix.
-        """
-        ...
-
-    async def arefresh_token(self, stale_token: Optional[str] = None) -> str:
-        """Renew the access token after one was rejected.
-
-        Args:
-            stale_token: The token that was just refused, when it is known.
-                Concurrent and retried 401s that pass the same stale token
-                collapse into a single renewal -- without it, each retry rotates
-                the refresh token again, spending credentials to re-solve a
-                problem the first renewal already fixed.
-
-        Returns:
-            The renewed token.
-        """
-        ...
 
 
 __all__ = ["TokenLoader"]
