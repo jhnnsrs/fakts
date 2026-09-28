@@ -54,10 +54,9 @@ from .models import (
     ChallengeKey,
     GrantStatus,
     Manifest,
-    Own,
-    Require,
     Requirement,
 )
+from arkitekt_spec.declare.wiring import Own, Require
 from .handle import TokenLoader
 
 

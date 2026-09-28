@@ -1,7 +1,6 @@
-from dataclasses import dataclass
 
 from arkitekt_spec import AppManifest, Requirement
-from arkitekt_spec.declare.wiring import Alias, Own, Require
+from arkitekt_spec.declare.wiring import Alias
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from typing import Any, List, Optional
 import json
