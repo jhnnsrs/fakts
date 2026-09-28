@@ -57,10 +57,15 @@ class RemoteGrant(BaseModel):
                 f"could not be renewed later."
             )
 
-        return merge_token_response(
+        active = merge_token_response(
             None,
             response,
             token_endpoint=endpoint.token_endpoint,
             report_endpoint=endpoint.report_endpoint,
             skew=TOKEN_EXPIRY_SKEW,
         )
+        # A mesh key is only useful with its coordination server; servers
+        # that leave it off the key publish it in the well-known document.
+        if active.mesh and not active.mesh.ionscale_coord_url:
+            active.mesh.ionscale_coord_url = endpoint.mesh_coord_url
+        return active

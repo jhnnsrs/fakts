@@ -69,7 +69,10 @@ class TestingFakts(Fakts):
         return self._token_index
 
     async def achallenge_alias(
-        self, alias: Alias, challenge_key: Optional[ChallengeKey] = None
+        self,
+        alias: Alias,
+        challenge_key: Optional[ChallengeKey] = None,
+        proxy: Optional[str] = None,
     ) -> bool:
         """Every alias is reachable in tests."""
         return True

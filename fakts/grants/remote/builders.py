@@ -16,6 +16,7 @@ from fakts.grants.remote.authorizers.device_code import (
 )
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
+from fakts.mesh import MeshOptions
 from fakts.models import ActiveFakts, Manifest
 from fakts.protocols import FaktsCache
 
@@ -57,6 +58,8 @@ def build_device_code_fakts(
     timeout: Optional[int] = None,
     allow_insecure_transport: bool = False,
     ssl_context: Optional[ssl.SSLContext] = None,
+    mesh: Optional[MeshOptions] = None,
+    mesh_proxy: Optional[str] = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the device code flow.
 
@@ -111,6 +114,13 @@ def build_device_code_fakts(
         TLS context used for *every* call — discovery, the device flow, the
         token endpoint, alias challenges and the report. Pass one to trust a
         private CA; without it, certifi's bundle applies throughout.
+    mesh : Optional[MeshOptions], optional
+        Join the deployment's mesh: ask for a mesh key when authorizing, and
+        run the mesh node in this process to reach mesh-only aliases
+        (``pip install "fakts[mesh]"``).
+    mesh_proxy : Optional[str], optional
+        Reach mesh-only aliases through this already running HTTP proxy
+        instead (e.g. ``arkitekt mesh proxy``); ``mesh`` is then ignored.
 
     Returns
     -------
@@ -131,12 +141,15 @@ def build_device_code_fakts(
                 timeout=timeout,
                 allow_insecure_transport=allow_insecure_transport,
                 ssl_context=context,
+                request_auth_key=mesh is not None and mesh_proxy is None,
             ),
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),
         manifest=manifest,
         allow_insecure_transport=allow_insecure_transport,
         ssl_context=context,
+        mesh=mesh,
+        mesh_proxy=mesh_proxy,
     )
 
 

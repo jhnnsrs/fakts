@@ -49,6 +49,7 @@ import random
 import ssl
 import time
 from enum import Enum
+from hashlib import sha256
 from ssl import SSLContext
 from urllib.parse import urlparse
 from typing import ClassVar, Any, Dict, List, Optional, Set, Tuple, Type
@@ -71,6 +72,7 @@ from koil.composition import KoiledModel
 from koil.bridge import unkoil
 
 from .challenge import generate_nonce, verify_challenge_signature
+from .mesh import MeshError, MeshOptions, NativeNode, TurnInfo, hostname_label
 from .models import (
     ActiveFakts,
     Alias,
@@ -266,6 +268,19 @@ class Fakts(KoiledModel):
     puts a rotating refresh token on the wire it has to be chosen, not
     stumbled into. Loopback never needs this."""
 
+    mesh: Optional[MeshOptions] = None
+    """Join the deployment's mesh: run a node in this process (once an
+    instance has a mesh alias; ``pip install "fakts[mesh]"``) and reach mesh
+    aliases through it. The grant should ask for a mesh key
+    (``request_auth_key``) so a fresh node can join. Ignored when
+    ``mesh_proxy`` is set."""
+
+    mesh_proxy: Optional[str] = None
+    """Reach mesh aliases through this running HTTP proxy (e.g. ``arkitekt
+    mesh proxy`` at ``http://localhost:1055``). Aliases that need the mesh
+    are skipped without one (or ``mesh``)."""
+
+    _mesh_node: Optional[NativeNode] = None
     _load_lock: Optional[asyncio.Lock] = None
     _token_lock: Optional[asyncio.Lock] = None
     _alias_lock: Optional[asyncio.Lock] = None
@@ -959,7 +974,10 @@ class Fakts(KoiledModel):
             return await self._afetch_token(interactive=permit)
 
     async def achallenge_alias(
-        self, alias: Alias, challenge_key: Optional[ChallengeKey] = None
+        self,
+        alias: Alias,
+        challenge_key: Optional[ChallengeKey] = None,
+        proxy: Optional[str] = None,
     ) -> bool:
         """Challenge a single alias (async)
 
@@ -968,6 +986,9 @@ class Fakts(KoiledModel):
         response must additionally carry a valid signature over it (see
         :mod:`fakts.challenge`) — a plain 200 is not enough, so a
         host that merely answers the probe cannot impersonate the service.
+
+        ``proxy`` is the HTTP proxy to challenge through (the mesh proxy,
+        for mesh aliases); by default the alias is challenged directly.
 
         Returns True if the challenge passed, raises otherwise.
         """
@@ -993,6 +1014,7 @@ class Fakts(KoiledModel):
             async with session.get(
                 alias.challenge_path,
                 params={"nonce": nonce} if nonce else None,
+                proxy=proxy,
                 # Do not follow redirects. The signed message commits only to
                 # the nonce, not to the host that answered, so a host that
                 # merely bounces the probe to the genuine service would have
@@ -1076,13 +1098,18 @@ class Fakts(KoiledModel):
         )
 
     async def _aresolve_requirement(
-        self, req: Requirement, omit_challenge: bool = False
+        self,
+        req: Requirement,
+        omit_challenge: bool = False,
+        mesh_proxy: Optional[str] = None,
     ) -> Tuple[Optional[Alias], AliasReport, Optional[str]]:
         """Resolve a single requirement to a working alias.
 
         Tries the instance's aliases in order (the first alias is the last
         known good one, see :meth:`arefresh_aliases`) and returns the first
-        one that passes its challenge.
+        one that passes its challenge. Mesh aliases are challenged through
+        ``mesh_proxy`` and returned carrying it (``Alias.proxy``); without a
+        mesh proxy they are skipped.
 
         Returns:
             A tuple of (selected alias or None, report, composition error
@@ -1118,22 +1145,40 @@ class Fakts(KoiledModel):
         errors_in_alias: List[str] = []
 
         for alias in instance.aliases:
+            proxy: Optional[str] = None
+            if alias.is_mesh():
+                if mesh_proxy is None:
+                    errors_in_alias.append(
+                        f"Alias {alias.id} of service {req.key} is only reachable over "
+                        f"the mesh, which is off (set ARKITEKT_MESH=1, or "
+                        f"ARKITEKT_MESH_PROXY to a running mesh proxy)."
+                    )
+                    continue
+                proxy = mesh_proxy
+            # A copy: the proxy is this process's, never the cached instance's.
+            selected = alias.model_copy(update={"proxy": proxy}) if proxy else alias
+
             if omit_challenge:
                 # If we omit the challenge, we just return the first alias
                 return (
-                    alias,
+                    selected,
                     AliasReport(alias_id=alias.id, reason=None, valid=True),
                     None,
                 )
 
             try:
                 challenge_ok = await asyncio.wait_for(
-                    self.achallenge_alias(alias, challenge_key=instance.challenge_key),
+                    self.achallenge_alias(
+                        alias,
+                        challenge_key=instance.challenge_key,
+                        # Only when set, so overrides without it keep working.
+                        **({"proxy": proxy} if proxy else {}),
+                    ),
                     timeout=self.alias_challenge_timeout,
                 )
                 if challenge_ok:
                     return (
-                        alias,
+                        selected,
                         AliasReport(alias_id=alias.id, reason=None, valid=True),
                         None,
                     )
@@ -1225,9 +1270,12 @@ class Fakts(KoiledModel):
                     exc_info=True,
                 )
 
+        mesh_proxy = await self._amesh_proxy(fakts)
         results = await asyncio.gather(
             *(
-                self._aresolve_requirement(req, omit_challenge=omit_challenge)
+                self._aresolve_requirement(
+                    req, omit_challenge=omit_challenge, mesh_proxy=mesh_proxy
+                )
                 for req in requirements
             )
         )
@@ -1288,6 +1336,104 @@ class Fakts(KoiledModel):
                 f"'{fakts.self.deployment_name}'):\n{joined_errors}\n"
                 f"Check that the services are running and reachable from this machine."
             )
+
+    async def _amesh_proxy(self, fakts: ActiveFakts) -> Optional[str]:
+        """The HTTP proxy mesh aliases are reached through, if the mesh is on."""
+        if self.mesh_proxy:
+            return self.mesh_proxy
+        if not any(
+            alias.is_mesh()
+            for instance in fakts.instances.values()
+            for alias in instance.aliases
+        ):
+            return None
+        node = await self._amesh_node(fakts)
+        return node.proxy_url if node else None
+
+    async def _amesh_node(self, fakts: ActiveFakts) -> Optional[NativeNode]:
+        """The mesh node, started on first use; it lives until the context
+        exits. Its state directory is keyed by the app's identity, so it is
+        joined once (with the key from the first token) and re-used after.
+        """
+        if self.mesh is None:
+            return None
+        if self._mesh_node is not None:
+            return self._mesh_node
+
+        me = fakts.self
+        if me.sub and me.organization and me.hub:
+            identity = f"{me.sub}-{me.organization}-{me.hub}"
+        else:
+            identity = sha256(
+                f"{me.deployment_name}:{self.manifest.hash()}".encode()
+            ).hexdigest()[:16]
+        statedir = self.mesh.node_dir(
+            f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
+        )
+
+        claim = fakts.mesh
+        if claim is None and not NativeNode.has_state(statedir):
+            logger.warning(
+                "The mesh is enabled, but this app holds no mesh key; mesh aliases "
+                "will be skipped (authorize again without the cache and allow mesh "
+                "access to join)."
+            )
+            return None
+        # The grant already filled a missing coord url from the well-known;
+        # a joined node remembers its coordination server.
+        coord_url = claim.ionscale_coord_url if claim else None
+        if claim is not None and not coord_url:
+            raise MeshError("The server sent a mesh key but no coordination url")
+
+        device = "".join(
+            c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum()
+        )[:8]
+        hostname = self.mesh.hostname or hostname_label(
+            f"{self.manifest.identifier}-{device}"
+        )
+        self._mesh_node = await NativeNode.start(
+            self.mesh,
+            statedir,
+            hostname,
+            coord_url=coord_url,
+            auth_key=claim.ionscale_auth_key if claim else None,
+        )
+        return self._mesh_node
+
+    async def _arunning_mesh_node(self) -> NativeNode:
+        self._ensure_entered()
+        assert self._alias_lock is not None
+        fakts = await self._aensure_loaded()
+        async with self._alias_lock:
+            node = await self._amesh_node(fakts)
+        if node is None:
+            raise MeshError(
+                "The mesh is not running: enable it (ARKITEKT_MESH=1 / Fakts.mesh) "
+                "and authorize with mesh access"
+            )
+        return node
+
+    async def amesh_turn(self) -> TurnInfo:
+        """The mesh node's TURN relay, as an ICE server for a WebRTC client
+        (async).
+
+        WebRTC media (e.g. LiveKit) cannot use the HTTP proxy. Configured
+        with only this ICE server and a relay-only transport policy, the
+        client sends everything through the relay on 127.0.0.1, which relays
+        it over the mesh to peers such as a mesh-only SFU.
+        """
+        node = await self._arunning_mesh_node()
+        return await node.turn()
+
+    async def amesh_forward(self, alias: Alias, port: Optional[int] = None) -> str:
+        """A local ``127.0.0.1:P`` that forwards TCP to a mesh alias (async).
+
+        For clients that cannot use the HTTP proxy (e.g. LiveKit's signaling
+        websocket). ``port`` defaults to the alias' port, then 443 or 80.
+        """
+        node = await self._arunning_mesh_node()
+        target = port or alias.port or (443 if alias.ssl else 80)
+        return await node.forward(alias.host, target)
 
     async def _areport_aliases(
         self, fakts: ActiveFakts, composition_errors: List[str], token: str
@@ -1812,6 +1958,9 @@ class Fakts(KoiledModel):
         self._alias_lock = None
         self._loaded_from_cache = False
         self._cache_write_failed = False
+        if self._mesh_node is not None:
+            node, self._mesh_node = self._mesh_node, None
+            node.close()
 
     def _repr_html_inline_(self) -> str:
         """(Internal) HTML representation for jupyter"""

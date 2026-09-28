@@ -36,7 +36,7 @@ import aiohttp
 from pydantic import BaseModel, Field
 
 from fakts.errors import FaktsError
-from fakts.models import ActiveFakts, AuthFakt, GrantStatus, Instance, SelfFakt
+from fakts.models import ActiveFakts, AuthFakt, GrantStatus, Instance, MeshClaim, SelfFakt
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,9 @@ class TokenResponse(BaseModel):
     self_: Optional[SelfFakt] = Field(default=None, alias="self")
     instances: Dict[str, Instance] = Field(default_factory=dict)
     statuses: Dict[str, GrantStatus] = Field(default_factory=dict)
+    mesh: Optional[MeshClaim] = None
+    """Sent once, with the first token, when a mesh key was requested and
+    granted."""
 
     model_config = {"populate_by_name": True, "extra": "allow"}
 
@@ -378,6 +381,8 @@ def merge_token_response(
         auth=auth,
         instances=instances,
         statuses=response.statuses if response.statuses else (previous.statuses if previous else {}),
+        # Only the first token carries the key; keep it for later starts.
+        mesh=response.mesh or (previous.mesh if previous else None),
     )
 
 

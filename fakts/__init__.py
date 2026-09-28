@@ -58,6 +58,7 @@ from .models import (
 )
 from arkitekt_spec.declare.wiring import Own, Require
 from .handle import TokenLoader
+from .mesh import MeshError, MeshOptions
 
 
 __all__ = [
@@ -75,6 +76,8 @@ __all__ = [
     "NeedsReauthenticationError",
     "ActiveFakts",
     "Alias",
+    "MeshError",
+    "MeshOptions",
     "ChallengeKey",
     "GrantStatus",
     "Manifest",

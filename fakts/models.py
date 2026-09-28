@@ -121,6 +121,26 @@ class SelfFakt(BaseModel):
 
     deployment_name: str
     alias: Alias
+    sub: Optional[str] = None
+    """The user the app acts for."""
+    organization: Optional[str] = None
+    """The organization the app was authorized in."""
+    hub: Optional[str] = None
+    """The hub the app is bound to (its mesh tag is ``tag:hub-<hub>``)."""
+
+    @field_validator("sub", "organization", "hub", mode="before")
+    @classmethod
+    def _ids_as_strings(cls, v: Any) -> Any:
+        return str(v) if isinstance(v, int) else v
+
+
+class MeshClaim(BaseModel):
+    """A key to join the deployment's mesh, granted once with the first
+    token when the app asked for it (``request_auth_key``) and the approver
+    allowed it. Kept across refreshes: the node joins with it only once."""
+
+    ionscale_auth_key: str
+    ionscale_coord_url: Optional[str] = None
 
 
 class ActiveFakts(BaseModel):
@@ -135,6 +155,8 @@ class ActiveFakts(BaseModel):
     ``instances``). Optional: servers that do not support statuses omit it,
     and unknown status values are coerced to UNKNOWN instead of failing
     validation (so a newer server cannot break older clients)."""
+    mesh: Optional[MeshClaim] = None
+    """The mesh key, if one was granted (see :class:`MeshClaim`)."""
 
     @field_validator("statuses", mode="before")
     @classmethod

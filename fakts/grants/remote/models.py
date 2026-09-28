@@ -37,8 +37,8 @@ class FaktsEndpoint(BaseModel):
     ``issuer``.
 
     ``extra="allow"`` is deliberate: the document also carries ``mesh_*``
-    and ``hub_*`` members that this client does not model but other tools
-    read off the same fetch.
+    and ``hub_*`` members that this client mostly does not model but other
+    tools read off the same fetch.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -68,6 +68,10 @@ class FaktsEndpoint(BaseModel):
     """The user-facing approval page template, containing a literal
     ``{code}`` placeholder. Informational — the device authorization
     response carries a ready-made ``verification_uri_complete``."""
+
+    mesh_coord_url: Optional[str] = None
+    """The mesh coordination server (ionscale), when the deployment has a
+    mesh. A granted mesh key usually names it too."""
 
     version: Optional[str] = None
     """The version of the server software (informational)"""

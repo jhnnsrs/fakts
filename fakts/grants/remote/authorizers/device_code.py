@@ -118,6 +118,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
     ``expires_in``"."""
     open_browser: bool = True
     allow_insecure_transport: bool = False
+    request_auth_key: bool = False
+    """Ask for a key to join the deployment's mesh; it comes back once, with
+    the first token (as ``mesh``), if the approver allows it."""
 
     sleeper: Callable[[float], Awaitable[None]] = Field(
         default=asyncio.sleep, exclude=True
@@ -147,6 +150,8 @@ class DeviceCodeAuthorizer(SSLContextModel):
             "requested_client_kind": self.requested_client_kind.value,
             "requested_client_role": self.requested_client_role.value,
         }
+        if self.request_auth_key:
+            payload["request_auth_key"] = True
 
         return await oauth2.apost_json(
             endpoint.device_authorization_endpoint,
