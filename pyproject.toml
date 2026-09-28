@@ -12,6 +12,8 @@ dependencies = [
     "koil>=3.3.2",
     "certifi>=2025.4.26",
     "aiohttp>=3.11.18",
+    # The app identity the login manifest is built on.
+    "arkitekt-spec>=0.1",
 ]
 
 [project.optional-dependencies]

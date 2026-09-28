@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from arkitekt_spec import AppManifest, Requirement
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 from typing import Any, List, Optional
 import json
@@ -229,19 +230,6 @@ class ActiveFakts(BaseModel):
         return v
 
 
-class Requirement(BaseModel):
-    """A requirement is a way to specify a requirement for a service instance in Fakts."""
-
-    key: str
-    service: str
-    """ The service is the service that will be used to fill the key, it will be used to find the correct instance. It needs to fullfill
-    the reverse domain naming scheme"""
-    optional: bool = False
-    """ The optional flag indicates if the requirement is optional or not. Users should be able to use the client even if the requirement is not met. """
-    description: Optional[str] = None
-    """ The description is a human readable description of the requirement. Will be show to the user when asking for the requirement."""
-
-
 @dataclass(frozen=True)
 class Own:
     """Marks a parameter as the app's *own* fakts server, not a required service.
@@ -297,31 +285,31 @@ class PublicSource(BaseModel):
     url: str
 
 
-class Manifest(BaseModel):
-    """A manifest for an app that can be installed in Arkitekt
+#: The fields ``Manifest.hash`` covers: exactly the ones the login manifest had before
+#: it was built on ``arkitekt_spec.AppManifest``, so no existing cache or grant moves.
+LOGIN_HASH_FIELDS = (
+    "version",
+    "identifier",
+    "scopes",
+    "logo",
+    "requirements",
+    "device_id",
+    "public_sources",
+    "description",
+)
 
-    Manifests are used to describe apps that can be installed in Arkitekt.
-    They provide information about the app, such as the
-    its globally unique identifier, the version, the scopes it needs, etc.
 
-    This Manifest is send to the Fakts server on initial app configuration,
-    and is used to register the app with the Fakts server, which in turn
-    will prompt the user to grant the app access to establish itself as
-    an Arkitekt app (and therefore as an OAuth2 client) (see more in the
-    Fakts documentation).
+class Manifest(AppManifest):
+    """The app's identity as it logs in: arkitekt-spec's ``AppManifest``, plus runtime fields.
 
+    Sent to the fakts server on initial app configuration, which prompts the user
+    to grant the app access to establish itself as an Arkitekt app (an OAuth2
+    client). The identity fields are the spec's -- the same ones a deployment
+    records -- and the fields below exist only at login.
     """
 
-    version: str
-    """ The version of the app TODO: Should this be a semver? """
-    identifier: str
-    """ The globally unique identifier of the app: TODO: Should we check for a reverse domain name? """
-    scopes: List[str]
-    """ Scopes that this app should request from the user """
-    logo: Optional[str] = None
-    """ A URL to the logo of the app TODO: We should enforce this to be a http URL as local paths won't work """
     requirements: Optional[List[Requirement]] = Field(default_factory=lambda: [])
-    """ Requirements that this app has TODO: What are the requirements? """
+    """ The services the app needs, filled in by the server's instances. """
     device_id: Optional[str] = Field(
         default=None, validation_alias=AliasChoices("device_id", "node_id")
     )
@@ -329,11 +317,8 @@ class Manifest(BaseModel):
     deprecated spelling, still read from older configs and servers. """
     public_sources: Optional[List[PublicSource]] = Field(default_factory=lambda: [])
 
-    description: Optional[str] = None
-    """ A human readable description of the app """
-
     model_config = ConfigDict(extra="forbid")
-    """ Configuration for the pydantic model to forbid extra fields """
+    """ A manifest is written in code: a misspelled field must fail, not vanish. """
 
     def hash(self) -> str:
         """Hash the manifest
@@ -348,7 +333,11 @@ class Manifest(BaseModel):
 
         """
 
-        unsorted_dict = self.model_dump()
+        # Only the fields that have always identified a login. The spec's newer
+        # identity fields (``author``, ``entrypoint``) are left out on purpose:
+        # adding them would change every app's hash, and with it the cache key and
+        # the grant binding -- one forced device-code login for every app.
+        unsorted_dict = self.model_dump(include=set(LOGIN_HASH_FIELDS))
 
         # Order must not affect the hash: the hash gates the cache, so a
         # manifest that is merely written differently would otherwise
