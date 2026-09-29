@@ -97,7 +97,6 @@ async def check_wellknown(
                 ) from e
 
             if "name" not in data:
-                logger.error(f"Malformed answer: {data}")
                 raise DiscoveryError(
                     f"The well-known endpoint {url} answered, but the response "
                     f"is missing the required 'name' field. Is a Fakts server "
@@ -138,7 +137,6 @@ async def check_wellknown(
 
         else:
             body = await resp.text()
-            logger.error(f"Could not retrieve on the endpoint: {resp.status}")
             raise DiscoveryError(
                 f"The well-known endpoint {url} answered with status code "
                 f"{resp.status} (expected 200). Is the Fakts server running and "

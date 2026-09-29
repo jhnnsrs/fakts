@@ -8,8 +8,7 @@ to discover the endpoint to connect to.
 
 """
 
-from .advertised import FirstAdvertisedDiscovery
 from .static import StaticDiscovery
 from .well_known import WellKnownDiscovery
 
-__all__ = ["FirstAdvertisedDiscovery", "StaticDiscovery", "WellKnownDiscovery"]
+__all__ = ["StaticDiscovery", "WellKnownDiscovery"]
