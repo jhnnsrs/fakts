@@ -940,12 +940,12 @@ class Fakts(KoiledModel):
         Returns True if the challenge passed, raises otherwise.
         """
         if challenge_key is not None and challenge_key.kind != "ed25519":
-            logger.warning(
-                "Instance pins a challenge key of unsupported kind '%s'. "
-                "Falling back to the plain (unauthenticated) challenge.",
-                challenge_key.kind,
+            # Fail closed: the instance pins an identity key precisely so that a
+            # plain 200 is not enough. Downgrading to it would accept anyone.
+            raise FaktsError(
+                f"The instance behind alias '{alias.id}' pins a challenge key of kind "
+                f"'{challenge_key.kind}', which this fakts cannot verify. Upgrade fakts."
             )
-            challenge_key = None
 
         nonce = generate_nonce() if challenge_key else None
 

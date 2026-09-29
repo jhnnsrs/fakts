@@ -85,9 +85,11 @@ def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str
             "Install it with: pip install fakts[crypto]"
         ) from e
 
+    from cryptography.exceptions import InvalidSignature
+
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(key.key))
-    except Exception:
+        public_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(key.key, validate=True))
+    except (ValueError, TypeError):
         logger.warning(
             "Could not parse the pinned challenge key. Failing the challenge.",
             exc_info=True,
@@ -95,7 +97,11 @@ def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str
         return False
 
     try:
-        public_key.verify(base64.b64decode(signature_b64), build_challenge_message(nonce))
-        return True
-    except Exception:
+        signature = base64.b64decode(signature_b64, validate=True)
+    except (ValueError, TypeError):
         return False
+    try:
+        public_key.verify(signature, build_challenge_message(nonce))
+    except InvalidSignature:
+        return False
+    return True

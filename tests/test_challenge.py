@@ -185,18 +185,17 @@ async def test_build_challenge_message_is_domain_separated():
     assert build_challenge_message("abc") == f"{CHALLENGE_DOMAIN}:abc".encode()
 
 
-async def test_unsupported_key_kind_falls_back_to_plain(challenge_server) -> None:
-    """A key of an unknown kind (from a newer server) must not break the
-    client; it falls back to the plain challenge with a warning."""
+async def test_an_unsupported_key_kind_fails_closed(challenge_server) -> None:
+    """A pinned key of a kind this fakts cannot verify must not downgrade to
+    the plain challenge: the instance pinned a key so a 200 is not enough."""
 
     async def handler(request: web.Request) -> web.Response:
-        return web.Response(text="ok")
+        return web.Response(text="ok")  # anyone can answer 200
 
     port = await challenge_server(handler)
     key = ChallengeKey(kind="post-quantum-9000", key="irrelevant")
     grant = CountingGrant(fakts=make_pinned_fakts(port, key))
 
     async with Fakts(grant=grant, manifest=make_manifest()) as fakts:
-        alias = await fakts.aget_alias("test", omit_report=True)
-
-    assert alias.id == "primary"
+        with pytest.raises(CompositionError, match=r"post-quantum-9000.*Upgrade fakts"):
+            await fakts.aget_alias("test", omit_report=True)
