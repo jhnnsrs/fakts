@@ -92,6 +92,11 @@ def _write_tls(directory: Path, address: str) -> None:
         .not_valid_before(now - datetime.timedelta(minutes=5))
         .not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        # Python 3.13's default context is VERIFY_X509_STRICT: without the key
+        # identifiers it rejects the chain, and the health check just times out.
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False
+        )
         .add_extension(
             x509.KeyUsage(
                 digital_signature=True, content_commitment=False, key_encipherment=False,
@@ -123,6 +128,17 @@ def _write_tls(directory: Path, address: str) -> None:
         .not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.SubjectAlternativeName(names), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+            critical=False,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+            critical=False,
+        )
         .sign(ca_key, hashes.SHA256())
     )
 
@@ -169,15 +185,17 @@ logging:
 def _wait_healthy(url: str, ca_file: str, timeout: float = 60) -> None:
     context = ssl.create_default_context(cafile=ca_file)
     deadline = time.monotonic() + timeout
+    last: object = None
     while True:
         try:
             with urllib.request.urlopen(url, context=context, timeout=2) as response:
                 if response.status == 200:
                     return
-        except OSError:
-            pass
+                last = f"HTTP {response.status}"
+        except OSError as e:
+            last = e
         if time.monotonic() > deadline:
-            raise TimeoutError(f"ionskale did not become healthy at {url}")
+            raise TimeoutError(f"ionskale did not become healthy at {url} (last: {last})")
         time.sleep(0.5)
 
 
