@@ -14,6 +14,7 @@ from typing import Any, List
 import pytest
 import pytest_asyncio
 from aiohttp import web
+from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 
 from fakts import Fakts
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
@@ -172,6 +173,9 @@ async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: Any) ->
         # Served from the alias map, still carrying the proxy.
         again = await fakts.aget_alias("test")
         assert again.proxy == proxy
+        # An external proxy is no node of this process: nothing to forward through.
+        with pytest.raises(AliasMeshError, match="ARKITEKT_MESH_PROXY"):
+            await again.aturn()
         # The instance (what gets cached) never holds it.
         assert fakts.loaded_fakts is not None
         assert all(
@@ -309,11 +313,15 @@ async def test_fakts_runs_the_native_node(
         assert start["control_url"] == "https://mesh.example"
         assert start["statedir"].endswith("-native")
 
-        turn = await fakts.amesh_turn()
+        # The alias carries the node it is reached through.
+        turn = await alias.aturn()
         assert turn.urls == ["turn:127.0.0.1:3478?transport=udp"]
         assert turn.username == "u" and turn.credential == "c"
-        assert await fakts.amesh_forward(alias) == "127.0.0.1:5555"
-        assert await fakts.amesh_forward(alias, 7880) == "127.0.0.1:5555"
+        assert await alias.aforward() == "127.0.0.1:5555"
+        assert await alias.aforward(7880) == "127.0.0.1:5555"
+        # Also when served again from the alias map.
+        again = await fakts.aget_alias("test")
+        assert again._mesh is fakts._mesh_node
         node = fakts._mesh_node
         assert node is not None and node._node.forwards == [
             ("100.64.0.9", 8080),
@@ -385,16 +393,25 @@ async def test_no_key_and_no_node_skips_the_mesh(
         mesh=MeshOptions(state_root=tmp_path),
     )
     async with fakts:
-        assert await fakts._amesh_proxy(mesh_fakts()) is None
+        assert await fakts._amesh_route(mesh_fakts()) == (None, None)
     assert FakeNode.started == []
 
 
-@pytest.mark.asyncio
-async def test_turn_needs_the_mesh_on() -> None:
-    fakts = Fakts(grant=CountingGrant(fakts=mesh_fakts()), manifest=make_manifest())
-    async with fakts:
-        with pytest.raises(MeshError, match="not running"):
-            await fakts.amesh_turn()
+def test_a_mesh_error_is_the_spec_s_too() -> None:
+    """Whoever holds only an Alias catches the spec's MeshError; a node's
+    failure is fakts' MeshError, and must be caught by the same clause."""
+    assert issubclass(MeshError, AliasMeshError)
+
+
+def test_a_node_is_shared_by_deep_copies() -> None:
+    from copy import deepcopy
+
+    from fakts.mesh import NativeNode
+
+    node = NativeNode.__new__(NativeNode)
+    alias = Alias(id="a", host="db", kind="mesh").through_mesh("http://127.0.0.1:1", node)
+    assert "_mesh" not in alias.model_dump_json()
+    assert deepcopy(alias)._mesh is node
 
 
 # --- a real node, against a lab mesh (opt-in) --------------------------------

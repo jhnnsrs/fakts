@@ -17,8 +17,10 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Self
 
+from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
+from arkitekt_spec.declare.wiring import TurnInfo
 from pydantic import BaseModel
 
 from fakts.errors import FaktsError
@@ -26,7 +28,7 @@ from fakts.errors import FaktsError
 logger = logging.getLogger(__name__)
 
 
-class MeshError(FaktsError):
+class MeshError(FaktsError, AliasMeshError):
     """The mesh node could not be started, or did not connect.
 
     ``code`` is the node's own error code, as the Rust client and
@@ -118,15 +120,6 @@ def _translate(error: Exception, bindings: Any, statedir: Path) -> MeshError:
     return MeshError(str(error), "start")
 
 
-class TurnInfo(BaseModel):
-    """One ICE server entry for a WebRTC client: the node's TURN relay on
-    127.0.0.1, whose relayed traffic goes over the mesh."""
-
-    urls: list[str]
-    username: str
-    credential: str
-
-
 class NativeNode:
     """The mesh node running in this process; stop it with :meth:`close`."""
 
@@ -135,6 +128,11 @@ class NativeNode:
         self.proxy_url: str = node.proxy_url
         """The local HTTP proxy into the mesh, e.g. ``http://127.0.0.1:41234``."""
         self.statedir = statedir
+
+    def __deepcopy__(self, memo: dict) -> Self:
+        # A running node is shared, never copied: a deep copy of an alias
+        # reached through it is still reached through it.
+        return self
 
     @staticmethod
     def has_state(statedir: Path) -> bool:

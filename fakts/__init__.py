@@ -58,7 +58,7 @@ from .models import (
 )
 from arkitekt_spec.declare.wiring import Own, Require
 from .handle import TokenLoader
-from .mesh import MeshError, MeshOptions
+from .mesh import MeshError, MeshOptions, TurnInfo
 
 
 __all__ = [
@@ -78,6 +78,7 @@ __all__ = [
     "Alias",
     "MeshError",
     "MeshOptions",
+    "TurnInfo",
     "ChallengeKey",
     "GrantStatus",
     "Manifest",

@@ -72,7 +72,7 @@ from koil.composition import KoiledModel
 from koil.bridge import unkoil
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshError, MeshOptions, NativeNode, TurnInfo, hostname_label
+from .mesh import MeshError, MeshOptions, NativeNode, hostname_label
 from .models import (
     ActiveFakts,
     Alias,
@@ -1102,13 +1102,16 @@ class Fakts(KoiledModel):
         req: Requirement,
         omit_challenge: bool = False,
         mesh_proxy: Optional[str] = None,
+        mesh_node: Optional[NativeNode] = None,
     ) -> Tuple[Optional[Alias], AliasReport, Optional[str]]:
         """Resolve a single requirement to a working alias.
 
         Tries the instance's aliases in order (the first alias is the last
         known good one, see :meth:`arefresh_aliases`) and returns the first
         one that passes its challenge. Mesh aliases are challenged through
-        ``mesh_proxy`` and returned carrying it (``Alias.proxy``); without a
+        ``mesh_proxy`` and returned carrying it (``Alias.proxy``) and, if this
+        process runs it, the ``mesh_node`` (for ``Alias.aforward`` and
+        ``Alias.aturn``); without a
         mesh proxy they are skipped.
 
         Returns:
@@ -1145,7 +1148,7 @@ class Fakts(KoiledModel):
         errors_in_alias: List[str] = []
 
         for alias in instance.aliases:
-            proxy: Optional[str] = None
+            selected = alias
             if alias.is_mesh():
                 if mesh_proxy is None:
                     errors_in_alias.append(
@@ -1154,9 +1157,8 @@ class Fakts(KoiledModel):
                         f"ARKITEKT_MESH_PROXY to a running mesh proxy)."
                     )
                     continue
-                proxy = mesh_proxy
-            # A copy: the proxy is this process's, never the cached instance's.
-            selected = alias.model_copy(update={"proxy": proxy}) if proxy else alias
+                # A copy: the route is this process's, never the cached instance's.
+                selected = alias.through_mesh(mesh_proxy, mesh_node)
 
             if omit_challenge:
                 # If we omit the challenge, we just return the first alias
@@ -1172,7 +1174,7 @@ class Fakts(KoiledModel):
                         alias,
                         challenge_key=instance.challenge_key,
                         # Only when set, so overrides without it keep working.
-                        **({"proxy": proxy} if proxy else {}),
+                        **({"proxy": selected.proxy} if selected.proxy else {}),
                     ),
                     timeout=self.alias_challenge_timeout,
                 )
@@ -1270,11 +1272,14 @@ class Fakts(KoiledModel):
                     exc_info=True,
                 )
 
-        mesh_proxy = await self._amesh_proxy(fakts)
+        mesh_proxy, mesh_node = await self._amesh_route(fakts)
         results = await asyncio.gather(
             *(
                 self._aresolve_requirement(
-                    req, omit_challenge=omit_challenge, mesh_proxy=mesh_proxy
+                    req,
+                    omit_challenge=omit_challenge,
+                    mesh_proxy=mesh_proxy,
+                    mesh_node=mesh_node,
                 )
                 for req in requirements
             )
@@ -1337,18 +1342,22 @@ class Fakts(KoiledModel):
                 f"Check that the services are running and reachable from this machine."
             )
 
-    async def _amesh_proxy(self, fakts: ActiveFakts) -> Optional[str]:
-        """The HTTP proxy mesh aliases are reached through, if the mesh is on."""
+    async def _amesh_route(
+        self, fakts: ActiveFakts
+    ) -> Tuple[Optional[str], Optional[NativeNode]]:
+        """The HTTP proxy mesh aliases are reached through and the node that
+        runs it: both ``None`` if the mesh is off, no node for an external
+        ``mesh_proxy``."""
         if self.mesh_proxy:
-            return self.mesh_proxy
+            return self.mesh_proxy, None
         if not any(
             alias.is_mesh()
             for instance in fakts.instances.values()
             for alias in instance.aliases
         ):
-            return None
+            return None, None
         node = await self._amesh_node(fakts)
-        return node.proxy_url if node else None
+        return (node.proxy_url, node) if node else (None, None)
 
     async def _amesh_node(self, fakts: ActiveFakts) -> Optional[NativeNode]:
         """The mesh node, started on first use; it lives until the context
@@ -1399,41 +1408,6 @@ class Fakts(KoiledModel):
             auth_key=claim.ionscale_auth_key if claim else None,
         )
         return self._mesh_node
-
-    async def _arunning_mesh_node(self) -> NativeNode:
-        self._ensure_entered()
-        assert self._alias_lock is not None
-        fakts = await self._aensure_loaded()
-        async with self._alias_lock:
-            node = await self._amesh_node(fakts)
-        if node is None:
-            raise MeshError(
-                "The mesh is not running: enable it (ARKITEKT_MESH=1 / Fakts.mesh) "
-                "and authorize with mesh access"
-            )
-        return node
-
-    async def amesh_turn(self) -> TurnInfo:
-        """The mesh node's TURN relay, as an ICE server for a WebRTC client
-        (async).
-
-        WebRTC media (e.g. LiveKit) cannot use the HTTP proxy. Configured
-        with only this ICE server and a relay-only transport policy, the
-        client sends everything through the relay on 127.0.0.1, which relays
-        it over the mesh to peers such as a mesh-only SFU.
-        """
-        node = await self._arunning_mesh_node()
-        return await node.turn()
-
-    async def amesh_forward(self, alias: Alias, port: Optional[int] = None) -> str:
-        """A local ``127.0.0.1:P`` that forwards TCP to a mesh alias (async).
-
-        For clients that cannot use the HTTP proxy (e.g. LiveKit's signaling
-        websocket). ``port`` defaults to the alias' port, then 443 or 80.
-        """
-        node = await self._arunning_mesh_node()
-        target = port or alias.port or (443 if alias.ssl else 80)
-        return await node.forward(alias.host, target)
 
     async def _areport_aliases(
         self, fakts: ActiveFakts, composition_errors: List[str], token: str
