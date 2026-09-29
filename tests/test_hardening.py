@@ -6,6 +6,7 @@ before the fix. They are grouped by what they protect, not by module.
 
 import logging
 import os
+import ssl
 import stat
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -33,6 +34,7 @@ from fakts.models import (
     Requirement,
 )
 from fakts.oauth2 import InsecureTransportError, check_transport
+from fakts.report import PendingReport, areport_aliases
 
 from .helpers import make_fakts_value, make_manifest
 
@@ -198,9 +200,11 @@ async def test_report_is_skipped_over_untrusted_transport(monkeypatch) -> None:
     value.auth.token_endpoint = "http://some-lan-box:8000/o/token/"
     value.auth.report_endpoint = "http://some-lan-box:8000/f/report/"
 
-    fakts = Fakts(grant=Grant(fakts=value), manifest=make_manifest())
-    async with fakts:
-        await fakts._areport_aliases(value, [], "an-access-token")
+    await areport_aliases(
+        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        ssl_context=ssl.create_default_context(),
+        allow_insecure_transport=False,
+    )
 
     assert posted == [], f"the access token was sent over plain http: {posted}"
 
@@ -222,9 +226,11 @@ async def test_report_over_https_is_sent(monkeypatch) -> None:
     value.auth.token_endpoint = "https://example.com/o/token/"
     value.auth.report_endpoint = "https://example.com/f/report/"
 
-    fakts = Fakts(grant=Grant(fakts=value), manifest=make_manifest())
-    async with fakts:
-        await fakts._areport_aliases(value, [], "an-access-token")
+    await areport_aliases(
+        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        ssl_context=ssl.create_default_context(),
+        allow_insecure_transport=False,
+    )
 
     assert posted == ["https://example.com/f/report/"]
 
@@ -236,10 +242,12 @@ async def test_report_is_skipped_when_origin_differs() -> None:
     value.auth.token_endpoint = "https://real.example.com/o/token/"
     value.auth.report_endpoint = "https://attacker.example.com/f/report/"
 
-    fakts = Fakts(grant=Grant(fakts=value), manifest=make_manifest())
-    async with fakts:
-        # Reaches the origin check and returns without attempting a request.
-        await fakts._areport_aliases(value, [], "an-access-token")
+    # Reaches the origin check and returns without attempting a request.
+    await areport_aliases(
+        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        ssl_context=ssl.create_default_context(),
+        allow_insecure_transport=False,
+    )
 
 
 @pytest.mark.parametrize(

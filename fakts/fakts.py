@@ -49,13 +49,12 @@ import time
 from enum import Enum
 from ssl import SSLContext
 from typing import Any, ClassVar
-from urllib.parse import urlparse
 
 import aiohttp
 import certifi
 from koil.bridge import unkoil
 from koil.composition import KoiledModel
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from fakts import oauth2
 from fakts.cache.nocache import NoCache
@@ -81,6 +80,7 @@ from .models import (
     Requirement,
 )
 from .protocols import FaktsCache, FaktsGrant
+from .report import AliasReport, PendingReport, areport_aliases
 from .utils import truncate
 
 logger = logging.getLogger(__name__)
@@ -89,12 +89,6 @@ TOKEN_EXPIRY_SKEW = oauth2.TOKEN_EXPIRY_SKEW
 """Seconds before the actual expiry at which a token is considered expired.
 
 Re-exported from :mod:`fakts.oauth2`, which owns the value."""
-
-REPORT_TIMEOUT = 5
-"""Seconds to allow the alias report. Deliberately short and separate: the
-report runs while ``_alias_lock`` is held, so a slow endpoint would otherwise
-stall every alias lookup in the process. Telemetry must never be able to do
-that."""
 
 REFRESH_TOKEN_MAX_AGE = 30 * 24 * 3600
 """How long a single refresh token is assumed to stay usable. Servers
@@ -125,12 +119,6 @@ _REAUTH_REASONS = {
 }
 
 
-def _same_origin(left: str, right: str) -> bool:
-    """Whether two URLs share scheme, host and port."""
-    a, b = urlparse(left), urlparse(right)
-    return (a.scheme, a.hostname, a.port) == (b.scheme, b.hostname, b.port)
-
-
 class ReauthPolicy(str, Enum):
     """When the token path may run an interactive grant on its own.
 
@@ -150,17 +138,6 @@ class ReauthPolicy(str, Enum):
     ALWAYS = "always"
     """Legacy behaviour: let any token renewal prompt. Convenient for
     single-process interactive apps, hazardous anywhere else."""
-
-
-class AliasReport(BaseModel):
-    alias_id: str | None = None
-    reason: str | None = None
-    valid: bool = False
-
-
-class ReportRequest(BaseModel):
-    alias_reports: dict[str, AliasReport]
-    functional: bool
 
 
 class Fakts(KoiledModel):
@@ -308,6 +285,7 @@ class Fakts(KoiledModel):
     the probe — and, where the instance pins a key, the signature check with
     it — for the rest of the process."""
     _cache_write_failed: bool = False
+    _pending_report: "PendingReport | None" = None
 
     def _ensure_entered(self) -> None:
         """Raise if the context manager was not entered yet"""
@@ -1055,6 +1033,16 @@ class Fakts(KoiledModel):
         self._aliases_refreshed = False
         self._instances_gen += 1
 
+    async def _aflush_report(self) -> None:
+        """Send the report of the last resolution, if any, outside every lock."""
+        pending, self._pending_report = self._pending_report, None
+        if pending is not None:
+            await areport_aliases(
+                pending,
+                ssl_context=self.ssl_context,
+                allow_insecure_transport=self.allow_insecure_transport,
+            )
+
     def _is_granted(self, fakts_key: str) -> bool:
         """Whether an instance with aliases was granted for the key."""
         instance = self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
@@ -1237,10 +1225,13 @@ class Fakts(KoiledModel):
         """
         self._ensure_entered()
         assert self._alias_lock is not None
-        async with self._alias_lock:
-            await self._arefresh_aliases_locked(
-                omit_challenge=omit_challenge, omit_report=omit_report
-            )
+        try:
+            async with self._alias_lock:
+                await self._arefresh_aliases_locked(
+                    omit_challenge=omit_challenge, omit_report=omit_report
+                )
+        finally:
+            await self._aflush_report()
 
     async def _arefresh_aliases_locked(
         self,
@@ -1359,7 +1350,15 @@ class Fakts(KoiledModel):
                 await self._apersist_locked(updated)
 
         if report_token:
-            await self._areport_aliases(fakts, composition_errors, report_token)
+            # Sent by the caller once _alias_lock is released: a slow report
+            # endpoint must not stall every alias lookup in the process. A
+            # later resolution (the self-heal retry) replaces this one.
+            self._pending_report = PendingReport(
+                fakts=fakts,
+                report_map=dict(new_report_map),
+                functional=not composition_errors,
+                token=report_token,
+            )
 
         if composition_errors:
             joined_errors = "\n".join(composition_errors)
@@ -1368,90 +1367,6 @@ class Fakts(KoiledModel):
                 f"'{self.manifest.identifier}' (deployment "
                 f"'{fakts.self.deployment_name}'):\n{joined_errors}\n"
                 f"Check that the services are running and reachable from this machine."
-            )
-
-    async def _areport_aliases(
-        self, fakts: ActiveFakts, composition_errors: list[str], token: str
-    ) -> None:
-        """Report the alias resolution outcome to the server (best effort).
-
-        Reporting is telemetry and must never break the app: endpoints
-        that do not advertise a report url are skipped, and any error
-        during the report itself is caught and logged.
-
-        The token is passed in rather than fetched here — see
-        :meth:`arefresh_aliases` for why acquiring it at this point would
-        corrupt the alias state it is reporting on.
-        """
-        if not fakts.auth.report_endpoint:
-            logger.info("The endpoint does not advertise a report url. Skipping the alias report.")
-            return
-
-        # The report carries the access token, so it gets the same transport
-        # gate as every other credential-bearing call — and must go to the
-        # deployment we authenticated against. `report_endpoint` is derived
-        # from a server-supplied base_url, so without the origin check a
-        # misconfigured (or tampered) document would exfiltrate the bearer
-        # token to an unrelated host.
-        try:
-            oauth2.check_transport(fakts.auth.report_endpoint, self.allow_insecure_transport)
-        except Exception:
-            logger.warning(
-                "Not reporting alias status: the report endpoint would require "
-                "sending the access token over an untrusted transport.",
-                exc_info=True,
-            )
-            return
-
-        if not _same_origin(fakts.auth.report_endpoint, fakts.auth.token_endpoint):
-            logger.warning(
-                "Not reporting alias status: the report endpoint (%s) is not on the "
-                "same origin as the token endpoint this app authenticated against.",
-                fakts.auth.report_endpoint,
-            )
-            return
-
-        report = ReportRequest(
-            alias_reports=dict(self.report_map),
-            functional=len(composition_errors) == 0,
-        )
-        logger.debug("Reporting usage: %s", report)
-
-        try:
-            async with (
-                aiohttp.ClientSession(
-                    connector=(
-                        aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
-                    ),
-                    headers={
-                        "Accept": "application/json",
-                        "Authorization": f"Bearer {token}",
-                    },
-                    timeout=aiohttp.ClientTimeout(total=REPORT_TIMEOUT),
-                ) as session,
-                session.post(
-                    fakts.auth.report_endpoint,
-                    json=report.model_dump(),
-                    # The bearer token must not follow a redirect elsewhere.
-                    allow_redirects=False,
-                ) as resp,
-            ):
-                if resp.status != 200:
-                    body = await resp.text()
-                    logger.warning(
-                        "Failed to report alias status to %s: status code %s. Response body: %s",
-                        fakts.auth.report_endpoint,
-                        resp.status,
-                        truncate(body) or "<empty>",
-                    )
-                    return
-                # The status is the answer; a body that is not JSON is no failure.
-                logger.debug("Reported alias status to %s", fakts.auth.report_endpoint)
-        except Exception:
-            logger.warning(
-                "Could not report alias status to %s. Continuing without reporting.",
-                fakts.auth.report_endpoint,
-                exc_info=True,
             )
 
     async def _arefresh_aliases_with_selfheal(
@@ -1517,67 +1432,72 @@ class Fakts(KoiledModel):
         """
         self._ensure_entered()
         assert self._alias_lock is not None
-        async with self._alias_lock:
-            stale_unchallenged = not omit_challenge and fakts_key in self._unchallenged_keys
-            # ``_aliases_refreshed`` has to be part of the fast path, not just
-            # the refresh condition below it. The token path invalidates
-            # aliases by clearing that flag and deliberately leaving
-            # ``alias_map`` alone (it cannot take _alias_lock, see L1) — so a
-            # fast path that consults only ``alias_map`` would serve exactly
-            # the entries the invalidation was meant to retire.
-            if (
-                not force_refresh
-                and not stale_unchallenged
-                and self._aliases_refreshed
-                and fakts_key in self.alias_map
-            ):
-                return self.alias_map[fakts_key]
+        try:
+            async with self._alias_lock:
+                stale_unchallenged = not omit_challenge and fakts_key in self._unchallenged_keys
+                # ``_aliases_refreshed`` has to be part of the fast path, not just
+                # the refresh condition below it. The token path invalidates
+                # aliases by clearing that flag and deliberately leaving
+                # ``alias_map`` alone (it cannot take _alias_lock, see L1) — so a
+                # fast path that consults only ``alias_map`` would serve exactly
+                # the entries the invalidation was meant to retire.
+                if (
+                    not force_refresh
+                    and not stale_unchallenged
+                    and self._aliases_refreshed
+                    and fakts_key in self.alias_map
+                ):
+                    return self.alias_map[fakts_key]
 
-            # A granted key that failed to resolve last time (its service was
-            # briefly down) is tried again, not failed for the process's life.
-            unresolved = fakts_key not in self.alias_map and self._is_granted(fakts_key)
-            if force_refresh or stale_unchallenged or unresolved or not self._aliases_refreshed:
-                try:
-                    await self._arefresh_aliases_with_selfheal(
-                        omit_challenge=omit_challenge, omit_report=omit_report
+                # A granted key that failed to resolve last time (its service was
+                # briefly down) is tried again, not failed for the process's life.
+                unresolved = fakts_key not in self.alias_map and self._is_granted(fakts_key)
+                if force_refresh or stale_unchallenged or unresolved or not self._aliases_refreshed:
+                    try:
+                        await self._arefresh_aliases_with_selfheal(
+                            omit_challenge=omit_challenge, omit_report=omit_report
+                        )
+                    except CompositionError:
+                        # Even if some *other* required service failed, the
+                        # requested key may have resolved fine -- or not have been
+                        # granted at all, which has its own error below. Only the
+                        # requested key's own failure is this composition error.
+                        if fakts_key not in self.alias_map and self._is_granted(fakts_key):
+                            raise
+
+                if fakts_key in self.alias_map:
+                    return self.alias_map[fakts_key]
+
+                requirement = next(
+                    (req for req in (self.manifest.requirements or []) if req.key == fakts_key),
+                    None,
+                )
+
+                if requirement is not None:
+                    # The key is declared: distinguish "the server did not grant
+                    # an instance" (expected for declined optional services) from
+                    # "an instance was granted but is unreachable".
+                    instance = (
+                        self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
                     )
-                except CompositionError:
-                    # Even if some *other* required service failed, the
-                    # requested key may have resolved fine -- or not have been
-                    # granted at all, which has its own error below. Only the
-                    # requested key's own failure is this composition error.
-                    if fakts_key not in self.alias_map and self._is_granted(fakts_key):
-                        raise
+                    if instance is None or not instance.aliases:
+                        kind = "optional" if requirement.optional else "required"
+                        raise ServiceNotGrantedError(
+                            f"The {kind} service '{fakts_key}' is declared in the manifest of "
+                            f"'{self.manifest.identifier}', but the server did not grant an "
+                            f"instance for it "
+                            f"({self._not_granted_why(fakts_key, requirement.service)})."
+                        )
 
-            if fakts_key in self.alias_map:
-                return self.alias_map[fakts_key]
+                    report = self.report_map.get(fakts_key)
+                    if report and report.reason:
+                        raise AliasNotFoundError(
+                            f"Could not resolve alias for {fakts_key}: {report.reason}"
+                        )
 
-            requirement = next(
-                (req for req in (self.manifest.requirements or []) if req.key == fakts_key),
-                None,
-            )
-
-            if requirement is not None:
-                # The key is declared: distinguish "the server did not grant
-                # an instance" (expected for declined optional services) from
-                # "an instance was granted but is unreachable".
-                instance = self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
-                if instance is None or not instance.aliases:
-                    kind = "optional" if requirement.optional else "required"
-                    raise ServiceNotGrantedError(
-                        f"The {kind} service '{fakts_key}' is declared in the manifest of "
-                        f"'{self.manifest.identifier}', but the server did not grant an "
-                        f"instance for it "
-                        f"({self._not_granted_why(fakts_key, requirement.service)})."
-                    )
-
-                report = self.report_map.get(fakts_key)
-                if report and report.reason:
-                    raise AliasNotFoundError(
-                        f"Could not resolve alias for {fakts_key}: {report.reason}"
-                    )
-
-            raise self._undeclared_key_error(fakts_key)
+                raise self._undeclared_key_error(fakts_key)
+        finally:
+            await self._aflush_report()
 
     async def aget_alias_or_none(
         self,

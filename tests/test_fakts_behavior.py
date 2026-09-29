@@ -553,3 +553,29 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
         alias = await fakts.aget_alias("test", omit_report=True)
 
     assert alias.id == "primary"
+
+
+async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pytest.MonkeyPatch):
+    """A slow report endpoint used to stall every alias lookup in the process
+    for up to REPORT_TIMEOUT, because the report ran under _alias_lock."""
+    import fakts.fakts as fakts_module
+
+    held: list[bool] = []
+
+    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+        return True
+
+    async def report(pending, **kwargs) -> None:
+        held.append(fakts._alias_lock.locked())
+
+    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    monkeypatch.setattr(fakts_module, "areport_aliases", report)
+    value = make_fakts_value()
+    value.auth.access_token = "a-token"
+    value.auth.expires_at = 10**10
+    fakts = Fakts(grant=CountingGrant(fakts=value), manifest=make_manifest())
+
+    async with fakts:
+        await fakts.aget_alias("test")
+
+    assert held == [False]
