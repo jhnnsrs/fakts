@@ -26,6 +26,11 @@ from fakts.oauth2 import resolve_expiry
 
 from .test_fakts_behavior import make_fakts_value, make_manifest
 
+# File modes, owners and groups are POSIX: on Windows the cache neither sets
+# nor checks them (see fakts.cache.file), so there is nothing to assert.
+posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX file modes, owners and groups")
+
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -508,6 +513,7 @@ def loose_umask() -> Iterator[None]:
         os.umask(previous)
 
 
+@posix_only
 async def test_ensure_private_dir_creates_0700_under_loose_umask(
     tmp_path: Path, loose_umask: None
 ) -> None:
@@ -520,6 +526,7 @@ async def test_ensure_private_dir_creates_0700_under_loose_umask(
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
 
 
+@posix_only
 async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
     tmp_path: Path, loose_umask: None
 ) -> None:
@@ -536,6 +543,7 @@ async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
 
 
+@posix_only
 async def test_ensure_private_dir_leaves_a_foreign_dir_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -551,6 +559,7 @@ async def test_ensure_private_dir_leaves_a_foreign_dir_alone(
     assert stat.S_IMODE(directory.stat().st_mode) == 0o775
 
 
+@posix_only
 async def test_ensure_private_dir_is_idempotent(
     tmp_path: Path, loose_umask: None
 ) -> None:
@@ -563,6 +572,7 @@ async def test_ensure_private_dir_is_idempotent(
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700
 
 
+@posix_only
 async def test_cache_file_is_private(tmp_path: Path) -> None:
     """The cache now holds a live rotating secret."""
     cache_file = tmp_path / "cache.json"

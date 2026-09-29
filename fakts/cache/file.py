@@ -505,13 +505,16 @@ class FileCache(pydantic.BaseModel):
         # from the start: os.replace preserves the temp file's permissions,
         # which makes a chmod after the rename both too late and racy.
         # os.open's mode argument is masked by the umask, hence the fchmod.
+        # Windows has no POSIX modes (and no fchmod): there the file takes the
+        # ACL of the user's profile directory it is created in.
         directory = os.path.dirname(os.path.abspath(self.cache_file)) or "."
         tmp_file = f"{self.cache_file}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
 
         try:
             fd = os.open(tmp_file, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
             try:
-                os.fchmod(fd, 0o600)
+                if os.name == "posix":
+                    os.fchmod(fd, 0o600)
                 with os.fdopen(fd, "w", closefd=False) as f:
                     f.write(cache.model_dump_json())
                     f.flush()

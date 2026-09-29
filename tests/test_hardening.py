@@ -392,6 +392,7 @@ async def test_unresolvable_gid_warns(
     assert any("chmod g-w" in m for m in _warnings(caplog))
 
 
+@_posix_only
 async def test_self_only_group_resolves_as_no_other_members(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
