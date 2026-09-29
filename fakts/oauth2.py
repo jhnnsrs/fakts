@@ -122,8 +122,11 @@ class TokenResponse(BaseModel):
     client_id: str | None = None
 
     self_: SelfFakt | None = Field(default=None, alias="self")
-    instances: dict[str, Instance] = Field(default_factory=dict)
-    statuses: dict[str, GrantStatus] = Field(default_factory=dict)
+    instances: dict[str, Instance] | None = None
+    """``None`` when the response does not carry them (keep what we have); an
+    empty dict when the server withdrew every service."""
+    statuses: dict[str, GrantStatus] | None = None
+    """``None`` when not sent; otherwise authoritative, even when empty."""
     mesh: MeshClaim | None = None
     """Sent once, with the first token, when a mesh key was requested and
     granted."""
@@ -382,7 +385,12 @@ def merge_token_response(
         token_type=response.token_type or "Bearer",
     )
 
-    instances = _merge_instances(previous.instances if previous else {}, response.instances)
+    previous_instances = previous.instances if previous else {}
+    instances = (
+        dict(previous_instances)
+        if response.instances is None
+        else _merge_instances(previous_instances, response.instances)
+    )
 
     self_fakt = response.self_ or (previous.self if previous else None)
     if self_fakt is None:
@@ -396,7 +404,7 @@ def merge_token_response(
         auth=auth,
         instances=instances,
         statuses=response.statuses
-        if response.statuses
+        if response.statuses is not None
         else (previous.statuses if previous else {}),
         # Only the first token carries the key; keep it for later starts.
         mesh=response.mesh or (previous.mesh if previous else None),
@@ -410,11 +418,9 @@ def _merge_instances(
 
     The server is authoritative about *which* aliases exist; the client is
     authoritative about which one worked last time. Preserve the local
-    ordering for aliases that survive, and append genuinely new ones.
+    ordering for aliases that survive, and append genuinely new ones. An empty
+    ``incoming`` withdraws every instance.
     """
-    if not incoming:
-        return dict(previous)
-
     merged: dict[str, Instance] = {}
     for key, instance in incoming.items():
         old = previous.get(key)

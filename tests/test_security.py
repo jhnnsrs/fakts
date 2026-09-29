@@ -195,3 +195,43 @@ async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown) 
         await discover_url(
             f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"]
         )
+
+
+# --------------------------------------------------------------------------- #
+# A refresh is authoritative about what the app may still reach
+# --------------------------------------------------------------------------- #
+
+
+def _refresh(previous, **members) -> "object":
+    from fakts.oauth2 import TokenResponse, merge_token_response
+
+    response = TokenResponse(
+        access_token="a2", refresh_token="r2", client_id="test_client_id", **members
+    )
+    return merge_token_response(
+        previous, response, token_endpoint="http://x/token", report_endpoint=None, skew=30
+    )
+
+
+def test_a_refresh_that_withdraws_every_service_withdraws_them() -> None:
+    """Empty instances used to read as 'field omitted' and kept the old grants."""
+    from .helpers import make_fakts_value
+
+    previous = make_fakts_value()
+    previous.statuses = {"test": "granted"}  # type: ignore[assignment]
+    assert previous.instances
+
+    withdrawn = _refresh(previous, instances={}, statuses={})
+    assert withdrawn.instances == {}
+    assert withdrawn.statuses == {}
+
+
+def test_a_refresh_that_omits_the_members_keeps_them() -> None:
+    from .helpers import make_fakts_value
+
+    previous = make_fakts_value()
+    previous.statuses = {"test": "granted"}  # type: ignore[assignment]
+
+    kept = _refresh(previous)
+    assert kept.instances.keys() == previous.instances.keys()
+    assert kept.statuses == previous.statuses
