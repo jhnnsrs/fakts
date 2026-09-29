@@ -6,7 +6,6 @@ tailnet in arkirust's ``crates/mesh-py``, and by ``test_a_real_node`` below
 when a lab mesh is configured.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Any, List
@@ -412,41 +411,3 @@ def test_a_node_is_shared_by_deep_copies() -> None:
     alias = Alias(id="a", host="db", kind="mesh").through_mesh("http://127.0.0.1:1", node)
     assert "_mesh" not in alias.model_dump_json()
     assert deepcopy(alias)._mesh is node
-
-
-# --- a real node, against a lab mesh (opt-in) --------------------------------
-
-LAB = ("ARKITEKT_TEST_MESH_URL", "ARKITEKT_TEST_MESH_KEY", "ARKITEKT_TEST_MESH_PEER")
-
-
-@pytest.mark.mesh
-@pytest.mark.asyncio
-async def test_a_real_node(tmp_path: Path) -> None:
-    """Join the lab mesh and reach its peer through the node's proxy.
-
-    Same environment as arkirust's ``crates/mesh-py/tests/test_lab.py``:
-    the control url, an auth key, and a peer serving HTTP on port 80.
-    """
-    pytest.importorskip("arkitekt_mesh")
-    if not all(os.environ.get(name) for name in LAB):
-        pytest.skip(f"set {', '.join(LAB)} to run against a lab mesh")
-    import aiohttp
-
-    node = await NativeNode.start(
-        MeshOptions(timeout=60),
-        tmp_path / "node",
-        "fakts-test",
-        coord_url=os.environ["ARKITEKT_TEST_MESH_URL"],
-        auth_key=os.environ["ARKITEKT_TEST_MESH_KEY"],
-    )
-    try:
-        assert NativeNode.has_state(tmp_path / "node")
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(
-                f"http://{os.environ['ARKITEKT_TEST_MESH_PEER']}/", proxy=node.proxy_url
-            ) as response,
-        ):
-            assert response.status < 500
-    finally:
-        node.close()

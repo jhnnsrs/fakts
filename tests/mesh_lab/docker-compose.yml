@@ -1,0 +1,43 @@
+# A throwaway mesh for fakts' mesh tests: our ionscale fork (ionskale) as the
+# control server, and a tailscale node (fakts-peer) serving HTTP on :80.
+#
+# Everything run-specific -- ports, the address the mesh advertises, the
+# config and TLS files, the peer's auth key -- comes from tests/mesh_lab/
+# conftest.py, which renders it before `up` and mints the keys after ionskale
+# is healthy. The peer is started only then (it needs a key).
+services:
+  ionskale:
+    image: jhnnsrs/ionskale:${IONSKALE_TAG:-latest}
+    command: ["server", "--config", "/etc/ionscale/config.yaml"]
+    stop_grace_period: 1s
+    ports:
+    - "${IONSKALE_HTTPS_PORT}:443"
+    - "${IONSKALE_STUN_PORT}:3478/udp"
+    # config.yaml, tls/ and the ACL the conftest sets with the CLI.
+    volumes:
+    - "${MESH_LAB_DIR}:/etc/ionscale:ro"
+
+  # Joins the mesh as fakts-peer. Userspace networking needs no TUN device:
+  # tailscaled hands connections to its tailnet address to the local
+  # listeners of this network namespace, which `web` shares.
+  peer:
+    image: tailscale/tailscale:${TAILSCALE_TAG:-stable}
+    stop_grace_period: 1s
+    environment:
+      TS_AUTHKEY: ${PEER_KEY:-}
+      TS_HOSTNAME: fakts-peer
+      TS_EXTRA_ARGS: --login-server=${MESH_LAB_URL:-}
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      # Go trusts the throwaway CA for control and DERP.
+      SSL_CERT_FILE: /etc/lab/ca.pem
+    volumes:
+    - "${MESH_LAB_DIR}/tls/ca.pem:/etc/lab/ca.pem:ro"
+
+  # Answers every path with 200, so an alias challenge against the peer passes.
+  web:
+    image: traefik/whoami:latest
+    command: ["--port", "80"]
+    network_mode: service:peer
+    depends_on:
+    - peer

@@ -98,8 +98,23 @@ wheels = [
 ]
 
 [[package]]
+name = "arkitekt-mesh"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/1e/0c400c446e906f172ebe0727a04a09d762b190af2e948d81c22a7ca67829/arkitekt_mesh-0.1.0.tar.gz", hash = "sha256:231610720285bc1b3a9f3f0813c4a63a97641bd840c816095e208b7dbba92231", size = 211100, upload-time = "2026-09-29T10:14:28.051Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/0d/2dea04551bd06594e720b9cc661b5142f8feda708be730b975af470d8e1e/arkitekt_mesh-0.1.0-cp39-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:a05888b6329ce6e315f99126141b3ebe97cf91405224001af9e355347f620170", size = 6005239, upload-time = "2026-09-29T10:14:13.419Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/c7/ffeac8d3eff004135eb3bfd9d4cc6ea77fe0e9b51ee0b033c85c39ef9351/arkitekt_mesh-0.1.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c7d30d6fb17355ea64930eaec01b60ae17abbcec7c613b77a61b8d47a0b49ab3", size = 3377891, upload-time = "2026-09-29T10:14:15.752Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/ee/a52b4f5d1f707afc4c3bd915927af0a4ffe06ab85245fb27a39854e1cd7d/arkitekt_mesh-0.1.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:12e916ab28bac78291b5da4da58a0fdab77b0dac12f53d20dcefbd1317da2332", size = 3357284, upload-time = "2026-09-29T10:14:17.74Z" },
+    { url = "https://files.pythonhosted.org/packages/97/ef/e0ccc5e03a09e2ed37b63cf6b1c0de409998612337f047fd9eeed70f5456/arkitekt_mesh-0.1.0-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:0064c25899c627c50f606c95dd155b01fc5830b76846abe3819ca256bbb86bf8", size = 3545384, upload-time = "2026-09-29T10:14:19.78Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/75/05e5a3a8eefb09fc8adb3c6d356eab572b265fc2fced38095f3601f23298/arkitekt_mesh-0.1.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:a30b2bd22536766dc2a3f49ed68dbe9e18dd70748bef8798471faf8b41c5f97e", size = 3649665, upload-time = "2026-09-29T10:14:22.051Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/4a/5c132263563a6ce257bc9a63bef2eae8efeffc7c66489e799fed21743518/arkitekt_mesh-0.1.0-cp39-abi3-win_amd64.whl", hash = "sha256:fd52dd87154dc234fa7c891ae85dfaa0ccf8e9361a93ed66716e1f2f74b4e429", size = 2847063, upload-time = "2026-09-29T10:14:24.069Z" },
+    { url = "https://files.pythonhosted.org/packages/11/ca/b6cbe151eaba3115f105e8f3b661d8ac5cd92c5fc31714ff7a1372b7e9c4/arkitekt_mesh-0.1.0-cp39-abi3-win_arm64.whl", hash = "sha256:49a0d2a6252fa361a089af1aad8b0033f55f9835aca4639333f1896c4d78cedb", size = 2656141, upload-time = "2026-09-29T10:14:26.098Z" },
+]
+
+[[package]]
 name = "arkitekt-spec"
-version = "1.1.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -108,9 +123,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/b1/cb1b4c32821c49b5f094f4dec78a8d0c4ece5a80c26bbf88714761e529c7/arkitekt_spec-1.1.0.tar.gz", hash = "sha256:3ed6fbefec1410a854176786482b4a078e8020a6b26b092ecec8126d1b2cde74", size = 143114, upload-time = "2026-09-28T18:52:38.994Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/27/51a5c73f6e58066c11dbfc4753147f560acff53fa2fcb09727b452bdebc3/arkitekt_spec-1.4.0.tar.gz", hash = "sha256:81d61ba5cac57994c912c70a8bf92a290cdd5b29c2c582eead406a3cef61dd1b", size = 148707, upload-time = "2026-09-29T09:13:09.8Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/d5/9dbd2778b766160f0e2658321c6efec204c63da7447b02c5dd15afdfc63e/arkitekt_spec-1.1.0-py3-none-any.whl", hash = "sha256:1dff912544ea4608643933dc85e1b162ec2756975900877c929809eca735b8f7", size = 177443, upload-time = "2026-09-28T18:52:37.99Z" },
+    { url = "https://files.pythonhosted.org/packages/23/c1/1e2d813863cc672e8bbd47cb3577931c55a32002b383de39d2b677a900a2/arkitekt_spec-1.4.0-py3-none-any.whl", hash = "sha256:93a7970a419eacdbb519db18e9b8d3bf9566e4ba74236831afa8dd0a586037bf", size = 183456, upload-time = "2026-09-29T09:13:08.782Z" },
 ]
 
 [[package]]
@@ -468,6 +483,9 @@ dependencies = [
 crypto = [
     { name = "cryptography" },
 ]
+mesh = [
+    { name = "arkitekt-mesh" },
+]
 rath = [
     { name = "rath" },
 ]
@@ -486,14 +504,15 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.11.18" },
-    { name = "arkitekt-spec", specifier = ">=1.1" },
+    { name = "arkitekt-mesh", marker = "extra == 'mesh'", specifier = ">=0.1" },
+    { name = "arkitekt-spec", specifier = ">=1.4" },
     { name = "certifi", specifier = ">=2025.4.26" },
     { name = "cryptography", marker = "extra == 'crypto'", specifier = ">=42" },
     { name = "koil", specifier = ">=3.3.2" },
     { name = "pydantic", specifier = ">2" },
     { name = "rath", marker = "extra == 'rath'", specifier = ">=3.0" },
 ]
-provides-extras = ["crypto", "rath"]
+provides-extras = ["crypto", "mesh", "rath"]
 
 [package.metadata.requires-dev]
 dev = [
