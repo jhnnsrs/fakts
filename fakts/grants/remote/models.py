@@ -1,5 +1,5 @@
 import ssl
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import certifi
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,34 +48,34 @@ class FaktsEndpoint(BaseModel):
     it, because the server does not publish one."""
     name: str = "Helper"
     """A human readable name for the endpoint"""
-    description: Optional[str] = None
+    description: str | None = None
     """A human readable description for the endpoint"""
 
-    issuer: Optional[str] = None
+    issuer: str | None = None
     """The OAuth2 issuer identifier."""
-    token_endpoint: Optional[str] = None
+    token_endpoint: str | None = None
     """Absolute URL of the OAuth2 token endpoint. Every grant — device code,
     redeem, refresh — is a POST here."""
-    device_authorization_endpoint: Optional[str] = None
+    device_authorization_endpoint: str | None = None
     """Absolute URL of the device authorization endpoint. Non-standard in
     one respect: it takes a JSON body carrying the fakts manifest, and it
     also performs the client registration."""
-    jwks_uri: Optional[str] = None
+    jwks_uri: str | None = None
     """Where the server publishes the keys its access tokens are signed with."""
-    grant_types_supported: List[str] = Field(default_factory=list)
-    token_endpoint_auth_methods_supported: List[str] = Field(default_factory=list)
-    configure: Optional[str] = None
+    grant_types_supported: list[str] = Field(default_factory=list)
+    token_endpoint_auth_methods_supported: list[str] = Field(default_factory=list)
+    configure: str | None = None
     """The user-facing approval page template, containing a literal
     ``{code}`` placeholder. Informational — the device authorization
     response carries a ready-made ``verification_uri_complete``."""
 
-    mesh_coord_url: Optional[str] = None
+    mesh_coord_url: str | None = None
     """The mesh coordination server (ionscale), when the deployment has a
     mesh. A granted mesh key usually names it too."""
 
-    version: Optional[str] = None
+    version: str | None = None
     """The version of the server software (informational)"""
-    protocol_version: Optional[str] = None
+    protocol_version: str | None = None
     """The version of the fakts protocol the server speaks. Servers that
     do not advertise it are treated as speaking protocol version "1"."""
 

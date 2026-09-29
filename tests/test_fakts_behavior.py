@@ -4,7 +4,6 @@ and self-healing of stale caches."""
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from pydantic import BaseModel
@@ -16,99 +15,22 @@ from fakts.fakts import Fakts as FaktsClass
 from fakts.models import (
     ActiveFakts,
     Alias,
-    AuthFakt,
     GrantStatus,
-    Instance,
-    Manifest,
     Requirement,
-    SelfFakt,
 )
 
+from .helpers import CountingGrant, MemoryCache, make_fakts_value, make_manifest
+
 pytestmark = pytest.mark.asyncio
-
-
-def make_fakts_value(
-    host: str = "localhost",
-    *,
-    refresh_token: str = "test_refresh_token",
-    client_id: str = "test_client_id",
-    access_token: str | None = None,
-    expires_at: float | None = None,
-) -> ActiveFakts:
-    return ActiveFakts(
-        self=SelfFakt(
-            deployment_name="test_deployment",
-            alias=Alias(id="self", host=host, port=8000, path="/self"),
-        ),
-        auth=AuthFakt(
-            client_id=client_id,
-            refresh_token=refresh_token,
-            access_token=access_token,
-            expires_at=expires_at,
-            token_endpoint=f"http://{host}:8000/token",
-            report_endpoint=f"http://{host}:8000/report",
-        ),
-        instances={
-            "test": Instance(
-                service="test_service",
-                identifier="test_instance",
-                aliases=[
-                    Alias(id="primary", host=host, port=8000, path="/test"),
-                    Alias(id="fallback", host=host, port=8001, path="/test"),
-                ],
-            )
-        },
-    )
-
-
-def make_manifest() -> Manifest:
-    return Manifest(
-        version="0.1.0",
-        identifier="test_manifest",
-        scopes=["openid"],
-        requirements=[Requirement(key="test", service="test_service")],
-    )
-
-
-class CountingGrant(BaseModel):
-    """A grant that counts how often it was loaded"""
-
-    fakts: ActiveFakts
-    load_count: int = 0
-    delay: float = 0
-
-    async def aload(self) -> ActiveFakts:
-        self.load_count += 1
-        if self.delay:
-            await asyncio.sleep(self.delay)
-        return self.fakts
-
-
-class MemoryCache(BaseModel):
-    """An in-memory cache that counts sets and can be preseeded"""
-
-    value: Optional[ActiveFakts] = None
-    hash: str = ""
-    set_count: int = 0
-
-    async def aload(self) -> Optional[ActiveFakts]:
-        return self.value
-
-    async def aset(self, value: ActiveFakts) -> None:
-        self.value = value
-        self.set_count += 1
-
-    async def areset(self) -> None:
-        self.value = None
 
 
 class FailingSetCache(BaseModel):
     """A cache whose writes always fail (e.g. read-only file system)"""
 
-    value: Optional[ActiveFakts] = None
+    value: ActiveFakts | None = None
     hash: str = ""
 
-    async def aload(self) -> Optional[ActiveFakts]:
+    async def aload(self) -> ActiveFakts | None:
         return self.value
 
     async def aset(self, value: ActiveFakts) -> None:
@@ -363,15 +285,11 @@ async def test_aget_alias_or_none():
     fakts = Fakts(grant=grant, manifest=manifest)
 
     async with fakts:
-        alias = await fakts.aget_alias_or_none(
-            "test", omit_challenge=True, omit_report=True
-        )
+        alias = await fakts.aget_alias_or_none("test", omit_challenge=True, omit_report=True)
         assert alias is not None and alias.id == "primary"
 
         assert (
-            await fakts.aget_alias_or_none(
-                "declined", omit_challenge=True, omit_report=True
-            )
+            await fakts.aget_alias_or_none("declined", omit_challenge=True, omit_report=True)
             is None
         )
 
@@ -412,17 +330,13 @@ async def test_manifest_hash_invalidates_cache(tmp_path: Path):
     cache_file = str(tmp_path / "cache.json")
 
     grant = CountingGrant(fakts=make_fakts_value())
-    fakts = Fakts(
-        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
-    )
+    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
     async with fakts:
         await fakts.aload()
     assert grant.load_count == 1
 
     # Same manifest: the cache is reused
-    fakts = Fakts(
-        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
-    )
+    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
     async with fakts:
         await fakts.aload()
     assert grant.load_count == 1
@@ -443,9 +357,7 @@ async def test_corrupt_cache_file_is_ignored(tmp_path: Path):
         f.write("{not valid json")
 
     grant = CountingGrant(fakts=make_fakts_value())
-    fakts = Fakts(
-        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
-    )
+    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
     async with fakts:
         loaded = await fakts.aload()
 

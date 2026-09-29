@@ -2,7 +2,7 @@
 
 import base64
 import sys
-from typing import AsyncIterator, Awaitable, Callable, Tuple
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
 import pytest_asyncio
@@ -20,12 +20,12 @@ from fakts.challenge import (
 from fakts.errors import CompositionError, FaktsError
 from fakts.models import ChallengeKey
 
-from .test_fakts_behavior import CountingGrant, make_fakts_value, make_manifest
+from .helpers import CountingGrant, make_fakts_value, make_manifest
 
 pytestmark = pytest.mark.asyncio
 
 
-def make_keypair() -> Tuple[Ed25519PrivateKey, ChallengeKey]:
+def make_keypair() -> tuple[Ed25519PrivateKey, ChallengeKey]:
     private = Ed25519PrivateKey.generate()
     raw = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     return private, ChallengeKey(key=base64.b64encode(raw).decode())
@@ -88,9 +88,7 @@ def make_pinned_fakts(port: int, key: ChallengeKey | None):
     value = make_fakts_value(host="127.0.0.1")
     instance = value.instances["test"]
     instance.challenge_key = key
-    instance.aliases = [
-        instance.aliases[0].model_copy(update={"port": port, "ssl": False})
-    ]
+    instance.aliases = [instance.aliases[0].model_copy(update={"port": port, "ssl": False})]
     return value
 
 
@@ -138,7 +136,7 @@ async def test_wrong_key_signature_fails(challenge_server) -> None:
     grant = CountingGrant(fakts=make_pinned_fakts(port, pinned_key))
 
     async with Fakts(grant=grant, manifest=make_manifest()) as fakts:
-        with pytest.raises(CompositionError, match="invalid\\s+signature|identity key"):
+        with pytest.raises(CompositionError, match=r"invalid\s+signature|identity key"):
             await fakts.aget_alias("test", omit_report=True)
 
 

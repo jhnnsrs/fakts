@@ -24,10 +24,9 @@ token — real behavior), so ``token_fetches`` is typically 1 after the first
 """
 
 import time
-from typing import Dict, List, Optional, Union
 from urllib.parse import urlparse
 
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from fakts.cache.nocache import NoCache
 from fakts.fakts import Fakts
@@ -58,8 +57,8 @@ class TestingFakts(Fakts):
     counts renewals for assertions.
     """
 
-    tokens: List[str] = ["test-token"]
-    token_lifetime: Optional[float] = None
+    tokens: list[str] = Field(default_factory=lambda: ["test-token"])
+    token_lifetime: float | None = None
 
     _token_index: int = PrivateAttr(default=0)
 
@@ -71,8 +70,8 @@ class TestingFakts(Fakts):
     async def achallenge_alias(
         self,
         alias: Alias,
-        challenge_key: Optional[ChallengeKey] = None,
-        proxy: Optional[str] = None,
+        challenge_key: ChallengeKey | None = None,
+        proxy: str | None = None,
     ) -> bool:
         """Every alias is reachable in tests."""
         return True
@@ -85,14 +84,12 @@ class TestingFakts(Fakts):
         self._token_index += 1
         self.loaded_token = token
         self._token_expires_at = (
-            time.time() + self.token_lifetime
-            if self.token_lifetime is not None
-            else None
+            time.time() + self.token_lifetime if self.token_lifetime is not None else None
         )
         return token
 
 
-def _parse_alias(key: str, value: Union[str, Alias]) -> Alias:
+def _parse_alias(key: str, value: str | Alias) -> Alias:
     """Coerce a URL string like ``"http://testserver"`` into an Alias."""
     if isinstance(value, Alias):
         return value
@@ -112,11 +109,11 @@ def _parse_alias(key: str, value: Union[str, Alias]) -> Alias:
 
 
 def build_testing_fakts(
-    aliases: Dict[str, Union[str, Alias]],
+    aliases: dict[str, str | Alias],
     *,
-    tokens: Optional[List[str]] = None,
+    tokens: list[str] | None = None,
     token: str = "test-token",
-    token_lifetime: Optional[float] = None,
+    token_lifetime: float | None = None,
     deployment_name: str = "testing",
 ) -> TestingFakts:
     """Build a :class:`TestingFakts` from a service→URL mapping.
@@ -146,9 +143,7 @@ def build_testing_fakts(
             access_token=None,
         ),
         instances={
-            key: Instance(
-                service=f"testing.{key}", identifier=f"testing.{key}", aliases=[alias]
-            )
+            key: Instance(service=f"testing.{key}", identifier=f"testing.{key}", aliases=[alias])
             for key, alias in resolved.items()
         },
         statuses={key: GrantStatus.GRANTED for key in resolved},
@@ -160,9 +155,7 @@ def build_testing_fakts(
             identifier="fakts-testing",
             version="0.0.1",
             scopes=["openid"],
-            requirements=[
-                Requirement(key=key, service=f"testing.{key}") for key in resolved
-            ],
+            requirements=[Requirement(key=key, service=f"testing.{key}") for key in resolved],
         ),
         cache=NoCache(),
         tokens=tokens if tokens is not None else [token],

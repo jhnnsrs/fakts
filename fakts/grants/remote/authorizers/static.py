@@ -9,15 +9,13 @@ checks the token actually belongs to that client, so the ``client_id`` has
 to travel with it. Hence the compound ``client_id:refresh_token`` form.
 """
 
-from typing import Tuple
-
 from fakts import oauth2
 from fakts.grants.remote.errors import RetrieveError
 from fakts.grants.remote.models import FaktsEndpoint, SSLContextModel
 from fakts.oauth2 import TokenResponse
 
 
-def split_credential(value: str) -> Tuple[str, str]:
+def split_credential(value: str) -> tuple[str, str]:
     """Split a ``client_id:refresh_token`` pair.
 
     Split once from the left: refresh tokens are URL-safe base64 and never
@@ -44,9 +42,7 @@ class StaticAuthorizer(SSLContextModel):
 
     async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
         if not endpoint.token_endpoint:
-            raise RetrieveError(
-                f"{endpoint.name} advertised no token_endpoint to refresh against."
-            )
+            raise RetrieveError(f"{endpoint.name} advertised no token_endpoint to refresh against.")
 
         client_id, refresh_token = split_credential(self.token)
 

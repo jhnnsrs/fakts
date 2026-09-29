@@ -21,13 +21,13 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 import pytest
 
-from ..conftest import _reserve_free_ports
+from ..helpers import reserve_free_ports
 
 COMPOSE_FILE = str(Path(__file__).parent / "docker-compose.yml")
 TAILNET = "fakts"
@@ -80,7 +80,7 @@ def _write_tls(directory: Path, address: str) -> None:
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     ca_key = ec.generate_private_key(ec.SECP256R1())
     ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "fakts mesh lab CA")])
     ca = (
@@ -99,9 +99,15 @@ def _write_tls(directory: Path, address: str) -> None:
         )
         .add_extension(
             x509.KeyUsage(
-                digital_signature=True, content_commitment=False, key_encipherment=False,
-                data_encipherment=False, key_agreement=False, key_cert_sign=True,
-                crl_sign=True, encipher_only=False, decipher_only=False,
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
             ),
             critical=True,
         )
@@ -128,9 +134,7 @@ def _write_tls(directory: Path, address: str) -> None:
         .not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.SubjectAlternativeName(names), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-        .add_extension(
-            x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False
-        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
         .add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
             critical=False,
@@ -148,9 +152,7 @@ def _write_tls(directory: Path, address: str) -> None:
     (tls / "ca.pem").write_bytes(ca.public_bytes(pem))
     (tls / "ionskale.pem").write_bytes(cert.public_bytes(pem) + ca.public_bytes(pem))
     (tls / "ionskale.key").write_bytes(
-        key.private_bytes(
-            pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
-        )
+        key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
     )
     # Read by the container's unprivileged user; throwaway material.
     tls.chmod(0o755)
@@ -208,7 +210,7 @@ def mesh_lab() -> Iterator[MeshLab]:
     from dokker import testing
 
     address = _mesh_address()
-    https, stun = _reserve_free_ports(2)
+    https, stun = reserve_free_ports(2)
     admin = secrets.token_hex(32)
     coord_url = f"https://{address}:{https}"
 
@@ -238,7 +240,9 @@ def mesh_lab() -> Iterator[MeshLab]:
                 except TimeoutError as e:
                     # Say why: a runner's docker differs in ways a local run hides.
                     state = deployed.ps(services=["ionskale"])
-                    logs = "\n".join(line for _, line in deployed.logs(services=["ionskale"], tail=60))
+                    logs = "\n".join(
+                        line for _, line in deployed.logs(services=["ionskale"], tail=60)
+                    )
                     raise TimeoutError(f"{e}\ncontainer: {state}\nlogs:\n{logs}") from None
 
                 cli_env = {
@@ -253,15 +257,24 @@ def mesh_lab() -> Iterator[MeshLab]:
 
                 def key(tag: str) -> str:
                     out = ionscale(
-                        "auth-keys", "create", "--tailnet", TAILNET,
-                        "--pre-authorized", "--tag", tag,
+                        "auth-keys",
+                        "create",
+                        "--tailnet",
+                        TAILNET,
+                        "--pre-authorized",
+                        "--tag",
+                        tag,
                     )
                     return out.split()[-1]
 
                 ionscale("tailnets", "create", "-n", TAILNET)
                 ionscale(
-                    "tailnets", "set-acl-policy", "--tailnet", TAILNET,
-                    "--file", "/etc/ionscale/acl.json",
+                    "tailnets",
+                    "set-acl-policy",
+                    "--tailnet",
+                    TAILNET,
+                    "--file",
+                    "/etc/ionscale/acl.json",
                 )
                 os.environ["PEER_KEY"] = key("tag:peer")
                 app_key = key("tag:app")

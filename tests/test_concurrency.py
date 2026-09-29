@@ -9,10 +9,9 @@ because it looks like coverage.
 
 import asyncio
 import time
-from typing import AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
-import pytest_asyncio
 from aiohttp import web
 from pydantic import BaseModel
 
@@ -21,11 +20,12 @@ from fakts.cache.file import FileCache
 from fakts.errors import NeedsReauthenticationError, NotEnteredError
 from fakts.models import ActiveFakts
 
-from .test_fakts_behavior import make_fakts_value, make_manifest
-from .test_token_path import (
+from .helpers import (
     MemoryCache,
     StaticGrant,
     fakts_pointing_at,
+    make_fakts_value,
+    make_manifest,
     token_body,
 )
 
@@ -33,26 +33,6 @@ pytestmark = pytest.mark.asyncio
 
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
-
-
-@pytest_asyncio.fixture
-async def token_server() -> AsyncIterator[Callable[..., Awaitable[str]]]:
-    runners = []
-
-    async def start(handler: Handler) -> str:
-        app = web.Application()
-        app.router.add_route("POST", "/token", handler)
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "127.0.0.1", 0)
-        await site.start()
-        runners.append(runner)
-        return f"http://127.0.0.1:{runner.addresses[0][1]}/token"
-
-    yield start
-
-    for runner in runners:
-        await runner.cleanup()
 
 
 class SlowGrant(BaseModel):
@@ -79,9 +59,7 @@ async def _always_pass(self, alias, challenge_key=None) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_that_drops_an_instance_reresolves_aliases(
-    token_server, monkeypatch
-) -> None:
+async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, monkeypatch) -> None:
     """A re-approval that *reduces* the grant must not leave us talking to a
     service we no longer have access to.
 
@@ -122,9 +100,7 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(
         )
 
 
-async def test_adopting_a_sibling_credential_reresolves_aliases(
-    token_server, monkeypatch
-) -> None:
+async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, monkeypatch) -> None:
     """Adoption replaces the whole ActiveFakts, instances included.
 
     Pre-fix, `_aadopt_cached_credentials` never touched the alias state at
@@ -285,9 +261,7 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
 # --------------------------------------------------------------------------- #
 
 
-async def test_untimed_credential_cannot_clobber_a_rotated_one(
-    token_server, monkeypatch
-) -> None:
+async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, monkeypatch) -> None:
     """`test_alias_persist_cannot_clobber_a_rotated_credential` stamps
     `refresh_issued_at` on both sides, so it never exercises the branch that
     actually fires in production.
@@ -318,9 +292,7 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(
     sibling.auth.refresh_issued_at = time.time()
 
     cache = MemoryCache(value=sibling)
-    fakts = Fakts(
-        grant=StaticGrant(fakts=ours), cache=cache, manifest=make_manifest()
-    )
+    fakts = Fakts(grant=StaticGrant(fakts=ours), cache=cache, manifest=make_manifest())
 
     async with fakts:
         fakts.loaded_fakts = ours
@@ -380,9 +352,7 @@ async def test_alogin_on_a_healthy_session_does_nothing(token_server) -> None:
 
     endpoint = await token_server(handler)
 
-    value = fakts_pointing_at(
-        endpoint, access_token="still_good", expires_at=time.time() + 3600
-    )
+    value = fakts_pointing_at(endpoint, access_token="still_good", expires_at=time.time() + 3600)
     grant = StaticGrant(fakts=value)
     fakts = Fakts(grant=grant, cache=MemoryCache(), manifest=make_manifest())
 
@@ -413,9 +383,7 @@ async def test_alogin_recovers_a_dead_session_in_one_call(token_server) -> None:
     endpoint = await token_server(handler)
 
     dead = fakts_pointing_at(endpoint, refresh_token="dead")
-    alive = fakts_pointing_at(
-        endpoint, access_token="fresh_access", expires_at=time.time() + 3600
-    )
+    alive = fakts_pointing_at(endpoint, access_token="fresh_access", expires_at=time.time() + 3600)
     grant = StaticGrant(fakts=alive, requires_user_interaction=True)
 
     fakts = Fakts(grant=grant, cache=MemoryCache(), manifest=make_manifest())

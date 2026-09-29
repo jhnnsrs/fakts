@@ -1,9 +1,11 @@
-from pydantic import Field
 import logging
-from typing import List
-from .utils import discover_url
+
+from pydantic import Field
+
 from fakts.grants.remote import FaktsEndpoint
 from fakts.grants.remote.models import SSLContextModel
+
+from .utils import discover_url
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ class WellKnownDiscovery(SSLContextModel):
         description="If the url does not end with a slash, should we append one? ",
     )
     """If the url does not end with a slash, should we append one? A well-known endpoint should end with a slash"""
-    auto_protocols: List[str] = Field(
+    auto_protocols: list[str] = Field(
         default_factory=lambda: [],
         description="If no protocol is specified, we will try to connect to the following protocols",
     )

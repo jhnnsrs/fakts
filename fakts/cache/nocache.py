@@ -1,4 +1,3 @@
-from typing import Optional
 from fakts.models import ActiveFakts
 from fakts.protocols import FaktsCache
 
@@ -6,7 +5,7 @@ from fakts.protocols import FaktsCache
 class NoCache(FaktsCache):
     """A cache implementation that does not store any data."""
 
-    async def aload(self) -> Optional[ActiveFakts]:
+    async def aload(self) -> ActiveFakts | None:
         """Loads the configuration from the grant
 
         It will try to load the configuration from the cache file.

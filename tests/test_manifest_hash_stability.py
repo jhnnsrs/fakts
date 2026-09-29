@@ -11,29 +11,43 @@ from arkitekt_spec import AppManifest, Requirement
 from fakts.models import Manifest
 from fakts.models import Requirement as FaktsRequirement
 
-VECTORS = [{'manifest': {'identifier': 'starmist', 'version': '0.1.0', 'scopes': ['openid']},
-  'hash': 'c3253e77a90f97c4675523590ba0febcc2c9375174b7ddbb9ef7e21412512cfa'},
- {'manifest': {'identifier': 'com.x',
-               'version': '1.2.3',
-               'scopes': ['read', 'openid'],
-               'logo': 'http://l',
-               'description': 'What it is',
-               'requirements': [{'key': 'rekuest',
-                                 'service': 'live.arkitekt.rekuest',
-                                 'optional': False,
-                                 'description': 'r'},
-                                {'key': 'mikro',
-                                 'service': 'live.arkitekt.mikro',
-                                 'optional': True}],
-               'device_id': 'dev-1',
-               'public_sources': [{'kind': 'github', 'url': 'https://github.com/x/y'}]},
-  'hash': 'de81a64bdfb85ed125301d4c30f1f5562e50bc49a201c7489b07aea528c53dbf'},
- {'manifest': {'identifier': 'app',
-               'version': '0.0.1',
-               'scopes': [],
-               'requirements': None,
-               'public_sources': None},
-  'hash': 'cd432252e48177d2b07f85ee36f3296595f8ac55eb269f92a91567d951b3f802'}]
+VECTORS = [
+    {
+        "manifest": {"identifier": "starmist", "version": "0.1.0", "scopes": ["openid"]},
+        "hash": "c3253e77a90f97c4675523590ba0febcc2c9375174b7ddbb9ef7e21412512cfa",
+    },
+    {
+        "manifest": {
+            "identifier": "com.x",
+            "version": "1.2.3",
+            "scopes": ["read", "openid"],
+            "logo": "http://l",
+            "description": "What it is",
+            "requirements": [
+                {
+                    "key": "rekuest",
+                    "service": "live.arkitekt.rekuest",
+                    "optional": False,
+                    "description": "r",
+                },
+                {"key": "mikro", "service": "live.arkitekt.mikro", "optional": True},
+            ],
+            "device_id": "dev-1",
+            "public_sources": [{"kind": "github", "url": "https://github.com/x/y"}],
+        },
+        "hash": "de81a64bdfb85ed125301d4c30f1f5562e50bc49a201c7489b07aea528c53dbf",
+    },
+    {
+        "manifest": {
+            "identifier": "app",
+            "version": "0.0.1",
+            "scopes": [],
+            "requirements": None,
+            "public_sources": None,
+        },
+        "hash": "cd432252e48177d2b07f85ee36f3296595f8ac55eb269f92a91567d951b3f802",
+    },
+]
 
 
 @pytest.mark.parametrize("vector", VECTORS)

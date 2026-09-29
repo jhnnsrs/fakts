@@ -31,8 +31,9 @@ def could_copy_to_clipboard(text: str) -> bool:
 
 
 try:
-    from rich import print as rprint
-    from rich.panel import Panel
+    # Optional: a nicer prompt when rich is installed.
+    from rich import print as rprint  # pyright: ignore[reportMissingImports]
+    from rich.panel import Panel  # pyright: ignore[reportMissingImports]
 
     def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
         """Prints the device code prompt

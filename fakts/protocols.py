@@ -1,12 +1,11 @@
-from typing import Dict, Any, Union, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from fakts.models import ActiveFakts
 
+NestedFaktValue = str | int | float | bool | None | dict[str, Any] | list[Any]
 
-NestedFaktValue = Union[str, int, float, bool, None, Dict[str, Any], list[Any]]
 
-
-FaktValue = Union[str, int, float, bool, None, Dict[str, NestedFaktValue], list[NestedFaktValue]]
+FaktValue = str | int | float | bool | None | dict[str, NestedFaktValue] | list[NestedFaktValue]
 
 
 @runtime_checkable

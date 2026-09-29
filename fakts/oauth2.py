@@ -29,7 +29,8 @@ import logging
 import os
 import ssl
 import time
-from typing import Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 from urllib.parse import urlparse
 
 import aiohttp
@@ -93,8 +94,8 @@ class OAuth2ErrorResponse(Exception):
     def __init__(
         self,
         error: str,
-        description: Optional[str] = None,
-        status: Optional[int] = None,
+        description: str | None = None,
+        status: int | None = None,
     ) -> None:
         self.error = error
         self.description = description
@@ -114,16 +115,16 @@ class TokenResponse(BaseModel):
     """
 
     access_token: str
-    refresh_token: Optional[str] = None
+    refresh_token: str | None = None
     token_type: str = "Bearer"
-    expires_in: Optional[int] = None
-    scope: Optional[str] = None
-    client_id: Optional[str] = None
+    expires_in: int | None = None
+    scope: str | None = None
+    client_id: str | None = None
 
-    self_: Optional[SelfFakt] = Field(default=None, alias="self")
-    instances: Dict[str, Instance] = Field(default_factory=dict)
-    statuses: Dict[str, GrantStatus] = Field(default_factory=dict)
-    mesh: Optional[MeshClaim] = None
+    self_: SelfFakt | None = Field(default=None, alias="self")
+    instances: dict[str, Instance] = Field(default_factory=dict)
+    statuses: dict[str, GrantStatus] = Field(default_factory=dict)
+    mesh: MeshClaim | None = None
     """Sent once, with the first token, when a mesh key was requested and
     granted."""
 
@@ -193,7 +194,7 @@ def _connector(ssl_context: ssl.SSLContext) -> aiohttp.TCPConnector:
     return aiohttp.TCPConnector(ssl=ssl_context)
 
 
-async def _handle(response: aiohttp.ClientResponse, url: str) -> Dict[str, Any]:
+async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     """Parse an OAuth2 response body, raising :class:`OAuth2ErrorResponse`.
 
     Two shapes have to be tolerated beyond plain RFC 6749: the fakts device
@@ -206,8 +207,7 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> Dict[str, Any]:
         data = json.loads(text)
     except json.JSONDecodeError as e:
         raise FaktsError(
-            f"{url} did not answer with JSON (status {response.status}): "
-            f"{text[:200]}"
+            f"{url} did not answer with JSON (status {response.status}): {text[:200]}"
         ) from e
 
     if not isinstance(data, dict):
@@ -236,21 +236,23 @@ async def apost_form(
     *,
     ssl_context: ssl.SSLContext,
     allow_insecure_transport: bool = False,
-    bearer: Optional[str] = None,
+    bearer: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """POST ``application/x-www-form-urlencoded`` to an OAuth2 endpoint."""
     check_transport(url, allow_insecure_transport)
     headers = {"Accept": "application/json"}
     if bearer:
         headers["Authorization"] = f"Bearer {bearer}"
 
-    async with aiohttp.ClientSession(
-        connector=_connector(ssl_context),
-        timeout=aiohttp.ClientTimeout(total=timeout),
-    ) as session:
-        async with session.post(url, data=dict(data), headers=headers) as response:
-            return await _handle(response, url)
+    async with (
+        aiohttp.ClientSession(
+            connector=_connector(ssl_context),
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as session,
+        session.post(url, data=dict(data), headers=headers) as response,
+    ):
+        return await _handle(response, url)
 
 
 async def apost_json(
@@ -259,9 +261,9 @@ async def apost_json(
     *,
     ssl_context: ssl.SSLContext,
     allow_insecure_transport: bool = False,
-    bearer: Optional[str] = None,
+    bearer: str | None = None,
     timeout: int = DEFAULT_TIMEOUT,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """POST a JSON body.
 
     The device authorization endpoint takes JSON with a *nested* manifest
@@ -273,15 +275,17 @@ async def apost_json(
     if bearer:
         headers["Authorization"] = f"Bearer {bearer}"
 
-    async with aiohttp.ClientSession(
-        connector=_connector(ssl_context),
-        timeout=aiohttp.ClientTimeout(total=timeout),
-    ) as session:
-        async with session.post(url, json=dict(payload), headers=headers) as response:
-            return await _handle(response, url)
+    async with (
+        aiohttp.ClientSession(
+            connector=_connector(ssl_context),
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as session,
+        session.post(url, json=dict(payload), headers=headers) as response,
+    ):
+        return await _handle(response, url)
 
 
-def resolve_expiry(expires_in: Optional[int], skew: int, now: Optional[float] = None) -> Optional[float]:
+def resolve_expiry(expires_in: int | None, skew: int, now: float | None = None) -> float | None:
     """Turn ``expires_in`` into an absolute timestamp.
 
     Three cases, all of which have bitten someone:
@@ -312,13 +316,13 @@ def resolve_expiry(expires_in: Optional[int], skew: int, now: Optional[float] = 
 
 
 def merge_token_response(
-    previous: Optional[ActiveFakts],
+    previous: ActiveFakts | None,
     response: TokenResponse,
     *,
     token_endpoint: str,
-    report_endpoint: Optional[str],
+    report_endpoint: str | None,
     skew: int,
-    fallback_client_id: Optional[str] = None,
+    fallback_client_id: str | None = None,
 ) -> ActiveFakts:
     """Build a *new* :class:`ActiveFakts` from a token response.
 
@@ -340,9 +344,7 @@ def merge_token_response(
             "the authorization step. The client cannot refresh without one."
         )
 
-    refresh_token = response.refresh_token or (
-        previous.auth.refresh_token if previous else None
-    )
+    refresh_token = response.refresh_token or (previous.auth.refresh_token if previous else None)
     if not refresh_token:
         raise FaktsError(
             "The token response carried no refresh_token. fakts protocol v2 is "
@@ -362,7 +364,9 @@ def merge_token_response(
         refresh_token=refresh_token,
         access_token=response.access_token,
         expires_at=resolve_expiry(response.expires_in, skew, now),
-        refresh_issued_at=now if rotated else (previous.auth.refresh_issued_at if previous else now),
+        refresh_issued_at=now
+        if rotated
+        else (previous.auth.refresh_issued_at if previous else now),
         chain_started_at=chain_started_at,
         token_type=response.token_type or "Bearer",
     )
@@ -380,7 +384,9 @@ def merge_token_response(
         self=self_fakt,
         auth=auth,
         instances=instances,
-        statuses=response.statuses if response.statuses else (previous.statuses if previous else {}),
+        statuses=response.statuses
+        if response.statuses
+        else (previous.statuses if previous else {}),
         # Only the first token carries the key; keep it for later starts.
         mesh=response.mesh or (previous.mesh if previous else None),
     )
@@ -388,7 +394,7 @@ def merge_token_response(
 
 def _merge_instances(
     previous: Mapping[str, Instance], incoming: Mapping[str, Instance]
-) -> Dict[str, Instance]:
+) -> dict[str, Instance]:
     """Adopt the server's instances while keeping the learned alias order.
 
     The server is authoritative about *which* aliases exist; the client is
@@ -398,7 +404,7 @@ def _merge_instances(
     if not incoming:
         return dict(previous)
 
-    merged: Dict[str, Instance] = {}
+    merged: dict[str, Instance] = {}
     for key, instance in incoming.items():
         old = previous.get(key)
         if old is None or not old.aliases:
@@ -415,7 +421,7 @@ def _merge_instances(
     return merged
 
 
-def instances_changed(previous: Optional[ActiveFakts], candidate: ActiveFakts) -> bool:
+def instances_changed(previous: ActiveFakts | None, candidate: ActiveFakts) -> bool:
     """Whether the set of reachable services materially changed.
 
     Used to invalidate resolved aliases after a refresh: a re-approval that

@@ -7,11 +7,9 @@ protocol with no adapter, and that the auth link's stale-token path survives
 being narrowed to it.
 """
 
-from typing import Optional
-
 import pytest
 
-from fakts import Fakts, Own, Require, TokenLoader
+from fakts import Own, Require, TokenLoader
 from fakts.testing import build_testing_fakts
 
 
@@ -50,12 +48,12 @@ class _RecordingLoader:
     """A two-line stand-in -- the point of narrowing to a protocol."""
 
     def __init__(self) -> None:
-        self.refreshed_with: list[Optional[str]] = []
+        self.refreshed_with: list[str | None] = []
 
     async def aget_token(self) -> str:
         return "stale-token"
 
-    async def arefresh_token(self, stale_token: Optional[str] = None) -> str:
+    async def arefresh_token(self, stale_token: str | None = None) -> str:
         self.refreshed_with.append(stale_token)
         return "fresh-token"
 
@@ -68,8 +66,10 @@ async def test_a_401_refreshes_with_the_token_that_failed():
     the stale token would make every retry of one rejected operation rotate the
     refresh token again, instead of collapsing into a single renewal.
     """
-    from fakts.contrib.rath.auth import FaktsAuthLink
+    pytest.importorskip("rath")  # the optional rath extra
     from rath.operation import Operation
+
+    from fakts.contrib.rath.auth import FaktsAuthLink
 
     loader = _RecordingLoader()
     link = FaktsAuthLink(token_loader=loader)
@@ -83,8 +83,10 @@ async def test_a_401_refreshes_with_the_token_that_failed():
 
 @pytest.mark.asyncio
 async def test_a_bare_authorization_header_refreshes_with_none():
-    from fakts.contrib.rath.auth import FaktsAuthLink
+    pytest.importorskip("rath")  # the optional rath extra
     from rath.operation import Operation
+
+    from fakts.contrib.rath.auth import FaktsAuthLink
 
     loader = _RecordingLoader()
     link = FaktsAuthLink(token_loader=loader)

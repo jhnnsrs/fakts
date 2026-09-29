@@ -17,9 +17,9 @@ import asyncio
 import logging
 import time
 import webbrowser
-from urllib.parse import urlparse
+from collections.abc import Awaitable, Callable
 from enum import Enum
-from typing import Awaitable, Callable, List, Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -51,8 +51,7 @@ def _as_seconds(raw: object, default: int, field: str) -> int:
         return int(raw)  # type: ignore[call-overload]
     except (TypeError, ValueError) as e:
         raise DeviceCodeError(
-            f"The device authorization endpoint sent a non-numeric "
-            f"'{field}': {raw!r}."
+            f"The device authorization endpoint sent a non-numeric '{field}': {raw!r}."
         ) from e
 
 
@@ -110,10 +109,10 @@ class DeviceCodeAuthorizer(SSLContextModel):
     expiration_time_seconds: int = 300
     """How long the device code should stay valid. The server clamps this to
     its own maximum, so the returned ``expires_in`` may be shorter."""
-    redirect_uris: List[str] = Field(default_factory=list)
+    redirect_uris: list[str] = Field(default_factory=list)
     requested_client_kind: ClientKind = ClientKind.DEVELOPMENT
     requested_client_role: ClientRole = ClientRole.INTERFACE
-    timeout: Optional[int] = None
+    timeout: float | None = None
     """The client's own deadline. ``None`` means "trust the server's
     ``expires_in``"."""
     open_browser: bool = True
@@ -122,9 +121,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
     """Ask for a key to join the deployment's mesh; it comes back once, with
     the first token (as ``mesh``), if the approver allows it."""
 
-    sleeper: Callable[[float], Awaitable[None]] = Field(
-        default=asyncio.sleep, exclude=True
-    )
+    sleeper: Callable[[float], Awaitable[None]] = Field(default=asyncio.sleep, exclude=True)
     """Injected so tests can assert the polling cadence without spending it."""
 
     requires_user_interaction: bool = True
@@ -196,9 +193,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
 
         token_endpoint = started.get("token_endpoint") or endpoint.token_endpoint
         if not token_endpoint:
-            raise DeviceCodeError(
-                f"{endpoint.name} advertised no token_endpoint to poll."
-            )
+            raise DeviceCodeError(f"{endpoint.name} advertised no token_endpoint to poll.")
 
         response = await self._apoll(
             token_endpoint,
@@ -268,16 +263,12 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     interval = min(interval + 5, max(1, int(remaining)))
                     continue
                 if e.error == "access_denied":
-                    raise UserDeniedError(
-                        "The user declined to grant this app access."
-                    ) from e
+                    raise UserDeniedError("The user declined to grant this app access.") from e
                 if e.error == "expired_token":
                     raise DeviceCodeExpiredError(
                         "The device code expired before it was approved."
                     ) from e
-                raise DeviceCodeError(
-                    f"The token endpoint refused the device code: {e}"
-                ) from e
+                raise DeviceCodeError(f"The token endpoint refused the device code: {e}") from e
 
             return TokenResponse(**data)
 

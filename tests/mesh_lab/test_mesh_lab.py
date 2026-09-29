@@ -16,7 +16,7 @@ from fakts import Fakts
 from fakts.mesh import MeshOptions, NativeNode
 from fakts.models import ActiveFakts, Alias, Instance, MeshClaim
 
-from ..test_fakts_behavior import CountingGrant, make_fakts_value, make_manifest
+from ..helpers import CountingGrant, make_fakts_value, make_manifest
 from .conftest import MeshLab
 
 pytestmark = [pytest.mark.integration, pytest.mark.mesh]
@@ -38,9 +38,7 @@ def peer_fakts(lab: MeshLab, *, with_key: bool = True) -> ActiveFakts:
         aliases=[Alias(id="peer", host=lab.peer, port=80, challenge="ht", kind="mesh")],
     )
     if with_key:
-        value.mesh = MeshClaim(
-            ionscale_auth_key=lab.app_key, ionscale_coord_url=lab.coord_url
-        )
+        value.mesh = MeshClaim(ionscale_auth_key=lab.app_key, ionscale_coord_url=lab.coord_url)
     return value
 
 
@@ -66,9 +64,7 @@ async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(
 
         async with aiohttp.ClientSession() as session:
             # Over the node's HTTP proxy, as every GraphQL link goes.
-            async with session.get(
-                alias.to_http_path(), proxy=alias.proxy
-            ) as response:
+            async with session.get(alias.to_http_path(), proxy=alias.proxy) as response:
                 assert response.status == 200
 
             # Over a local TCP forward the alias hands out, as LiveKit's
@@ -86,9 +82,7 @@ async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(
 
 
 @pytest.mark.asyncio
-async def test_a_joined_node_rejoins_without_a_key(
-    mesh_lab: MeshLab, tmp_path: Path
-) -> None:
+async def test_a_joined_node_rejoins_without_a_key(mesh_lab: MeshLab, tmp_path: Path) -> None:
     async with lab_fakts(peer_fakts(mesh_lab), tmp_path) as fakts:
         await fakts.aget_alias("test")
     assert any(NativeNode.has_state(d) for d in tmp_path.iterdir())
@@ -97,9 +91,11 @@ async def test_a_joined_node_rejoins_without_a_key(
     async with lab_fakts(peer_fakts(mesh_lab, with_key=False), tmp_path) as fakts:
         alias = await fakts.aget_alias("test")
         local = await alias.aforward()
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"http://{local}/") as response:
-                assert response.status == 200
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(f"http://{local}/") as response,
+        ):
+            assert response.status == 200
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,13 @@
 import asyncio
+import datetime
+import json
+import logging
 import os
 import stat
 import uuid
-from typing import Optional
+
 import pydantic
-import datetime
-import logging
-import json
+
 from fakts.models import ActiveFakts
 
 try:
@@ -17,6 +18,7 @@ except ImportError:  # pragma: no cover - Windows
     pwd = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
 
 def ensure_private_dir(path: str) -> None:
     """Create ``path`` (and its parents) and make it private to this user.
@@ -52,9 +54,7 @@ def ensure_private_dir(path: str) -> None:
             return
         if info.st_mode & 0o077:
             os.chmod(path, 0o700)
-            logger.debug(
-                "Tightened %s from %s to 0700.", path, oct(info.st_mode & 0o777)
-            )
+            logger.debug("Tightened %s from %s to 0700.", path, oct(info.st_mode & 0o777))
     except OSError:
         logger.debug("Could not make %s private.", path, exc_info=True)
 
@@ -107,7 +107,6 @@ def _group_may_contain_others(gid: int, owner_uid: int) -> bool:
         return True
 
     return bool(members - {owner})
-
 
 
 class CacheFile(pydantic.BaseModel):
@@ -172,10 +171,10 @@ class FileCache(pydantic.BaseModel):
     )
     """The hash to validate the cache against (if this value differes from the one in the cache, the grant will be reloaded)"""
 
-    expires_in: Optional[int] = None
+    expires_in: int | None = None
     """When should the cache expire"""
 
-    async def aload(self) -> Optional[ActiveFakts]:
+    async def aload(self) -> ActiveFakts | None:
         """Loads the configuration from the grant
 
         It will try to load the configuration from the cache file.
@@ -234,9 +233,12 @@ class FileCache(pydantic.BaseModel):
         if self.hash and cache.hash != self.hash:
             return None
 
-        if self.expires_in:
-            if cache.created + datetime.timedelta(seconds=self.expires_in) < datetime.datetime.now():
-                return None
+        if (
+            self.expires_in
+            and cache.created + datetime.timedelta(seconds=self.expires_in)
+            < datetime.datetime.now()
+        ):
+            return None
 
         return cache.fakts
 
@@ -464,9 +466,7 @@ class FileCache(pydantic.BaseModel):
             logger.debug("Could not fsync %s after writing the cache.", directory)
 
     @staticmethod
-    async def _areplace_with_retry(
-        source: str, destination: str, attempts: int = 5
-    ) -> None:
+    async def _areplace_with_retry(source: str, destination: str, attempts: int = 5) -> None:
         """os.replace, tolerating a concurrent reader on Windows.
 
         POSIX renames over an open file happily; Windows raises

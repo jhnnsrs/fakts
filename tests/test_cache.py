@@ -8,12 +8,10 @@ import pytest
 from fakts import Fakts
 from fakts.cache.file import CacheFile, FileCache
 from fakts.cache.nocache import NoCache
-
 from fakts.grants.hard import HardFaktsGrant
-from fakts.models import ActiveFakts, AuthFakt, Instance, Manifest, SelfFakt, Alias, Requirement
+from fakts.models import ActiveFakts, Alias, AuthFakt, Instance, Manifest, Requirement, SelfFakt
 
-from .test_fakts_behavior import make_fakts_value
-
+from .helpers import make_fakts_value
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,7 +19,10 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 def test_cache():
     grant = HardFaktsGrant(
         fakts=ActiveFakts(
-            self=SelfFakt(deployment_name="test_deployment", alias=Alias(id="test", host="localhost", port=8000, path="/test")),
+            self=SelfFakt(
+                deployment_name="test_deployment",
+                alias=Alias(id="test", host="localhost", port=8000, path="/test"),
+            ),
             auth=AuthFakt(
                 client_id="test_client_id",
                 refresh_token="test_refresh_token",
@@ -65,6 +66,7 @@ def test_cache():
 # --------------------------------------------------------------------------- #
 # FileCache edge cases (isolated via tmp_path)
 # --------------------------------------------------------------------------- #
+
 
 @pytest.mark.asyncio
 async def test_filecache_roundtrip(tmp_path: Path):

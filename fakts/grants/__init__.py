@@ -25,7 +25,6 @@ from .env import EnvGrant
 from .errors import GrantError
 from .remote import RemoteGrant
 
-
 __all__ = [
     "EnvGrant",
     "GrantError",

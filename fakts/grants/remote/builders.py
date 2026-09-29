@@ -1,6 +1,5 @@
 import ssl
 from hashlib import sha256
-from typing import Optional
 
 import certifi
 
@@ -21,7 +20,7 @@ from fakts.models import ActiveFakts, Manifest
 from fakts.protocols import FaktsCache
 
 
-def _resolve_ssl(ssl_context: Optional[ssl.SSLContext]) -> ssl.SSLContext:
+def _resolve_ssl(ssl_context: ssl.SSLContext | None) -> ssl.SSLContext:
     """One TLS context for the whole client.
 
     Discovery, the grant and the runtime each used to build their own, so
@@ -31,9 +30,7 @@ def _resolve_ssl(ssl_context: Optional[ssl.SSLContext]) -> ssl.SSLContext:
     return ssl_context or ssl.create_default_context(cafile=certifi.where())
 
 
-def _build_cache(
-    url: str, manifest: Manifest, cache_file: str, no_cache: bool
-) -> FaktsCache:
+def _build_cache(url: str, manifest: Manifest, cache_file: str, no_cache: bool) -> FaktsCache:
     """Build the default cache: a FileCache bound to the server url and the
     manifest hash, so a changed manifest *or* a different server invalidates
     previously cached fakts (instead of silently serving the old server's
@@ -55,11 +52,11 @@ def build_device_code_fakts(
     headless: bool = False,
     requested_client_kind: ClientKind = ClientKind.DEVELOPMENT,
     requested_client_role: ClientRole = ClientRole.INTERFACE,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     allow_insecure_transport: bool = False,
-    ssl_context: Optional[ssl.SSLContext] = None,
-    mesh: Optional[MeshOptions] = None,
-    mesh_proxy: Optional[str] = None,
+    ssl_context: ssl.SSLContext | None = None,
+    mesh: MeshOptions | None = None,
+    mesh_proxy: str | None = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the device code flow.
 
@@ -161,7 +158,7 @@ def build_redeem_fakts(
     cache_file: str = ".fakts_cache.json",
     no_cache: bool = False,
     allow_insecure_transport: bool = False,
-    ssl_context: Optional[ssl.SSLContext] = None,
+    ssl_context: ssl.SSLContext | None = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the redeem flow (headless/CI).
 

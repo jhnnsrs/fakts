@@ -1,18 +1,21 @@
-from dokker import Deployment
-from fakts import Fakts
 import os
+
+import pytest
+from dokker import Deployment
+
+from fakts import Fakts
 from fakts.cache.nocache import NoCache
-from fakts.grants.remote.base import RemoteGrant
 from fakts.grants.remote.authorizers.device_code import (
     ClientKind,
     DeviceCodeAuthorizer,
 )
+from fakts.grants.remote.base import RemoteGrant
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts.grants.remote.models import FaktsEndpoint
 from fakts.models import Manifest, Requirement
-import pytest
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
+
 
 @pytest.mark.integration
 def test_device_code_grant_device_id(deployed_infra: Deployment):
@@ -33,10 +36,10 @@ def test_device_code_grant_device_id(deployed_infra: Deployment):
         on the approval page — which is what the server looks the pending
         registration up by.
         """
-        
 
         await deployed_infra.arun(
-            "lok", f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --hub localhost"
+            "lok",
+            f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --hub localhost",
         )
 
     fakts = Fakts(

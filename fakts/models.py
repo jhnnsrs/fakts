@@ -1,11 +1,11 @@
+import json
+from enum import Enum
+from hashlib import sha256
+from typing import Any
 
 from arkitekt_spec import AppManifest, Requirement
 from arkitekt_spec.declare.wiring import Alias
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
-from typing import Any, List, Optional
-import json
-from enum import Enum
-from hashlib import sha256
 
 
 class GrantStatus(str, Enum):
@@ -26,8 +26,6 @@ class GrantStatus(str, Enum):
     """The deployment does not offer this service."""
     UNKNOWN = "unknown"
     """The server did not report a (known) status for this requirement."""
-
-
 
 
 class ChallengeKey(BaseModel):
@@ -56,7 +54,7 @@ class Instance(BaseModel):
     service: str
     identifier: str
     aliases: list[Alias] = []
-    challenge_key: Optional[ChallengeKey] = None
+    challenge_key: ChallengeKey | None = None
     """Optional public key of the service. If set, alias challenges must
     answer with a valid signature (see ChallengeKey); the same key is used
     for all aliases of the instance (one service identity, many routes)."""
@@ -84,11 +82,11 @@ class AuthFakt(BaseModel):
     persist whatever the latest response carried."""
     token_endpoint: str
     """Absolute URL of the OAuth2 token endpoint, taken from discovery."""
-    report_endpoint: Optional[str] = None
+    report_endpoint: str | None = None
     """Where to report the alias resolution outcome. Derived from the
     endpoint's ``base_url`` (the server does not publish it). Endpoints that
     do not support reporting simply omit it, and the client skips the report."""
-    scopes: List[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
     """The *granted* scopes, as returned by the token endpoint. Under
     per-requirement consent this legitimately differs from what was asked
     for, so it must never be validated against the request."""
@@ -96,19 +94,19 @@ class AuthFakt(BaseModel):
     refresh_token: str
     """The live rotating secret. Every use invalidates the previous value, so
     a rotated token must be persisted before the new access token is used."""
-    access_token: Optional[str] = None
+    access_token: str | None = None
     """The current access token. Persisted so that sibling processes sharing
     a cache can reuse it instead of each racing to refresh; may be stale on
     load, which is what ``expires_at`` is for."""
-    expires_at: Optional[float] = None
+    expires_at: float | None = None
     """Absolute unix timestamp at which ``access_token`` expires. ``None``
     means the server declared no lifetime: treat the token as opaque and
     refresh only when it is actually rejected."""
-    refresh_issued_at: Optional[float] = None
+    refresh_issued_at: float | None = None
     """When the current refresh token was issued (unix ts). Lets the client
     recognise a blown sliding window locally instead of guessing at an
     ``invalid_grant``."""
-    chain_started_at: Optional[float] = None
+    chain_started_at: float | None = None
     """When this refresh chain began (unix ts), carried across rotations.
     Servers cap the absolute lifetime of a chain independently of the
     sliding window, so this is what detects "this authorization is simply
@@ -121,11 +119,11 @@ class SelfFakt(BaseModel):
 
     deployment_name: str
     alias: Alias
-    sub: Optional[str] = None
+    sub: str | None = None
     """The user the app acts for."""
-    organization: Optional[str] = None
+    organization: str | None = None
     """The organization the app was authorized in."""
-    hub: Optional[str] = None
+    hub: str | None = None
     """The hub the app is bound to (its mesh tag is ``tag:hub-<hub>``)."""
 
     @field_validator("sub", "organization", "hub", mode="before")
@@ -140,7 +138,7 @@ class MeshClaim(BaseModel):
     allowed it. Kept across refreshes: the node joins with it only once."""
 
     ionscale_auth_key: str
-    ionscale_coord_url: Optional[str] = None
+    ionscale_coord_url: str | None = None
 
 
 class ActiveFakts(BaseModel):
@@ -155,7 +153,7 @@ class ActiveFakts(BaseModel):
     ``instances``). Optional: servers that do not support statuses omit it,
     and unknown status values are coerced to UNKNOWN instead of failing
     validation (so a newer server cannot break older clients)."""
-    mesh: Optional[MeshClaim] = None
+    mesh: MeshClaim | None = None
     """The mesh key, if one was granted (see :class:`MeshClaim`)."""
 
     @field_validator("statuses", mode="before")
@@ -172,10 +170,6 @@ class ActiveFakts(BaseModel):
                 for key, value in v.items()
             }
         return v
-
-
-
-
 
 
 class PublicSource(BaseModel):
@@ -209,14 +203,14 @@ class Manifest(AppManifest):
     records -- and the fields below exist only at login.
     """
 
-    requirements: Optional[List[Requirement]] = Field(default_factory=lambda: [])
+    requirements: list[Requirement] | None = Field(default_factory=lambda: [])
     """ The services the app needs, filled in by the server's instances. """
-    device_id: Optional[str] = Field(
+    device_id: str | None = Field(
         default=None, validation_alias=AliasChoices("device_id", "node_id")
     )
     """ The device this app instance runs on; the runtime sets it. ``node_id`` is the
     deprecated spelling, still read from older configs and servers. """
-    public_sources: Optional[List[PublicSource]] = Field(default_factory=lambda: [])
+    public_sources: list[PublicSource] | None = Field(default_factory=lambda: [])
 
     model_config = ConfigDict(extra="forbid")
     """ A manifest is written in code: a misspelled field must fail, not vanish. """

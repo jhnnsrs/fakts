@@ -8,7 +8,7 @@ when a lab mesh is configured.
 
 import sys
 from pathlib import Path
-from typing import Any, List
+from typing import Any, ClassVar
 
 import pytest
 import pytest_asyncio
@@ -22,7 +22,7 @@ from fakts.mesh import MeshError, MeshOptions, NativeNode, hostname_label
 from fakts.models import ActiveFakts, Alias, Instance, MeshClaim, SelfFakt
 from fakts.oauth2 import TokenResponse, merge_token_response
 
-from .test_fakts_behavior import CountingGrant, make_fakts_value, make_manifest
+from .helpers import CountingGrant, make_fakts_value, make_manifest
 
 
 def test_hostnames_are_dns_labels() -> None:
@@ -34,9 +34,7 @@ def test_hostnames_are_dns_labels() -> None:
 
 def test_nodes_live_in_the_native_directory(tmp_path: Path) -> None:
     # The Rust client's native backend names its node directories the same way.
-    assert (
-        MeshOptions(state_root=tmp_path).node_dir("app-x") == tmp_path / "app-x-native"
-    )
+    assert MeshOptions(state_root=tmp_path).node_dir("app-x") == tmp_path / "app-x-native"
 
 
 def test_self_ids_may_be_numbers() -> None:
@@ -56,20 +54,18 @@ def test_self_ids_may_be_numbers() -> None:
 async def test_the_mesh_key_is_only_requested_when_asked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent: List[dict] = []
+    sent: list[dict] = []
 
     async def capture(url: str, payload: dict, **kwargs: Any) -> dict:
         sent.append(payload)
         return {}
 
-    monkeypatch.setattr(
-        "fakts.grants.remote.authorizers.device_code.oauth2.apost_json", capture
-    )
+    monkeypatch.setattr("fakts.grants.remote.authorizers.device_code.oauth2.apost_json", capture)
     endpoint = FaktsEndpoint(device_authorization_endpoint="http://localhost/device")
     await DeviceCodeAuthorizer(manifest=make_manifest()).arequest_code(endpoint)
-    await DeviceCodeAuthorizer(
-        manifest=make_manifest(), request_auth_key=True
-    ).arequest_code(endpoint)
+    await DeviceCodeAuthorizer(manifest=make_manifest(), request_auth_key=True).arequest_code(
+        endpoint
+    )
     assert "request_auth_key" not in sent[0]
     assert sent[1]["request_auth_key"] is True
 
@@ -106,9 +102,7 @@ def test_the_mesh_key_survives_refreshes() -> None:
     )
     assert refreshed.mesh == first.mesh
     # And it is cached with the rest.
-    assert (
-        ActiveFakts.model_validate_json(refreshed.model_dump_json()).mesh == first.mesh
-    )
+    assert ActiveFakts.model_validate_json(refreshed.model_dump_json()).mesh == first.mesh
 
 
 # --- resolution ------------------------------------------------------------
@@ -139,7 +133,7 @@ def mesh_fakts() -> ActiveFakts:
 @pytest_asyncio.fixture
 async def mesh_proxy() -> Any:
     """A forward proxy that answers every challenge and records the request lines."""
-    seen: List[str] = []
+    seen: list[str] = []
 
     async def handle(request: web.Request) -> web.Response:
         seen.append(f"{request.method} {request.url}")
@@ -177,16 +171,14 @@ async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: Any) ->
             await again.aturn()
         # The instance (what gets cached) never holds it.
         assert fakts.loaded_fakts is not None
-        assert all(
-            a.proxy is None for a in fakts.loaded_fakts.instances["test"].aliases
-        )
+        assert all(a.proxy is None for a in fakts.loaded_fakts.instances["test"].aliases)
 
 
 @pytest.mark.asyncio
 async def test_mesh_aliases_are_skipped_without_the_mesh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    challenged: List[str] = []
+    challenged: list[str] = []
 
     async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None) -> bool:
         challenged.append(alias.id)
@@ -206,13 +198,13 @@ async def test_mesh_aliases_are_skipped_without_the_mesh(
 
 
 class FakeNode:
-    started: List[dict] = []
+    started: ClassVar[list[dict]] = []
 
     def __init__(self, statedir: str, proxy_url: str):
         self.statedir = statedir
         self.proxy_url = proxy_url
         self.closed = False
-        self.forwards: List[tuple] = []
+        self.forwards: list[tuple] = []
 
     @staticmethod
     async def start(statedir, hostname, control_url=None, auth_key=None, timeout=90):
@@ -330,13 +322,9 @@ async def test_fakts_runs_the_native_node(
 
 
 @pytest.mark.asyncio
-async def test_native_needs_login_is_a_mesh_error(
-    fake_arkitekt_mesh: Any, tmp_path: Path
-) -> None:
+async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
     with pytest.raises(MeshError, match="no mesh key was granted") as raised:
-        await NativeNode.start(
-            MeshOptions(), tmp_path / "n", "app", "https://mesh.example", None
-        )
+        await NativeNode.start(MeshOptions(), tmp_path / "n", "app", "https://mesh.example", None)
     assert raised.value.code == "needs_login"
 
 
@@ -364,9 +352,7 @@ async def test_node_errors_keep_their_code(
 
     monkeypatch.setattr(FakeNode, "start", staticmethod(fail))
     with pytest.raises(MeshError, match=message) as raised:
-        await NativeNode.start(
-            MeshOptions(), tmp_path / "n", "app", "https://mesh.example", "key"
-        )
+        await NativeNode.start(MeshOptions(), tmp_path / "n", "app", "https://mesh.example", "key")
     assert raised.value.code == code
 
 
@@ -376,16 +362,12 @@ async def test_missing_bindings_say_what_to_install(
 ) -> None:
     monkeypatch.setitem(sys.modules, "arkitekt_mesh", None)
     with pytest.raises(MeshError, match=r"fakts\[mesh\]") as raised:
-        await NativeNode.start(
-            MeshOptions(), tmp_path / "n", "app", "https://mesh.example", "key"
-        )
+        await NativeNode.start(MeshOptions(), tmp_path / "n", "app", "https://mesh.example", "key")
     assert raised.value.code is None
 
 
 @pytest.mark.asyncio
-async def test_no_key_and_no_node_skips_the_mesh(
-    fake_arkitekt_mesh: Any, tmp_path: Path
-) -> None:
+async def test_no_key_and_no_node_skips_the_mesh(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
     fakts = Fakts(
         grant=CountingGrant(fakts=mesh_fakts()),
         manifest=make_manifest(),

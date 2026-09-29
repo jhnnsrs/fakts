@@ -1,10 +1,11 @@
-from fakts.grants.remote.models import FaktsEndpoint
-import aiohttp
 import logging
 import ssl
+
+import aiohttp
+
 from fakts.grants.remote.errors import DiscoveryError
+from fakts.grants.remote.models import FaktsEndpoint
 from fakts.utils import truncate
-from typing import Optional, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,69 +36,71 @@ async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout: int = 
     """
     url = f"{url}.well-known/fakts"
 
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(ssl=ssl_context),
-        headers={"User-Agent": "Fakts/0.1", "Accept": "application/json"},
-    ) as session:
-        async with session.get(
+    async with (
+        aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=ssl_context),
+            headers={"User-Agent": "Fakts/0.1", "Accept": "application/json"},
+        ) as session,
+        session.get(
             url,
             timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as resp:
-            if resp.status == 200:
-                try:
-                    data = await resp.json()
-                except Exception as e:
-                    body = await resp.text()
-                    raise DiscoveryError(
-                        f"The well-known endpoint {url} answered with status 200, "
-                        f"but the response is not valid JSON. Is a Fakts server "
-                        f"really running at this address? "
-                        f"Response body: {truncate(body) or '<empty>'}"
-                    ) from e
-
-                if "name" not in data:
-                    logger.error(f"Malformed answer: {data}")
-                    raise DiscoveryError(
-                        f"The well-known endpoint {url} answered, but the response "
-                        f"is missing the required 'name' field. Is a Fakts server "
-                        f"really running at this address? Received: {truncate(str(data))}"
-                    )
-
-                # A v1 server omits protocol_version entirely. Name that
-                # explicitly: a missing token_endpoint further down is a
-                # baffling symptom for what is really a version mismatch.
-                protocol_version = str(data.get("protocol_version", "1"))
-                if protocol_version != "2":
-                    raise DiscoveryError(
-                        f"{url} speaks fakts protocol version {protocol_version}, but "
-                        f"fakts >= 5 requires version 2. The v2 protocol is an "
-                        f"OAuth 2.0 extension and shares no endpoints with v1, so there "
-                        f"is no compatibility mode. Upgrade the server, or pin "
-                        f"fakts < 5 to keep talking to this one."
-                    )
-
-                if "token_endpoint" not in data:
-                    raise DiscoveryError(
-                        f"{url} claims fakts protocol version 2 but advertises no "
-                        f"'token_endpoint'. Received: {truncate(str(data))}"
-                    )
-
-                return FaktsEndpoint(**data)
-
-            else:
+        ) as resp,
+    ):
+        if resp.status == 200:
+            try:
+                data = await resp.json()
+            except Exception as e:
                 body = await resp.text()
-                logger.error(f"Could not retrieve on the endpoint: {resp.status}")
                 raise DiscoveryError(
-                    f"The well-known endpoint {url} answered with status code "
-                    f"{resp.status} (expected 200). Is the Fakts server running and "
-                    f"is the URL correct? Response body: {truncate(body) or '<empty>'}"
+                    f"The well-known endpoint {url} answered with status 200, "
+                    f"but the response is not valid JSON. Is a Fakts server "
+                    f"really running at this address? "
+                    f"Response body: {truncate(body) or '<empty>'}"
+                ) from e
+
+            if "name" not in data:
+                logger.error(f"Malformed answer: {data}")
+                raise DiscoveryError(
+                    f"The well-known endpoint {url} answered, but the response "
+                    f"is missing the required 'name' field. Is a Fakts server "
+                    f"really running at this address? Received: {truncate(str(data))}"
                 )
+
+            # A v1 server omits protocol_version entirely. Name that
+            # explicitly: a missing token_endpoint further down is a
+            # baffling symptom for what is really a version mismatch.
+            protocol_version = str(data.get("protocol_version", "1"))
+            if protocol_version != "2":
+                raise DiscoveryError(
+                    f"{url} speaks fakts protocol version {protocol_version}, but "
+                    f"fakts >= 5 requires version 2. The v2 protocol is an "
+                    f"OAuth 2.0 extension and shares no endpoints with v1, so there "
+                    f"is no compatibility mode. Upgrade the server, or pin "
+                    f"fakts < 5 to keep talking to this one."
+                )
+
+            if "token_endpoint" not in data:
+                raise DiscoveryError(
+                    f"{url} claims fakts protocol version 2 but advertises no "
+                    f"'token_endpoint'. Received: {truncate(str(data))}"
+                )
+
+            return FaktsEndpoint(**data)
+
+        else:
+            body = await resp.text()
+            logger.error(f"Could not retrieve on the endpoint: {resp.status}")
+            raise DiscoveryError(
+                f"The well-known endpoint {url} answered with status code "
+                f"{resp.status} (expected 200). Is the Fakts server running and "
+                f"is the URL correct? Response body: {truncate(body) or '<empty>'}"
+            )
 
 
 async def discover_url(
     url: str,
     ssl_context: ssl.SSLContext,
-    auto_protocols: Optional[List[str]] = None,
+    auto_protocols: list[str] | None = None,
     allow_appending_slash: bool = False,
     timeout: int = 4,
 ) -> FaktsEndpoint:
@@ -138,7 +141,7 @@ async def discover_url(
                 f"and no auto_protocols are configured on the discovery to try instead."
             )
 
-        errors: list[Tuple[str, Exception]] = []
+        errors: list[tuple[str, Exception]] = []
 
         for protocol in auto_protocols:
             logger.info(f"Trying to connect to {protocol}://{url}")

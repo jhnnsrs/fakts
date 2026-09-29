@@ -1,17 +1,19 @@
-from typing import Dict, AsyncGenerator, List, Tuple, Set
-from pydantic import Field, field_validator
-from socket import AF_INET, IPPROTO_UDP
 import asyncio
 import json
 import logging
-from pydantic import BaseModel
-from .utils import discover_url
-from fakts.grants.remote.models import FaktsEndpoint, SSLContextModel
+from collections.abc import AsyncGenerator
+from socket import AF_INET, IPPROTO_UDP
+
+from pydantic import BaseModel, Field, field_validator
+
 from fakts.grants.remote.errors import DiscoveryError
+from fakts.grants.remote.models import FaktsEndpoint, SSLContextModel
+
+from .utils import discover_url
 
 logger = logging.getLogger(__name__)
 
-DataGram = Tuple[bytes, Tuple[str, int]]
+DataGram = tuple[bytes, tuple[str, int]]
 
 
 class DiscoveryProtocol(asyncio.DatagramProtocol):
@@ -28,7 +30,7 @@ class DiscoveryProtocol(asyncio.DatagramProtocol):
         super().__init__()
         self._recvq = recvq
 
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         """Receive a datagram
 
         This method is called when a datagram is received, and
@@ -173,7 +175,7 @@ async def alisten_pure(bind: ListenBinding, strict: bool = False) -> AsyncGenera
         Any exception that is raised by the socket
     """
 
-    already_detected: Set[str] = set()
+    already_detected: set[str] = set()
 
     async for x in alisten(bind, strict):
         if x.url not in already_detected:
@@ -194,13 +196,13 @@ class FirstAdvertisedDiscovery(SSLContextModel):
     """The address to bind to"""
     strict: bool = False
     """Should we error on bad Beacons"""
-    discovered_endpoints: Dict[str, FaktsEndpoint] = Field(default_factory=dict)
+    discovered_endpoints: dict[str, FaktsEndpoint] = Field(default_factory=dict)
     """A cache of discovered endpoints"""
     allow_appending_slash: bool = Field(
         default=True,
         description="If the url does not end with a slash, should we append one? ",
     )
-    auto_protocols: List[str] = Field(
+    auto_protocols: list[str] = Field(
         default_factory=lambda: [],
         description="If no protocol is specified, we will try to connect to the following protocols",
     )
@@ -226,7 +228,7 @@ class FirstAdvertisedDiscovery(SSLContextModel):
             A valid endpoint
         """
 
-        failed_beacons: List[str] = []
+        failed_beacons: list[str] = []
 
         async for beacon in alisten_pure(self.binding, strict=self.strict):
             try:

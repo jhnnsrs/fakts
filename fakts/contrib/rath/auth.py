@@ -1,6 +1,7 @@
-from fakts.handle import TokenLoader
 from rath.links.auth import AuthTokenLink
 from rath.operation import Operation
+
+from fakts.handle import TokenLoader
 
 
 class FaktsAuthLink(AuthTokenLink):

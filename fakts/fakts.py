@@ -49,12 +49,14 @@ import time
 from enum import Enum
 from hashlib import sha256
 from ssl import SSLContext
+from typing import Any, ClassVar
 from urllib.parse import urlparse
-from typing import ClassVar, Any, Dict, List, Optional, Set, Tuple, Type
 
 import aiohttp
 import certifi
-from pydantic import BaseModel, Field
+from koil.bridge import unkoil
+from koil.composition import KoiledModel
+from pydantic import BaseModel, Field, PrivateAttr
 
 from fakts import oauth2
 from fakts.cache.nocache import NoCache
@@ -62,12 +64,10 @@ from fakts.errors import (
     AliasNotFoundError,
     CompositionError,
     FaktsError,
-    NotEnteredError,
     NeedsReauthenticationError,
+    NotEnteredError,
     ServiceNotGrantedError,
 )
-from koil.composition import KoiledModel
-from koil.bridge import unkoil
 
 from .challenge import generate_nonce, verify_challenge_signature
 from .mesh import MeshError, MeshOptions, NativeNode, hostname_label
@@ -155,7 +155,7 @@ class AliasReport(BaseModel):
 
 
 class ReportRequest(BaseModel):
-    alias_reports: Dict[str, AliasReport]
+    alias_reports: dict[str, AliasReport]
     functional: bool
 
 
@@ -224,24 +224,22 @@ class Fakts(KoiledModel):
     loaded_fakts: ActiveFakts | None = Field(default=None, exclude=True)
     """The currently loaded fakts. Please use `get` to access the fakts"""
 
-    alias_map: Dict[str, Alias] = Field(
+    alias_map: dict[str, Alias] = Field(
         default_factory=dict,
         exclude=True,
         description="Map of service names to active aliases",
     )
-    report_map: Dict[str, AliasReport] = Field(
+    report_map: dict[str, AliasReport] = Field(
         default_factory=dict,
         exclude=True,
         description="Map of service names to the outcome of their alias challenges",
     )
 
-    loaded_token: Optional[str] = Field(
+    loaded_token: str | None = Field(
         default=None, exclude=True, description="The currently loaded token"
     )
 
-    allow_auto_load: bool = Field(
-        default=True, description="Should we autoload on get?"
-    )
+    allow_auto_load: bool = Field(default=True, description="Should we autoload on get?")
     """Should we autoload the grants on a call to get?"""
 
     delete_on_exit: bool = False
@@ -266,23 +264,23 @@ class Fakts(KoiledModel):
     puts a rotating refresh token on the wire it has to be chosen, not
     stumbled into. Loopback never needs this."""
 
-    mesh: Optional[MeshOptions] = None
+    mesh: MeshOptions | None = None
     """Join the deployment's mesh: run a node in this process (once an
     instance has a mesh alias; ``pip install "fakts[mesh]"``) and reach mesh
     aliases through it. The grant should ask for a mesh key
     (``request_auth_key``) so a fresh node can join. Ignored when
     ``mesh_proxy`` is set."""
 
-    mesh_proxy: Optional[str] = None
+    mesh_proxy: str | None = None
     """Reach mesh aliases through this running HTTP proxy (e.g. ``arkitekt
     mesh proxy`` at ``http://localhost:1055``). Aliases that need the mesh
     are skipped without one (or ``mesh``)."""
 
-    _mesh_node: Optional[NativeNode] = None
-    _load_lock: Optional[asyncio.Lock] = None
-    _token_lock: Optional[asyncio.Lock] = None
-    _alias_lock: Optional[asyncio.Lock] = None
-    _token_expires_at: Optional[float] = None
+    _mesh_node: NativeNode | None = None
+    _load_lock: asyncio.Lock | None = None
+    _token_lock: asyncio.Lock | None = None
+    _alias_lock: asyncio.Lock | None = None
+    _token_expires_at: float | None = None
     _loaded_from_cache: bool = False
     """Whether the *configuration* came from the cache rather than the grant.
 
@@ -294,7 +292,7 @@ class Fakts(KoiledModel):
     """Whether we took over a credential another process rotated. Diagnostic
     only; kept separate so it cannot be mistaken for a stale instance list."""
     _aliases_refreshed: bool = False
-    _unchallenged_keys: set = set()
+    _unchallenged_keys: set[str] = PrivateAttr(default_factory=set)
     """Keys whose cached alias was accepted without probing it.
 
     ``omit_challenge=True`` stores an alias nobody verified. Serving that
@@ -305,11 +303,7 @@ class Fakts(KoiledModel):
 
     def _ensure_entered(self) -> None:
         """Raise if the context manager was not entered yet"""
-        if (
-            self._load_lock is None
-            or self._token_lock is None
-            or self._alias_lock is None
-        ):
+        if self._load_lock is None or self._token_lock is None or self._alias_lock is None:
             raise NotEnteredError(
                 "You need to enter the Fakts context (`with`/`async with`) before calling this function"
             )
@@ -442,10 +436,8 @@ class Fakts(KoiledModel):
         assert self._load_lock is not None
         # Logout is the one operation that legitimately touches all three
         # state domains, so it takes all three locks — in L1 order.
-        async with self._alias_lock:
-            async with self._token_lock:
-                async with self._load_lock:
-                    await self._alogout_locked()
+        async with self._alias_lock, self._token_lock, self._load_lock:
+            await self._alogout_locked()
 
     async def _alogout_locked(self) -> None:
         """Drop every trace of the session. Callers hold the relevant locks.
@@ -518,7 +510,7 @@ class Fakts(KoiledModel):
             if self._token_is_valid() and self.loaded_token:
                 return self.loaded_token
 
-        tried: Set[Tuple[str, str]] = set()
+        tried: set[tuple[str, str]] = set()
         # What we came in holding. Every await below can yield to a concurrent
         # aload(reload=True), which replaces loaded_fakts wholesale; comparing
         # against this is how we notice that happened.
@@ -550,9 +542,7 @@ class Fakts(KoiledModel):
             # a truthful message instead of a guess at what went wrong.
             expiry_reason = self._classify_refresh_expiry(auth)
             if expiry_reason:
-                return await self._areauthenticate(
-                    reason=expiry_reason, interactive=interactive
-                )
+                return await self._areauthenticate(reason=expiry_reason, interactive=interactive)
 
             tried.add((auth.client_id, auth.refresh_token))
 
@@ -582,11 +572,7 @@ class Fakts(KoiledModel):
                 adopted = await self._aawait_untried_credentials(tried)
                 if adopted is None:
                     return await self._areauthenticate(
-                        reason=(
-                            "superseded"
-                            if e.error == "invalid_client"
-                            else "rejected"
-                        ),
+                        reason=("superseded" if e.error == "invalid_client" else "rejected"),
                         interactive=interactive,
                     )
                 fakts = adopted
@@ -608,13 +594,9 @@ class Fakts(KoiledModel):
 
             return await self._acommit_token_response(fakts, data)
 
-        return await self._areauthenticate(
-            reason="exhausted", interactive=interactive
-        )
+        return await self._areauthenticate(reason="exhausted", interactive=interactive)
 
-    async def _acommit_token_response(
-        self, previous: ActiveFakts, data: Dict[str, Any]
-    ) -> str:
+    async def _acommit_token_response(self, previous: ActiveFakts, data: dict[str, Any]) -> str:
         """Persist a rotated credential, *then* start using it.
 
         The order matters and is not merely tidy. The server commits the
@@ -655,7 +637,7 @@ class Fakts(KoiledModel):
             )
         return self.loaded_token
 
-    def _classify_refresh_expiry(self, auth: AuthFakt) -> Optional[str]:
+    def _classify_refresh_expiry(self, auth: AuthFakt) -> str | None:
         """Name a locally-detectable expiry, if there is one.
 
         Servers enforce two independent limits: how long one refresh token
@@ -664,21 +646,13 @@ class Fakts(KoiledModel):
         explanation instead of asking and then guessing at ``invalid_grant``.
         """
         now = time.time()
-        if (
-            auth.refresh_issued_at
-            and now - auth.refresh_issued_at > REFRESH_TOKEN_MAX_AGE
-        ):
+        if auth.refresh_issued_at and now - auth.refresh_issued_at > REFRESH_TOKEN_MAX_AGE:
             return "idle"
-        if (
-            auth.chain_started_at
-            and now - auth.chain_started_at > REFRESH_CHAIN_MAX_AGE
-        ):
+        if auth.chain_started_at and now - auth.chain_started_at > REFRESH_CHAIN_MAX_AGE:
             return "chain_expired"
         return None
 
-    async def _aawait_untried_credentials(
-        self, tried: Set[Tuple[str, str]]
-    ) -> Optional[ActiveFakts]:
+    async def _aawait_untried_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
         """Wait briefly for a sibling's rotation to land, then adopt it.
 
         Terminates for the right reason: we only ever accept a credential we
@@ -697,9 +671,7 @@ class Fakts(KoiledModel):
             await asyncio.sleep(REFRESH_RETRY_DELAY * (1 + random.random()))
         return None
 
-    async def _aadopt_cached_credentials(
-        self, tried: Set[Tuple[str, str]]
-    ) -> Optional[ActiveFakts]:
+    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
         """Adopt the cached credential if it is one we have not tried.
 
         The key is the whole ``(client_id, refresh_token)`` pair, not the
@@ -797,9 +769,7 @@ class Fakts(KoiledModel):
             self.loaded_token = fakts.auth.access_token
             self._token_expires_at = fakts.auth.expires_at
             return fakts.auth.access_token
-        raise FaktsError(
-            "The grant completed but produced no access token."
-        )
+        raise FaktsError("The grant completed but produced no access token.")
 
     def _grant_requires_interaction(self) -> bool:
         """Whether reloading the grant would need a human."""
@@ -818,9 +788,7 @@ class Fakts(KoiledModel):
         async with self._load_lock:
             await self._apersist_locked(fakts)
 
-    async def _apersist_locked(
-        self, fakts: ActiveFakts, fresh_from_grant: bool = False
-    ) -> None:
+    async def _apersist_locked(self, fakts: ActiveFakts, fresh_from_grant: bool = False) -> None:
         """As :meth:`_apersist`, for callers already holding ``_load_lock``.
 
         ``fresh_from_grant`` marks the one write that is allowed to replace a
@@ -837,11 +805,7 @@ class Fakts(KoiledModel):
         except Exception:
             existing = None
 
-        if (
-            existing is not None
-            and not fresh_from_grant
-            and self._is_stale_auth(fakts, existing)
-        ):
+        if existing is not None and not fresh_from_grant and self._is_stale_auth(fakts, existing):
             logger.debug(
                 "Skipping cache write: the cache holds a newer credential than "
                 "the one we are about to persist."
@@ -907,7 +871,7 @@ class Fakts(KoiledModel):
             return True
         return time.time() < self._token_expires_at
 
-    async def arefresh_token(self, stale_token: Optional[str] = None) -> str:
+    async def arefresh_token(self, stale_token: str | None = None) -> str:
         """Renew the access token (async).
 
         Never interactive: this is what a transport layer calls after a 401,
@@ -959,8 +923,8 @@ class Fakts(KoiledModel):
     async def achallenge_alias(
         self,
         alias: Alias,
-        challenge_key: Optional[ChallengeKey] = None,
-        proxy: Optional[str] = None,
+        challenge_key: ChallengeKey | None = None,
+        proxy: str | None = None,
     ) -> bool:
         """Challenge a single alias (async)
 
@@ -985,16 +949,17 @@ class Fakts(KoiledModel):
 
         nonce = generate_nonce() if challenge_key else None
 
-        async with aiohttp.ClientSession(
-            connector=(
-                aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
-            ),
-            headers={
-                "Accept": "application/json",
-            },
-            timeout=aiohttp.ClientTimeout(total=self.alias_challenge_timeout),
-        ) as session:
-            async with session.get(
+        async with (
+            aiohttp.ClientSession(
+                connector=(
+                    aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
+                ),
+                headers={
+                    "Accept": "application/json",
+                },
+                timeout=aiohttp.ClientTimeout(total=self.alias_challenge_timeout),
+            ) as session,
+            session.get(
                 alias.challenge_path,
                 params={"nonce": nonce} if nonce else None,
                 proxy=proxy,
@@ -1004,41 +969,40 @@ class Fakts(KoiledModel):
                 # the real service sign our nonce and pass verification —
                 # while all subsequent traffic goes to the redirector.
                 allow_redirects=False,
-            ) as resp:
-                if resp.status != 200:
+            ) as resp,
+        ):
+            if resp.status != 200:
+                body = await resp.text()
+                logger.error(f"Failed to challenge alias {alias} with status code {resp.status}")
+                raise FaktsError(
+                    f"Challenge of alias '{alias.id}' at {alias.challenge_path} "
+                    f"answered with status code {resp.status} (expected 200). "
+                    f"Response body: {truncate(body) or '<empty>'}"
+                )
+
+            if challenge_key is not None and nonce is not None:
+                try:
+                    data = await resp.json()
+                    signature = data["signature"]
+                except Exception as err:
                     body = await resp.text()
-                    logger.error(
-                        f"Failed to challenge alias {alias} with status code {resp.status}"
-                    )
                     raise FaktsError(
-                        f"Challenge of alias '{alias.id}' at {alias.challenge_path} "
-                        f"answered with status code {resp.status} (expected 200). "
+                        f"The instance pins a challenge key, but the challenge of "
+                        f"alias '{alias.id}' at {alias.challenge_path} did not "
+                        f"answer with a signature. "
                         f"Response body: {truncate(body) or '<empty>'}"
+                    ) from err
+
+                if not verify_challenge_signature(challenge_key, nonce, signature):
+                    raise FaktsError(
+                        f"The challenge of alias '{alias.id}' at "
+                        f"{alias.challenge_path} answered with an invalid "
+                        f"signature: the host does not hold the service's "
+                        f"identity key (possible impersonation or a stale "
+                        f"pinned key)."
                     )
 
-                if challenge_key is not None and nonce is not None:
-                    try:
-                        data = await resp.json()
-                        signature = data["signature"]
-                    except Exception:
-                        body = await resp.text()
-                        raise FaktsError(
-                            f"The instance pins a challenge key, but the challenge of "
-                            f"alias '{alias.id}' at {alias.challenge_path} did not "
-                            f"answer with a signature. "
-                            f"Response body: {truncate(body) or '<empty>'}"
-                        )
-
-                    if not verify_challenge_signature(challenge_key, nonce, signature):
-                        raise FaktsError(
-                            f"The challenge of alias '{alias.id}' at "
-                            f"{alias.challenge_path} answered with an invalid "
-                            f"signature: the host does not hold the service's "
-                            f"identity key (possible impersonation or a stale "
-                            f"pinned key)."
-                        )
-
-                return True
+            return True
 
     def _grant_status_for(self, fakts_key: str) -> GrantStatus:
         """The grant status of a requirement key on the loaded fakts.
@@ -1084,9 +1048,9 @@ class Fakts(KoiledModel):
         self,
         req: Requirement,
         omit_challenge: bool = False,
-        mesh_proxy: Optional[str] = None,
-        mesh_node: Optional[NativeNode] = None,
-    ) -> Tuple[Optional[Alias], AliasReport, Optional[str]]:
+        mesh_proxy: str | None = None,
+        mesh_node: NativeNode | None = None,
+    ) -> tuple[Alias | None, AliasReport, str | None]:
         """Resolve a single requirement to a working alias.
 
         Tries the instance's aliases in order (the first alias is the last
@@ -1128,7 +1092,7 @@ class Fakts(KoiledModel):
                 None if req.optional else reason,
             )
 
-        errors_in_alias: List[str] = []
+        errors_in_alias: list[str] = []
 
         for alias in instance.aliases:
             selected = alias
@@ -1167,13 +1131,13 @@ class Fakts(KoiledModel):
                         AliasReport(alias_id=alias.id, reason=None, valid=True),
                         None,
                     )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 errors_in_alias.append(
                     f"Timeout while challenging alias {alias.id} for service {req.key}."
                 )
             except Exception as e:
                 errors_in_alias.append(
-                    f"Error while challenging alias {alias.challenge_path} for service {req.key}: {str(e)}"
+                    f"Error while challenging alias {alias.challenge_path} for service {req.key}: {e!s}"
                 )
 
         error_message = (
@@ -1245,7 +1209,7 @@ class Fakts(KoiledModel):
         # alias_map and reading it back makes a successful resolution look
         # like a failed one. Telemetry must never be able to do that, so it
         # also swallows its own failures rather than blocking resolution.
-        report_token: Optional[str] = None
+        report_token: str | None = None
         if not omit_report:
             try:
                 report_token = await self.aget_token()
@@ -1268,11 +1232,11 @@ class Fakts(KoiledModel):
             )
         )
 
-        new_alias_map: Dict[str, Alias] = {}
-        new_report_map: Dict[str, AliasReport] = {}
-        composition_errors: List[str] = []
+        new_alias_map: dict[str, Alias] = {}
+        new_report_map: dict[str, AliasReport] = {}
+        composition_errors: list[str] = []
 
-        for req, (selected_alias, report, error) in zip(requirements, results):
+        for req, (selected_alias, report, error) in zip(requirements, results, strict=True):
             new_report_map[req.key] = report
             if selected_alias:
                 new_alias_map[req.key] = selected_alias
@@ -1325,24 +1289,20 @@ class Fakts(KoiledModel):
                 f"Check that the services are running and reachable from this machine."
             )
 
-    async def _amesh_route(
-        self, fakts: ActiveFakts
-    ) -> Tuple[Optional[str], Optional[NativeNode]]:
+    async def _amesh_route(self, fakts: ActiveFakts) -> tuple[str | None, NativeNode | None]:
         """The HTTP proxy mesh aliases are reached through and the node that
         runs it: both ``None`` if the mesh is off, no node for an external
         ``mesh_proxy``."""
         if self.mesh_proxy:
             return self.mesh_proxy, None
         if not any(
-            alias.is_mesh()
-            for instance in fakts.instances.values()
-            for alias in instance.aliases
+            alias.is_mesh() for instance in fakts.instances.values() for alias in instance.aliases
         ):
             return None, None
         node = await self._amesh_node(fakts)
         return (node.proxy_url, node) if node else (None, None)
 
-    async def _amesh_node(self, fakts: ActiveFakts) -> Optional[NativeNode]:
+    async def _amesh_node(self, fakts: ActiveFakts) -> NativeNode | None:
         """The mesh node, started on first use; it lives until the context
         exits. Its state directory is keyed by the app's identity, so it is
         joined once (with the key from the first token) and re-used after.
@@ -1356,9 +1316,9 @@ class Fakts(KoiledModel):
         if me.sub and me.organization and me.hub:
             identity = f"{me.sub}-{me.organization}-{me.hub}"
         else:
-            identity = sha256(
-                f"{me.deployment_name}:{self.manifest.hash()}".encode()
-            ).hexdigest()[:16]
+            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[
+                :16
+            ]
         statedir = self.mesh.node_dir(
             f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
         )
@@ -1377,12 +1337,10 @@ class Fakts(KoiledModel):
         if claim is not None and not coord_url:
             raise MeshError("The server sent a mesh key but no coordination url")
 
-        device = "".join(
-            c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum()
-        )[:8]
-        hostname = self.mesh.hostname or hostname_label(
-            f"{self.manifest.identifier}-{device}"
-        )
+        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[
+            :8
+        ]
+        hostname = self.mesh.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
         self._mesh_node = await NativeNode.start(
             self.mesh,
             statedir,
@@ -1393,7 +1351,7 @@ class Fakts(KoiledModel):
         return self._mesh_node
 
     async def _areport_aliases(
-        self, fakts: ActiveFakts, composition_errors: List[str], token: str
+        self, fakts: ActiveFakts, composition_errors: list[str], token: str
     ) -> None:
         """Report the alias resolution outcome to the server (best effort).
 
@@ -1406,9 +1364,7 @@ class Fakts(KoiledModel):
         corrupt the alias state it is reporting on.
         """
         if not fakts.auth.report_endpoint:
-            logger.info(
-                "The endpoint does not advertise a report url. Skipping the alias report."
-            )
+            logger.info("The endpoint does not advertise a report url. Skipping the alias report.")
             return
 
         # The report carries the access token, so it gets the same transport
@@ -1418,9 +1374,7 @@ class Fakts(KoiledModel):
         # misconfigured (or tampered) document would exfiltrate the bearer
         # token to an unrelated host.
         try:
-            oauth2.check_transport(
-                fakts.auth.report_endpoint, self.allow_insecure_transport
-            )
+            oauth2.check_transport(fakts.auth.report_endpoint, self.allow_insecure_transport)
         except Exception:
             logger.warning(
                 "Not reporting alias status: the report endpoint would require "
@@ -1444,34 +1398,33 @@ class Fakts(KoiledModel):
         logger.debug("Reporting usage: %s", report)
 
         try:
-            async with aiohttp.ClientSession(
-                connector=(
-                    aiohttp.TCPConnector(ssl=self.ssl_context)
-                    if self.ssl_context
-                    else None
-                ),
-                headers={
-                    "Accept": "application/json",
-                    "Authorization": f"Bearer {token}",
-                },
-                timeout=aiohttp.ClientTimeout(total=REPORT_TIMEOUT),
-            ) as session:
-                async with session.post(
+            async with (
+                aiohttp.ClientSession(
+                    connector=(
+                        aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
+                    ),
+                    headers={
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {token}",
+                    },
+                    timeout=aiohttp.ClientTimeout(total=REPORT_TIMEOUT),
+                ) as session,
+                session.post(
                     fakts.auth.report_endpoint,
                     json=report.model_dump(),
-                ) as resp:
-                    if resp.status != 200:
-                        body = await resp.text()
-                        logger.warning(
-                            "Failed to report alias status to %s: status code %s. "
-                            "Response body: %s",
-                            fakts.auth.report_endpoint,
-                            resp.status,
-                            truncate(body) or "<empty>",
-                        )
-                        return
-                    data = await resp.json()
-                    logger.debug("Reporting usage, got response: %s", data)
+                ) as resp,
+            ):
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.warning(
+                        "Failed to report alias status to %s: status code %s. Response body: %s",
+                        fakts.auth.report_endpoint,
+                        resp.status,
+                        truncate(body) or "<empty>",
+                    )
+                    return
+                data = await resp.json()
+                logger.debug("Reporting usage, got response: %s", data)
         except Exception:
             logger.warning(
                 "Could not report alias status to %s. Continuing without reporting.",
@@ -1536,9 +1489,7 @@ class Fakts(KoiledModel):
         self._ensure_entered()
         assert self._alias_lock is not None
         async with self._alias_lock:
-            stale_unchallenged = (
-                not omit_challenge and fakts_key in self._unchallenged_keys
-            )
+            stale_unchallenged = not omit_challenge and fakts_key in self._unchallenged_keys
             # ``_aliases_refreshed`` has to be part of the fast path, not just
             # the refresh condition below it. The token path invalidates
             # aliases by clearing that flag and deliberately leaving
@@ -1569,11 +1520,7 @@ class Fakts(KoiledModel):
                 return self.alias_map[fakts_key]
 
             requirement = next(
-                (
-                    req
-                    for req in (self.manifest.requirements or [])
-                    if req.key == fakts_key
-                ),
+                (req for req in (self.manifest.requirements or []) if req.key == fakts_key),
                 None,
             )
 
@@ -1581,11 +1528,7 @@ class Fakts(KoiledModel):
                 # The key is declared: distinguish "the server did not grant
                 # an instance" (expected for declined optional services) from
                 # "an instance was granted but is unreachable".
-                instance = (
-                    self.loaded_fakts.instances.get(fakts_key)
-                    if self.loaded_fakts
-                    else None
-                )
+                instance = self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
                 if instance is None or not instance.aliases:
                     kind = "optional" if requirement.optional else "required"
                     raise ServiceNotGrantedError(
@@ -1609,7 +1552,7 @@ class Fakts(KoiledModel):
         omit_challenge: bool = False,
         omit_report: bool = False,
         force_refresh: bool = False,
-    ) -> Optional[Alias]:
+    ) -> Alias | None:
         """Get the alias for a service key, or None if unavailable (async)
 
         Like :meth:`aget_alias`, but returns None instead of raising when
@@ -1747,7 +1690,7 @@ class Fakts(KoiledModel):
         omit_challenge: bool = False,
         omit_report: bool = False,
         force_refresh: bool = False,
-    ) -> Optional[Alias]:
+    ) -> Alias | None:
         """Get the alias for a service key, or None if unavailable (sync)
 
         Synchronous wrapper around :meth:`aget_alias_or_none`.
@@ -1786,7 +1729,7 @@ class Fakts(KoiledModel):
         """
         return unkoil(self.aget_token, interactive=interactive)
 
-    def refresh_token(self, stale_token: Optional[str] = None) -> str:
+    def refresh_token(self, stale_token: str | None = None) -> str:
         """Renew the authentication token (sync).
 
         Synchronous wrapper around :meth:`arefresh_token`, including its
@@ -1864,7 +1807,8 @@ class Fakts(KoiledModel):
             # one. The first to enter wins and the second validates against the
             # wrong manifest. Give each Fakts its own cache instance.
             if getattr(self.cache, "hash", None) == "":
-                setattr(self.cache, "hash", self.manifest.hash())
+                # FaktsCache declares no hash: only caches that have one bind it.
+                setattr(self.cache, "hash", self.manifest.hash())  # noqa: B010
 
             # L4: a refresh-based session is credential state, not just config.
             # Without somewhere to persist it, every restart re-authenticates
@@ -1884,9 +1828,9 @@ class Fakts(KoiledModel):
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
     ) -> None:
         """Exit the context manager and clean up.
 

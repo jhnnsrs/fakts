@@ -28,7 +28,9 @@ def truncate(text: str, max_length: int = 300) -> str:
     return f"{text[:max_length]}... ({len(text) - max_length} more characters truncated)"
 
 
-def update_nested(d: MutableMapping[str, Any], u: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+def update_nested(
+    d: MutableMapping[str, Any], u: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Update a nested dictionary or similar mapping.
     This is a recursive function that will update the values in the dictionary
     *inplace*.

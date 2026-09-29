@@ -9,4 +9,4 @@ refresh) against its token endpoint.
 from .base import RemoteGrant
 from .models import Authorizer, Discovery, FaktsEndpoint
 
-__all__ = ["RemoteGrant", "Authorizer", "Discovery", "FaktsEndpoint"]
+__all__ = ["Authorizer", "Discovery", "FaktsEndpoint", "RemoteGrant"]

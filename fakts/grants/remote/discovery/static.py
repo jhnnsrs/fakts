@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+
 from fakts.grants.remote.models import FaktsEndpoint
 
 

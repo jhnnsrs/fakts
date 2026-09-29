@@ -4,14 +4,13 @@ Each of these asserts a specific failure mode that was verified to exist
 before the fix. They are grouped by what they protect, not by module.
 """
 
-import asyncio
 import logging
 import os
-import ssl
 import stat
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
-from typing import AsyncIterator, Awaitable, Callable, Optional
+from typing import ClassVar
 
 import pytest
 import pytest_asyncio
@@ -28,17 +27,14 @@ from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.models import (
     ActiveFakts,
     Alias,
-    AuthFakt,
     ChallengeKey,
-    Instance,
     Manifest,
     PublicSource,
     Requirement,
-    SelfFakt,
 )
 from fakts.oauth2 import InsecureTransportError, check_transport
 
-from .test_fakts_behavior import make_fakts_value, make_manifest
+from .helpers import make_fakts_value, make_manifest
 
 pytestmark = pytest.mark.asyncio
 
@@ -278,9 +274,7 @@ async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_ope
     async def token(request: web.Request) -> web.Response:
         return web.json_response({"error": "access_denied"}, status=400)
 
-    base = await server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}, method="POST"
-    )
+    base = await server({"/o/app-authorization/": authorize, "/o/token/": token}, method="POST")
 
     from fakts.grants.remote.errors import UserDeniedError
     from fakts.grants.remote.models import FaktsEndpoint
@@ -311,9 +305,7 @@ async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_ope
 # --------------------------------------------------------------------------- #
 
 
-_posix_only = pytest.mark.skipif(
-    os.name != "posix", reason="POSIX permission semantics"
-)
+_posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
 
 
 def _loose_dir(tmp_path: Path, mode: int = 0o775) -> Path:
@@ -401,7 +393,7 @@ async def test_self_only_group_resolves_as_no_other_members(
 
     class Group:
         gr_name = "jhnnsrs"
-        gr_mem: list[str] = []
+        gr_mem: ClassVar[list[str]] = []
 
     class User:
         pw_name = "jhnnsrs"
@@ -566,7 +558,6 @@ async def test_env_grant_recovers_unattended_when_credential_ages(
 ) -> None:
     """An aged env credential must reload from the environment rather than
     raise — that is the whole headless story."""
-    import json
 
     from fakts.fakts import REFRESH_TOKEN_MAX_AGE
 
@@ -611,8 +602,6 @@ async def test_fakts_is_unusable_after_exit() -> None:
 
     with pytest.raises(NotEnteredError):
         await fakts.aget_alias("test", omit_challenge=True, omit_report=True)
-
-
 
 
 # --------------------------------------------------------------------------- #

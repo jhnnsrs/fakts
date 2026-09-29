@@ -12,8 +12,6 @@ from fakts import Alias
 from fakts.testing import build_testing_fakts
 
 
-
-
 @pytest.mark.asyncio
 async def test_alias_resolves_without_omit_kwargs():
     """The consumer-shaped call: no ``omit_challenge``/``omit_report`` —
@@ -47,9 +45,7 @@ async def test_static_token_is_fetched_once_and_cached():
 
 @pytest.mark.asyncio
 async def test_zero_lifetime_rotates_every_call_and_last_token_repeats():
-    async with build_testing_fakts(
-        aliases={}, tokens=["a", "b"], token_lifetime=0
-    ) as fakts:
+    async with build_testing_fakts(aliases={}, tokens=["a", "b"], token_lifetime=0) as fakts:
         assert await fakts.aget_token() == "a"
         assert await fakts.aget_token() == "b"
         assert await fakts.aget_token() == "b"
@@ -83,10 +79,7 @@ def test_a_sync_with_works_for_synchronous_consumers():
     """A plain ``with`` enters it for synchronous consumers too."""
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     with fakts:
-        assert (
-            fakts.get_alias("alpaka").to_http_path("/llm/v1")
-            == "http://testserver/llm/v1"
-        )
+        assert fakts.get_alias("alpaka").to_http_path("/llm/v1") == "http://testserver/llm/v1"
         assert fakts.get_token() == "test-token"
 
 

@@ -1,38 +1,18 @@
-"""Some configuration for pytest"""
+"""The docker stack (lok + rekuest) the integration tests run against."""
 
 import os
-import socket
 import tempfile
+from collections.abc import Generator, Iterator
 from pathlib import Path
-from typing import Generator, Iterator
 
 import pytest
 from dokker import Deployment, testing
 
-project_path = os.path.join(os.path.dirname(__file__), "integration")
+from ..helpers import reserve_free_ports
+
+project_path = os.path.dirname(__file__)
 docker_compose_file = os.path.join(project_path, "docker-compose.yml")
 lok_config_template = os.path.join(project_path, "configs", "lok.yaml")
-
-
-def _reserve_free_ports(count: int) -> list[int]:
-    """Ask the OS for `count` distinct free TCP ports.
-
-    All sockets are held open until every port has been assigned, so the
-    kernel cannot hand out the same port twice within one call. They are
-    released before compose binds them -- a race in theory, but the ephemeral
-    range is large and this is what keeps concurrent runs (and the leftovers
-    of a crashed one) from colliding on a fixed port.
-    """
-    sockets: list[socket.socket] = []
-    try:
-        for _ in range(count):
-            sock = socket.socket()
-            sock.bind(("127.0.0.1", 0))
-            sockets.append(sock)
-        return [int(sock.getsockname()[1]) for sock in sockets]
-    finally:
-        for sock in sockets:
-            sock.close()
 
 
 @pytest.fixture(scope="session")
@@ -47,7 +27,7 @@ def integration_ports() -> Iterator[dict[str, int]]:
     tracked template, which keeps the checked-in file free of run-specific
     values.
     """
-    lok_port, rekuest_port, minio_port = _reserve_free_ports(3)
+    lok_port, rekuest_port, minio_port = reserve_free_ports(3)
 
     template = Path(lok_config_template).read_text()
     assert "__REKUEST_HOST_PORT__" in template, (

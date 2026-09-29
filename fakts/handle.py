@@ -16,10 +16,6 @@ and a new one resolves afresh. A token, by contrast, must stay live: it expires,
 and rotating it is what :class:`TokenLoader` is for.
 """
 
-
 from arkitekt_spec.declare.wiring import TokenLoader
-
-
-
 
 __all__ = ["TokenLoader"]

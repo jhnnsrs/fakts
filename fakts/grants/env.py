@@ -103,7 +103,7 @@ class EnvGrant(BaseModel):
                     f"${self.file_var} points to '{path}', but that file does not exist."
                 )
             try:
-                with open(path, "r") as f:
+                with open(path) as f:
                     content = f.read()
             except OSError as e:
                 raise GrantError(

@@ -66,9 +66,7 @@ def build_challenge_message(nonce: str) -> bytes:
     return f"{CHALLENGE_DOMAIN}:{nonce}".encode()
 
 
-def verify_challenge_signature(
-    key: ChallengeKey, nonce: str, signature_b64: str
-) -> bool:
+def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str) -> bool:
     """Verify a signed challenge response against the pinned public key.
 
     Returns False on any mismatch (wrong key, wrong nonce, malformed
@@ -97,9 +95,7 @@ def verify_challenge_signature(
         return False
 
     try:
-        public_key.verify(
-            base64.b64decode(signature_b64), build_challenge_message(nonce)
-        )
+        public_key.verify(base64.b64decode(signature_b64), build_challenge_message(nonce))
         return True
     except Exception:
         return False

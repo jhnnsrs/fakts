@@ -16,7 +16,7 @@ from fakts import (
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 
-from .test_fakts_behavior import make_fakts_value, make_manifest
+from .helpers import make_fakts_value, make_manifest
 
 pytestmark = pytest.mark.asyncio
 
@@ -47,9 +47,7 @@ async def test_env_grant_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert loaded == value
 
 
-async def test_env_grant_errors_are_verbose(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+async def test_env_grant_errors_are_verbose(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.delenv("FAKTS", raising=False)
     monkeypatch.delenv("FAKTS_FILE", raising=False)
 

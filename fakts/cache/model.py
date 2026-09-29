@@ -1,11 +1,12 @@
-import pydantic
-from typing import Dict, Any
 import datetime
+from typing import Any
+
+import pydantic
 
 
 class CacheModel(pydantic.BaseModel):
     """Cache file model"""
 
-    config: Dict[str, Any]
+    config: dict[str, Any]
     created: datetime.datetime
     hash: str = ""

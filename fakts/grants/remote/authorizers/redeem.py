@@ -10,7 +10,6 @@ That asymmetry is the server's, not ours.
 """
 
 import json
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -39,9 +38,7 @@ class RedeemAuthorizer(SSLContextModel):
 
     async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
         if not endpoint.token_endpoint:
-            raise RetrieveError(
-                f"{endpoint.name} advertised no token_endpoint to redeem against."
-            )
+            raise RetrieveError(f"{endpoint.name} advertised no token_endpoint to redeem against.")
 
         try:
             data = await oauth2.apost_form(

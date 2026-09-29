@@ -7,14 +7,13 @@ Everything here runs without a real fakts server.
 """
 
 import ssl
-from typing import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
 import pytest_asyncio
 from aiohttp import web
 
 from fakts.grants.remote.authorizers.device_code import (
-    ClientKind,
     DeviceCodeAuthorizer,
 )
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
@@ -30,7 +29,7 @@ from fakts.grants.remote.errors import (
 from fakts.grants.remote.models import FaktsEndpoint
 from fakts.oauth2 import InsecureTransportError
 
-from .test_fakts_behavior import make_manifest
+from .helpers import make_manifest
 
 pytestmark = pytest.mark.asyncio
 
@@ -112,9 +111,7 @@ def collecting_sleeper(recorded: list) -> Callable[[float], Awaitable[None]]:
 async def test_device_code_happy_path(local_server, monkeypatch) -> None:
     """The full flow: register, poll once, return tokens and config."""
     opened: list[str] = []
-    monkeypatch.setattr(
-        "webbrowser.open_new", lambda url: opened.append(url) or True
-    )
+    monkeypatch.setattr("webbrowser.open_new", lambda url: opened.append(url) or True)
 
     async def authorize(request: web.Request) -> web.Response:
         body = await request.json()
@@ -142,9 +139,7 @@ async def test_device_code_happy_path(local_server, monkeypatch) -> None:
         assert form["client_id"] == "minted_client_id"
         return web.json_response(TOKEN_BODY)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     seen_codes: list[str] = []
 
@@ -193,9 +188,7 @@ async def test_device_code_polls_while_pending(local_server) -> None:
             return web.json_response({"error": "authorization_pending"}, status=400)
         return web.json_response(TOKEN_BODY)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
@@ -233,9 +226,7 @@ async def test_device_code_slow_down_backs_off(local_server) -> None:
             return web.json_response({"error": "slow_down"}, status=400)
         return web.json_response(TOKEN_BODY)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
@@ -267,9 +258,7 @@ async def test_device_code_access_denied_raises_user_denied(local_server) -> Non
     async def token(request: web.Request) -> web.Response:
         return web.json_response({"error": "access_denied"}, status=400)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
@@ -299,9 +288,7 @@ async def test_device_code_expired_token_raises_expired(local_server) -> None:
     async def token(request: web.Request) -> web.Response:
         return web.json_response({"error": "expired_token"}, status=400)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
@@ -333,14 +320,12 @@ async def test_device_code_client_deadline_raises_timeout(local_server) -> None:
     async def token(request: web.Request) -> web.Response:
         return web.json_response({"error": "authorization_pending"}, status=400)
 
-    base_url = await local_server(
-        {"/o/app-authorization/": authorize, "/o/token/": token}
-    )
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
         open_browser=False,
-        timeout=3,
+        timeout=0.2,
         sleeper=collecting_sleeper([]),
         allow_insecure_transport=True,
     )

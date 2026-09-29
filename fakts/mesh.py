@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional, Self
+from typing import Any, Self
 
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from arkitekt_spec.declare.wiring import TurnInfo
@@ -37,7 +37,7 @@ class MeshError(FaktsError, AliasMeshError):
     refused (the bindings are missing, the mesh is not running, ...).
     """
 
-    def __init__(self, message: str, code: Optional[str] = None) -> None:
+    def __init__(self, message: str, code: str | None = None) -> None:
         super().__init__(message)
         self.code = code
 
@@ -48,17 +48,16 @@ NEEDS_LOGIN = (
 )
 
 NOT_INSTALLED = (
-    "The mesh needs the arkitekt-mesh bindings; install them with "
-    '`pip install "fakts[mesh]"`'
+    'The mesh needs the arkitekt-mesh bindings; install them with `pip install "fakts[mesh]"`'
 )
 
 
 class MeshOptions(BaseModel):
     """Where the mesh node keeps its state, and how long it may take to join."""
 
-    state_root: Optional[Path] = None
+    state_root: Path | None = None
     """Where node state lives (default: ``<state dir>/arkitekt/mesh``)."""
-    hostname: Optional[str] = None
+    hostname: str | None = None
     """The node's hostname (default: ``<app identifier>-<device id>``)."""
     timeout: float = 90
     """How long joining and connecting may take, in seconds."""
@@ -106,9 +105,7 @@ def _translate(error: Exception, bindings: Any, statedir: Path) -> MeshError:
     if isinstance(error, bindings.NeedsLogin):
         return MeshError(NEEDS_LOGIN, "needs_login")
     if isinstance(error, bindings.Locked):
-        return MeshError(
-            f"Another mesh node is already running in {statedir}", "locked"
-        )
+        return MeshError(f"Another mesh node is already running in {statedir}", "locked")
     if isinstance(error, bindings.Refused):
         return MeshError(f"The mesh refused this node: {error}", "login")
     if isinstance(error, bindings.Timeout):
@@ -145,8 +142,8 @@ class NativeNode:
         options: MeshOptions,
         statedir: Path,
         hostname: str,
-        coord_url: Optional[str],
-        auth_key: Optional[str],
+        coord_url: str | None,
+        auth_key: str | None,
     ) -> NativeNode:
         """Start the node, joining with ``auth_key`` or re-using the state in ``statedir``."""
         bindings = _bindings()
@@ -162,9 +159,7 @@ class NativeNode:
             )
         except bindings.MeshError as e:
             raise _translate(e, bindings, statedir) from e
-        logger.info(
-            "Connected to the mesh as %s; proxy at %s", hostname, node.proxy_url
-        )
+        logger.info("Connected to the mesh as %s; proxy at %s", hostname, node.proxy_url)
         return cls(node, statedir)
 
     async def turn(self) -> TurnInfo:
@@ -174,9 +169,7 @@ class NativeNode:
             info = await self._node.turn()
         except bindings.MeshError as e:
             raise MeshError(str(e)) from e
-        return TurnInfo(
-            urls=list(info.urls), username=info.username, credential=info.credential
-        )
+        return TurnInfo(urls=list(info.urls), username=info.username, credential=info.credential)
 
     async def forward(self, host: str, port: int) -> str:
         """A local ``127.0.0.1:P`` forwarding TCP to ``host:port`` on the mesh."""

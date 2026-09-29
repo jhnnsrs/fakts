@@ -1,16 +1,7 @@
 """Unit tests for the pure-logic utilities (``utils.py``) and the context
 helpers (``helpers.py``)."""
 
-import pytest
-
-from fakts import Fakts
-from fakts.fakts import Fakts as FaktsClass
-from fakts.grants.hard import HardFaktsGrant
-from fakts.models import Alias
 from fakts.utils import truncate, update_nested
-
-from .test_fakts_behavior import make_fakts_value, make_manifest
-
 
 # --------------------------------------------------------------------------- #
 # utils.truncate
