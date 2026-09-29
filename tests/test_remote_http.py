@@ -640,3 +640,76 @@ async def test_discover_url_aggregates_protocol_errors() -> None:
             auto_protocols=["http"],
             timeout=1,
         )
+
+
+async def test_device_code_polling_survives_a_transient_server_error(local_server) -> None:
+    """A 503 (or a dropped connection) mid-login must not end a half-approved login."""
+    answers = iter(["unavailable", "pending", "granted"])
+
+    async def authorize(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "status": "granted",
+                "device_code": "dev_code",
+                "user_code": "CODE",
+                "client_id": "cid",
+                "verification_uri_complete": "http://example.com/x",
+                "expires_in": 300,
+                "interval": 1,
+            }
+        )
+
+    async def token(request: web.Request) -> web.Response:
+        answer = next(answers)
+        if answer == "unavailable":
+            return web.Response(status=503, text="upstream down")
+        if answer == "pending":
+            return web.json_response({"error": "authorization_pending"}, status=400)
+        return web.json_response(TOKEN_BODY)
+
+    base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
+    authorizer = DeviceCodeAuthorizer(
+        manifest=make_manifest(),
+        open_browser=False,
+        timeout=5,
+        sleeper=collecting_sleeper([]),
+        allow_insecure_transport=True,
+    )
+
+    response = await authorizer.aauthorize(endpoint_for(base_url))
+    assert response.access_token == TOKEN_BODY["access_token"]
+
+
+async def test_the_terminal_prompt_fills_in_the_approval_url(capsys) -> None:
+    from fakts.grants.remote.authorizers.device_code import display_in_terminal
+
+    endpoint = endpoint_for("http://lok.example/")
+    endpoint.configure = "http://lok.example/f/configure/{code}"
+    await display_in_terminal(endpoint, "ABCD")
+
+    printed = capsys.readouterr().out
+    assert "http://lok.example/f/configure/ABCD" in printed
+    assert "{code}" not in printed and "device" not in printed.split("ABCD")[-1]
+
+
+async def test_a_grant_without_a_token_endpoint_fails_before_authorizing() -> None:
+    from fakts.grants.remote.base import RemoteGrant
+    from fakts.grants.remote.errors import RemoteGrantError
+
+    class NoTokenEndpoint:
+        async def adiscover(self) -> FaktsEndpoint:
+            endpoint = endpoint_for("http://x/")
+            endpoint.token_endpoint = None
+            return endpoint
+
+    class MustNotRun:
+        called = False
+
+        async def aauthorize(self, endpoint):
+            MustNotRun.called = True
+            raise AssertionError("authorized against an endpoint the grant then refuses")
+
+    grant = RemoteGrant.model_construct(discovery=NoTokenEndpoint(), authorizer=MustNotRun())
+    with pytest.raises(RemoteGrantError, match="no token_endpoint"):
+        await grant.aload()
+    assert not MustNotRun.called

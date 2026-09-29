@@ -28,6 +28,11 @@ def could_copy_to_clipboard(text: str) -> bool:
     except ImportError:
         logger.debug("Could not import pyperclip, not copying to clipboard")
         return False
+    except Exception:
+        # No clipboard backend (headless, no xclip): a convenience, never a
+        # reason to abort the login.
+        logger.debug("Could not copy to the clipboard", exc_info=True)
+        return False
 
 
 try:
@@ -105,7 +110,7 @@ except ImportError:
         print("Please visit the following URL:")
         print("\t" + querystring)
         print("Or go to this URL:")
-        print("\t" + url + "device")
+        print("\t" + url)
         print("And enter the following code:")
         print("\t" + code)
         if could_copy:

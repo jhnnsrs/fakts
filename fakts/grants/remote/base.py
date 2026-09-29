@@ -49,13 +49,15 @@ class RemoteGrant(BaseModel):
                 f"{self.discovery.__class__.__name__}: {e}"
             ) from e
 
-        response = await self.authorizer.aauthorize(endpoint)
-
+        # Before authorizing: otherwise the server mints a client (and the user
+        # may approve it) only for the grant to throw it away.
         if not endpoint.token_endpoint:
             raise RemoteGrantError(
                 f"{endpoint.name} advertised no token_endpoint, so the session "
                 f"could not be renewed later."
             )
+
+        response = await self.authorizer.aauthorize(endpoint)
 
         active = merge_token_response(
             None,

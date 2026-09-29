@@ -84,6 +84,10 @@ class InsecureTransportError(FaktsError):
     """
 
 
+class TransientHTTPError(FaktsError):
+    """The endpoint answered 5xx: a server-side failure worth retrying."""
+
+
 class OAuth2ErrorResponse(Exception):
     """A structured OAuth2 error response (RFC 6749 §5.2).
 
@@ -233,6 +237,10 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
         )
 
     text = await response.text()
+    if response.status >= 500:
+        # Before parsing: a 5xx is usually a proxy's HTML page, not JSON.
+        raise TransientHTTPError(f"{url} answered {response.status}: {text[:200]}")
+
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:

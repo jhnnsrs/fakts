@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from enum import Enum
 from urllib.parse import urlparse
 
+import aiohttp
 from pydantic import BaseModel, Field, model_validator
 
 from fakts import oauth2
@@ -66,8 +67,10 @@ async def display_in_terminal(endpoint: "FaktsEndpoint", code: str) -> None:
     authorization response, which the authorizer opens directly. This hook
     remains the extension point for headless and test harnesses.
     """
-    base = endpoint.configure or endpoint.base_url
-    print_device_code_prompt(base, base, code)
+    # `configure` is a template with a literal {code}; fill it in, so the
+    # printed link lands on the pre-filled approval page.
+    approve = endpoint.configure.replace("{code}", code) if endpoint.configure else None
+    print_device_code_prompt(approve or endpoint.base_url, endpoint.base_url, code)
 
 
 async def granted_in_terminal(endpoint: "FaktsEndpoint", token: str) -> None:
@@ -191,7 +194,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
         if user_code:
             await self.device_code_hook(endpoint, user_code)
 
-        token_endpoint = started.get("token_endpoint") or endpoint.token_endpoint
+        # Poll the endpoint the session will be renewed against, not one the
+        # device response names: the two must never diverge.
+        token_endpoint = endpoint.token_endpoint
         if not token_endpoint:
             raise DeviceCodeError(f"{endpoint.name} advertised no token_endpoint to poll.")
 
@@ -250,6 +255,12 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     ssl_context=self.ssl_context,
                     allow_insecure_transport=self.allow_insecure_transport,
                 )
+            except (aiohttp.ClientError, TimeoutError, oauth2.TransientHTTPError) as e:
+                # The user may be halfway through approving: one dropped
+                # connection or 5xx must not end the login. The deadline
+                # still bounds how long this keeps trying.
+                logger.info("Polling %s failed (%s); retrying.", token_endpoint, e)
+                continue
             except oauth2.OAuth2ErrorResponse as e:
                 if e.error == "authorization_pending":
                     continue
