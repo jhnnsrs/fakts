@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from fakts.errors import AliasNotFoundError, CompositionError, ServiceNotGrantedError
-from fakts.mesh import MeshError, MeshRoute, NativeNode
+from fakts.mesh import MeshRoute
 from fakts.models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Instance, Requirement
 from fakts.report import AliasReport, PendingReport, areport_aliases
 from fakts.session import TokenSession
@@ -295,17 +295,9 @@ class AliasResolver:
         fakts = state.loaded_fakts or fakts
         generation = state.instances_gen
 
-        mesh_proxy, mesh_node, mesh_error = await self._route.aroute(fakts)
         results = await asyncio.gather(
             *(
-                self._aresolve_requirement(
-                    fakts,
-                    req,
-                    omit_challenge=omit_challenge,
-                    mesh_proxy=mesh_proxy,
-                    mesh_node=mesh_node,
-                    mesh_error=mesh_error,
-                )
+                self._aresolve_requirement(fakts, req, omit_challenge=omit_challenge)
                 for req in requirements
             )
         )
@@ -384,17 +376,19 @@ class AliasResolver:
         fakts: ActiveFakts,
         req: Requirement,
         omit_challenge: bool = False,
-        mesh_proxy: str | None = None,
-        mesh_node: NativeNode | None = None,
-        mesh_error: MeshError | None = None,
     ) -> tuple[Alias | None, AliasReport, str | None]:
         """Resolve a single requirement to a working alias.
 
         Tries the instance's aliases in order (the first is the last known good
         one) and returns the first that passes its challenge. Mesh aliases are
-        challenged through ``mesh_proxy`` and returned carrying it and, if this
-        process runs it, the ``mesh_node`` (for ``Alias.aforward``/``aturn``);
-        without a mesh proxy they are skipped.
+        challenged through the mesh route and returned carrying its proxy and,
+        if this process runs it, its node (for ``Alias.aforward``/``aturn``).
+
+        A node is never started to reach what is reachable without one: while
+        it is not running, mesh aliases wait until every other alias of the
+        service failed, and only then is the node started for them. A proxy,
+        or a node another service already started, costs nothing, so then the
+        order is kept as it is.
 
         Returns (selected alias or None, report, composition error or None);
         the composition error is only set for required services.
@@ -424,41 +418,41 @@ class AliasResolver:
             )
 
         errors_in_alias: list[str] = []
+        waiting_for_mesh: list[Alias] = []
         for alias in instance.aliases:
             selected = alias
             if alias.is_mesh():
-                if mesh_proxy is None:
+                route = self._route.ready()
+                if route is None:
+                    waiting_for_mesh.append(alias)
+                    continue
+                # A copy: the route is this process's, never the cached instance's.
+                selected = alias.through_mesh(*route)
+            if await self._atry(req, instance, alias, selected, omit_challenge, errors_in_alias):
+                return (selected, AliasReport(alias_id=alias.id, reason=None, valid=True), None)
+
+        if waiting_for_mesh:
+            proxy, node, mesh_error = await self._route.aroute(fakts)
+            for alias in waiting_for_mesh:
+                if proxy is None:
                     errors_in_alias.append(
                         f"Alias {alias.id} of service {req.key} is only reachable over "
-                        f"the mesh, and the mesh node could not start: {mesh_error}"
+                        f"the mesh, which is not available: {mesh_error}"
                         if mesh_error is not None
                         else f"Alias {alias.id} of service {req.key} is only reachable "
                         f"over the mesh, which is off: pass mesh=MeshOptions() (with "
                         f'fakts[mesh] installed) or mesh=MeshProxy(url="http://...") to Fakts.'
                     )
                     continue
-                # A copy: the route is this process's, never the cached instance's.
-                selected = alias.through_mesh(mesh_proxy, mesh_node)
-
-            if omit_challenge:
-                return (selected, AliasReport(alias_id=alias.id, reason=None, valid=True), None)
-
-            try:
-                challenge_ok = await asyncio.wait_for(
-                    self._probe(alias, instance.challenge_key, selected.proxy),
-                    timeout=self._settings.alias_challenge_timeout,
-                )
-                if challenge_ok:
-                    return (selected, AliasReport(alias_id=alias.id, reason=None, valid=True), None)
-            except TimeoutError:
-                errors_in_alias.append(
-                    f"Timeout while challenging alias {alias.id} for service {req.key}."
-                )
-            except Exception as e:
-                errors_in_alias.append(
-                    f"Error while challenging alias {alias.challenge_path} for service "
-                    f"{req.key}: {e!s}"
-                )
+                selected = alias.through_mesh(proxy, node)
+                if await self._atry(
+                    req, instance, alias, selected, omit_challenge, errors_in_alias
+                ):
+                    return (
+                        selected,
+                        AliasReport(alias_id=alias.id, reason=None, valid=True),
+                        None,
+                    )
 
         error_message = (
             f"All {len(instance.aliases)} alias(es) of service {req.key} "
@@ -470,6 +464,33 @@ class AliasResolver:
             AliasReport(alias_id=None, reason=error_message, valid=False),
             None if req.optional else error_message,
         )
+
+    async def _atry(
+        self,
+        req: Requirement,
+        instance: Instance,
+        alias: Alias,
+        selected: Alias,
+        omit_challenge: bool,
+        errors: list[str],
+    ) -> bool:
+        """Whether ``selected`` (``alias`` as it is reached) passes its
+        challenge; why not is appended to ``errors``."""
+        if omit_challenge:
+            return True
+        try:
+            if await asyncio.wait_for(
+                self._probe(alias, instance.challenge_key, selected.proxy),
+                timeout=self._settings.alias_challenge_timeout,
+            ):
+                return True
+        except TimeoutError:
+            errors.append(f"Timeout while challenging alias {alias.id} for service {req.key}.")
+        except Exception as e:
+            errors.append(
+                f"Error while challenging alias {alias.challenge_path} for service {req.key}: {e!s}"
+            )
+        return False
 
     def _probe(
         self, alias: Alias, challenge_key: ChallengeKey | None, proxy: str | None

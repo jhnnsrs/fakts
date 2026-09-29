@@ -127,10 +127,12 @@ class Fakts(KoiledModel):
     mesh: MeshConfig | None = None
     """How to reach aliases that are only on the deployment's mesh:
     ``MeshOptions()`` runs a node in this process (``pip install
-    "fakts[mesh]"``; the grant should ask for a mesh key with
-    ``request_auth_key`` so a fresh node can join), ``MeshProxy(url=...)`` goes
-    through a proxy that is already running. Without either, mesh aliases are
-    skipped."""
+    "fakts[mesh]"``), started only when a service is reachable no other way;
+    the grant should ask for a mesh key with ``request_auth_key`` so a fresh
+    node can join. ``MeshOptions(auto=True)`` (the builders' default) does the
+    same but stays quiet when the bindings or a key are missing.
+    ``MeshProxy(url=...)`` goes through a proxy that is already running.
+    Without any, mesh aliases are skipped."""
 
     _state: SessionState | None = PrivateAttr(default=None)
     _session: TokenSession | None = PrivateAttr(default=None)

@@ -12,6 +12,8 @@ through, and a TURN relay and TCP forwards for WebRTC media (LiveKit).
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
 import logging
 import os
 import re
@@ -22,7 +24,7 @@ from typing import Annotated, Any, Literal, Self
 
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from arkitekt_spec.declare.wiring import TurnInfo
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from fakts.errors import FaktsError
 from fakts.models import ActiveFakts, Manifest
@@ -52,12 +54,44 @@ NOT_INSTALLED = (
     'The mesh needs the arkitekt-mesh bindings; install them with `pip install "fakts[mesh]"`'
 )
 
+NO_KEY = (
+    "This app holds no mesh key and no joined node: the server granted none (mesh "
+    "access was opted out of, or the organization has no mesh). To join, allow mesh "
+    "access and authorize the app again without the cache"
+)
+
+
+def bindings_installed() -> bool:
+    """Whether the mesh bindings can be imported, without importing them."""
+    try:
+        return importlib.util.find_spec("arkitekt_mesh") is not None
+    except ValueError:
+        # Already imported, without a spec (a stand-in module).
+        return sys.modules.get("arkitekt_mesh") is not None
+
 
 class MeshOptions(BaseModel):
     """Run a mesh node in this process (``pip install "fakts[mesh]"``): where it
-    keeps its state, and how long it may take to join."""
+    keeps its state, and how long it may take to join.
+
+    The node is only started when a service cannot be reached without it:
+    every non-mesh alias of that service failed its challenge.
+    """
 
     kind: Literal["node"] = "node"
+    auto: bool = False
+    """Use the mesh only if it is available, and say nothing when it is not.
+    Without the bindings installed this is off; the login asks for a mesh key,
+    and when the server grants none (the user opted out, or the organization
+    has no mesh) mesh aliases are skipped quietly. Without ``auto``, both of
+    those are reported (as warnings, and on the aliases that needed the mesh)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    def requests_key(self) -> bool:
+        """Whether a login should ask the server for a key to join with."""
+        return not self.auto or bindings_installed()
+
     state_root: Path | None = None
     """Where node state lives (default: ``<state dir>/arkitekt/mesh``)."""
     hostname: str | None = None
@@ -82,10 +116,15 @@ class MeshProxy(BaseModel):
     """Reach mesh-only aliases through an HTTP proxy that is already running
     (e.g. ``arkitekt mesh proxy``); this process starts no node."""
 
+    model_config = ConfigDict(frozen=True)
+
     kind: Literal["proxy"] = "proxy"
     url: str
     """The proxy, e.g. ``http://localhost:1055``."""
 
+
+AUTO_MESH = MeshOptions(auto=True)
+"""The builders' default: the mesh when it is available, silence when not."""
 
 MeshConfig = Annotated[MeshOptions | MeshProxy, Field(discriminator="kind")]
 """How a Fakts reaches mesh aliases: its own node, or a running proxy."""
@@ -203,9 +242,10 @@ class MeshRoute:
     """How this process reaches mesh aliases, for one entered Fakts.
 
     Either a running HTTP proxy (``proxy``, nothing to start) or a node this
-    process starts on first use (``options``) and closes on exit. A node that
-    cannot start is remembered (``error``), so lookups do not retry a join
-    that can take ``MeshOptions.timeout`` each.
+    process starts the first time a service needs it (``options``) and closes
+    on exit. Why there is no route (the node failed, no key, no bindings) is
+    remembered in ``error``, so lookups do not retry a join that can take
+    ``MeshOptions.timeout`` each.
     """
 
     def __init__(self, mesh: MeshOptions | MeshProxy | None, manifest: Manifest) -> None:
@@ -214,43 +254,61 @@ class MeshRoute:
         self.manifest = manifest
         self.node: NativeNode | None = None
         self.error: MeshError | None = None
+        self._starting = asyncio.Lock()
+
+    @property
+    def enabled(self) -> bool:
+        return self.proxy is not None or self.options is not None
+
+    def ready(self) -> tuple[str, NativeNode | None] | None:
+        """The route if it costs nothing to use: a proxy, or a node already up."""
+        if self.proxy:
+            return self.proxy, None
+        if self.node is not None:
+            return self.node.proxy_url, self.node
+        return None
 
     async def aroute(
         self, fakts: ActiveFakts
     ) -> tuple[str | None, NativeNode | None, MeshError | None]:
         """The HTTP proxy mesh aliases are reached through, the node that runs
         it, and why there is none: all ``None`` if the mesh is off, no node for
-        a MeshProxy.
+        a MeshProxy. Starts the node on the first call; single-flight.
 
-        A node that fails to start is not fatal: aliases that do not need the
+        A node that cannot start is not fatal: aliases that do not need the
         mesh still resolve, and the failure is remembered (and reported on the
         mesh aliases) instead of being retried on every lookup.
         """
-        if self.proxy:
-            return self.proxy, None, None
-        if not any(
-            alias.is_mesh() for instance in fakts.instances.values() for alias in instance.aliases
-        ):
-            return None, None, None
-        if self.error is not None:
-            return None, None, self.error
-        try:
-            node = await self._anode(fakts)
-        except MeshError as e:
-            logger.warning("The mesh node could not start: %s", e)
-            self.error = e
-            return None, None, e
-        return (node.proxy_url, node, None) if node else (None, None, None)
-
-    async def _anode(self, fakts: ActiveFakts) -> NativeNode | None:
-        """The mesh node, started on first use; it lives until the context
-        exits. Its state directory is keyed by the app's identity, so it is
-        joined once (with the key from the first token) and re-used after.
-        """
+        if (route := self.ready()) is not None:
+            return route[0], route[1], None
         if self.options is None:
-            return None
-        if self.node is not None:
-            return self.node
+            return None, None, None
+        async with self._starting:
+            if self.node is not None:
+                return self.node.proxy_url, self.node, None
+            if self.error is not None:
+                return None, None, self.error
+            try:
+                self.node = await self._anode(fakts)
+            except MeshError as e:
+                quiet = self.options.auto and e.code in (None, "needs_login")
+                logger.log(
+                    logging.DEBUG if quiet else logging.WARNING,
+                    "The mesh node could not start: %s",
+                    e,
+                )
+                self.error = e
+                return None, None, e
+            return self.node.proxy_url, self.node, None
+
+    async def _anode(self, fakts: ActiveFakts) -> NativeNode:
+        """Start the mesh node; it lives until the context exits. Its state
+        directory is keyed by the app's identity, so it is joined once (with
+        the key from the first token) and re-used after.
+        """
+        assert self.options is not None
+        if self.options.auto and not bindings_installed():
+            raise MeshError(NOT_INSTALLED)
 
         me = fakts.self
         if me.sub and me.organization and me.hub:
@@ -265,12 +323,7 @@ class MeshRoute:
 
         claim = fakts.mesh
         if claim is None and not NativeNode.has_state(statedir):
-            logger.warning(
-                "The mesh is enabled, but this app holds no mesh key; mesh aliases "
-                "will be skipped (authorize again without the cache and allow mesh "
-                "access to join)."
-            )
-            return None
+            raise MeshError(NO_KEY, "needs_login")
         # The grant already filled a missing coord url from the well-known;
         # a joined node remembers its coordination server.
         coord_url = claim.ionscale_coord_url if claim else None
@@ -281,14 +334,13 @@ class MeshRoute:
             :8
         ]
         hostname = self.options.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
-        self.node = await NativeNode.start(
+        return await NativeNode.start(
             self.options,
             statedir,
             hostname,
             coord_url=coord_url,
             auth_key=claim.ionscale_auth_key if claim else None,
         )
-        return self.node
 
     def close(self) -> None:
         """Stop the node, if one was started."""

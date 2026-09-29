@@ -14,7 +14,7 @@ from fakts.grants.remote.authorizers.device_code import (
 )
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
-from fakts.mesh import MeshOptions, MeshProxy
+from fakts.mesh import AUTO_MESH, MeshOptions, MeshProxy
 from fakts.models import Manifest
 from fakts.protocols import FaktsCache
 
@@ -83,7 +83,7 @@ def build_device_code_fakts(
     timeout: int | None = None,
     allow_insecure_transport: bool = False,
     ssl_context: ssl.SSLContext | None = None,
-    mesh: MeshOptions | MeshProxy | None = None,
+    mesh: MeshOptions | MeshProxy | None = AUTO_MESH,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the device code flow.
 
@@ -138,11 +138,15 @@ def build_device_code_fakts(
         TLS context used for *every* call — discovery, the device flow, the
         token endpoint, alias challenges and the report. Pass one to trust a
         private CA; without it, certifi's bundle applies throughout.
-    mesh : MeshOptions | MeshProxy, optional
-        Reach mesh-only aliases. ``MeshOptions()`` asks for a mesh key when
-        authorizing and runs the node in this process (``pip install
-        "fakts[mesh]"``); ``MeshProxy(url=...)`` uses a proxy that is already
-        running (e.g. ``arkitekt mesh proxy``).
+    mesh : MeshOptions | MeshProxy | None, optional
+        Reach mesh-only aliases. The default, ``MeshOptions(auto=True)``, uses
+        the mesh when it is available: with the bindings installed (``pip
+        install "fakts[mesh]"``) the login asks for a mesh key, and the node
+        starts only when a service is reachable no other way. The server may
+        grant no key (the user opted out, or the organization has no mesh);
+        mesh aliases are then skipped quietly. ``MeshOptions()`` does the same
+        but reports what is missing; ``MeshProxy(url=...)`` uses a proxy that
+        is already running (e.g. ``arkitekt mesh proxy``); ``None`` is off.
 
     Returns
     -------
@@ -162,7 +166,7 @@ def build_device_code_fakts(
             allow_insecure_transport=allow_insecure_transport,
             ssl_context=context,
             # Only a node of our own needs a key; a proxy is already on the mesh.
-            request_auth_key=isinstance(mesh, MeshOptions),
+            request_auth_key=isinstance(mesh, MeshOptions) and mesh.requests_key(),
         ),
         context=context,
         cache_file=cache_file,
@@ -181,7 +185,7 @@ def build_redeem_fakts(
     no_cache: bool = False,
     allow_insecure_transport: bool = False,
     ssl_context: ssl.SSLContext | None = None,
-    mesh: MeshOptions | MeshProxy | None = None,
+    mesh: MeshOptions | MeshProxy | None = AUTO_MESH,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the redeem flow (headless/CI).
 
@@ -204,11 +208,12 @@ def build_redeem_fakts(
         app is started from varying directories.
     no_cache : bool, optional
         Disable caching entirely, by default False.
-    mesh : MeshOptions | MeshProxy, optional
-        Reach mesh-only aliases. The redeem grant cannot ask for a mesh key
-        (only the device-code flow can), so ``MeshOptions()`` works for a node
-        that already joined on this machine, and ``MeshProxy(url=...)``
-        through a proxy that is running.
+    mesh : MeshOptions | MeshProxy | None, optional
+        Reach mesh-only aliases (default ``MeshOptions(auto=True)``, see
+        :func:`build_device_code_fakts`). The redeem grant cannot ask for a
+        mesh key (only the device-code flow can), so a node only comes up if
+        it already joined on this machine; ``MeshProxy(url=...)`` goes
+        through a proxy that is running; ``None`` is off.
 
     Returns
     -------

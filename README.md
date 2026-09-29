@@ -597,19 +597,28 @@ The renewal never prompts: a rejected request raises
 ### Mesh-only services
 
 Some deployments put services on a private mesh (a tailnet) instead of a
-public address. The server marks those aliases `kind: "mesh"`, and fakts skips
-them unless it is told how to reach the mesh:
+public address. The server marks those aliases `kind: "mesh"`. By default the
+builders use the mesh **when it is available**, and stay quiet when it is not:
+
+- Without the bindings (`pip install "fakts[mesh]"`) the mesh is off, and
+  mesh aliases are skipped.
+- With them, the login asks the server for a key to join the mesh with. The
+  server may grant none (the user opted out of the mesh, or the organization
+  has none), and then mesh aliases are skipped, too.
+- A node is only started when a service is reachable no other way: while no
+  node is running, a service's mesh aliases wait until its other aliases have
+  failed. Later runs reuse the node's state (under
+  `~/.local/state/arkitekt/mesh` on Linux).
+
+Choose explicitly with `mesh`:
 
 ```python
 from fakts import MeshOptions, MeshProxy, build_device_code_fakts
 
-# Run a mesh node in this process (pip install "fakts[mesh]"). The first
-# login asks the server for a key to join with; later runs reuse the node's
-# state (under ~/.local/state/arkitekt/mesh on Linux).
-fakts = build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())
-
-# Or go through a proxy that is already running (e.g. `arkitekt mesh proxy`).
-fakts = build_device_code_fakts(url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055"))
+build_device_code_fakts(url=url, manifest=manifest)                           # MeshOptions(auto=True)
+build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())       # the same, but report what is missing
+build_device_code_fakts(url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055"))  # a running proxy
+build_device_code_fakts(url=url, manifest=manifest, mesh=None)                # off
 ```
 
 A mesh alias comes back with `proxy` set, so an HTTP client that honours it
@@ -625,12 +634,12 @@ Both raise `arkitekt_spec`'s `MeshError` for an alias reached through a
 `MeshProxy` (there is no node to forward through) or one that is not on the
 mesh; `fakts.MeshError` is a subclass of it, so catching that one catches both.
 If the node cannot start or join, only mesh aliases are affected: their
-resolution error names the node's failure, every non-mesh alias keeps
-resolving, and fakts does not retry the join on every call.
+resolution error names why, every non-mesh alias keeps resolving, and fakts
+does not retry the join on every call.
 
 `build_redeem_fakts` takes `mesh` too, but the redeem grant cannot ask for a
-join key: use it with a `MeshProxy`, or with `MeshOptions()` for a node that
-already joined on this machine.
+join key: a node only comes up if it already joined on this machine, or use a
+`MeshProxy`.
 
 ## Error handling
 
@@ -657,7 +666,7 @@ code and (truncated) response body where applicable:
 | `ssl_context` | certifi's CAs | TLS verification for every request fakts makes |
 | `allow_insecure_transport` | `False` | Permit sending credentials over plain http to a non-loopback host (loopback never needs it) |
 | `reauth_policy` | `ReauthPolicy.ON_LOGIN` | When token renewal may run an interactive grant: `NEVER`, `ON_LOGIN` (only `alogin()`/`aload()`/`arefresh()` may prompt), or `ALWAYS` |
-| `mesh` | `None` | `MeshOptions()` or `MeshProxy(url=...)` to reach mesh-only aliases (see [mesh-only services](#mesh-only-services)) |
+| `mesh` | `None` (builders: `MeshOptions(auto=True)`) | `MeshOptions()` or `MeshProxy(url=...)` to reach mesh-only aliases (see [mesh-only services](#mesh-only-services)) |
 | `allow_auto_load` | `True` | If `False`, `aget_*` raises instead of loading implicitly — call `aload()` yourself |
 | `refetch_on_alias_failure` | `True` | Reload from the grant once when aliases from a *cached* config fail their challenges — only when that needs no human; otherwise it raises and asks you to `alogin()` |
 | `alias_challenge_timeout` | `3` | Seconds per alias challenge probe |
