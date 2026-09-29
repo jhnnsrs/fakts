@@ -151,10 +151,11 @@ def is_loopback(url: str) -> bool:
 def check_transport(url: str, allow_insecure: bool) -> None:
     """Gate a *credential-bearing* request on the transport opt-in.
 
-    Discovery is deliberately not gated: it carries no secret, and a
-    downgraded discovery yields a plain-HTTP token endpoint that this check
-    catches anyway. The gate belongs where the credential is, not where the
-    URL was learned.
+    Discovery carries no secret, so the gate sits here, where the credential
+    is. It only judges this URL's scheme: which host the endpoint names is the
+    discovery's to check (a tampered well-known document can name an https
+    endpoint on another origin), and redirects are refused by the posting
+    helpers themselves, since they would otherwise resend the body.
     """
     if urlparse(url).scheme != "http" or is_loopback(url):
         return
@@ -202,6 +203,16 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     its throttle answers ``429`` with a bare ``{"error": "slow_down"}`` and
     no ``status`` key at all.
     """
+    if 300 <= response.status < 400:
+        # Never followed (allow_redirects=False): on 307/308 aiohttp would resend
+        # the form body -- the refresh token, redeem token or device code -- to
+        # wherever Location points, plain http included.
+        raise FaktsError(
+            f"{url} answered with a redirect ({response.status}) to "
+            f"{response.headers.get('Location', '<no Location>')}; refusing to "
+            f"follow a redirect with credentials. Configure the endpoint's final URL."
+        )
+
     text = await response.text()
     try:
         data = json.loads(text)
@@ -250,7 +261,7 @@ async def apost_form(
             connector=_connector(ssl_context),
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as session,
-        session.post(url, data=dict(data), headers=headers) as response,
+        session.post(url, data=dict(data), headers=headers, allow_redirects=False) as response,
     ):
         return await _handle(response, url)
 
@@ -280,7 +291,7 @@ async def apost_json(
             connector=_connector(ssl_context),
             timeout=aiohttp.ClientTimeout(total=timeout),
         ) as session,
-        session.post(url, json=dict(payload), headers=headers) as response,
+        session.post(url, json=dict(payload), headers=headers, allow_redirects=False) as response,
     ):
         return await _handle(response, url)
 

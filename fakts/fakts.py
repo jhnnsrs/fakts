@@ -1412,6 +1412,8 @@ class Fakts(KoiledModel):
                 session.post(
                     fakts.auth.report_endpoint,
                     json=report.model_dump(),
+                    # The bearer token must not follow a redirect elsewhere.
+                    allow_redirects=False,
                 ) as resp,
             ):
                 if resp.status != 200:
@@ -1423,8 +1425,8 @@ class Fakts(KoiledModel):
                         truncate(body) or "<empty>",
                     )
                     return
-                data = await resp.json()
-                logger.debug("Reporting usage, got response: %s", data)
+                # The status is the answer; a body that is not JSON is no failure.
+                logger.debug("Reported alias status to %s", fakts.auth.report_endpoint)
         except Exception:
             logger.warning(
                 "Could not report alias status to %s. Continuing without reporting.",
