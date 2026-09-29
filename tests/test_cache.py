@@ -168,3 +168,34 @@ async def test_nocache_never_persists():
     await cache.aset(make_fakts_value())
     await cache.areset()
     assert await cache.aload() is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["[]", '"a string"', "42", "null", "{", "\xff\xfe"])
+async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, content: str):
+    """A corrupt cache must never break startup, whatever JSON (or not) it holds."""
+    cache_file = tmp_path / "cache.json"
+    cache_file.write_text(content, encoding="latin-1")
+    cache = FileCache(cache_file=str(cache_file), hash="h")
+
+    assert await cache.aload() is None
+
+
+@pytest.mark.asyncio
+async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: Path):
+    """Caches written before UTC stamping carry naive local times."""
+    import datetime
+    import json
+
+    cache_file = tmp_path / "cache.json"
+    cache = FileCache(cache_file=str(cache_file), hash="h", expires_in=3600)
+    await cache.aset(make_fakts_value())
+
+    data = json.loads(cache_file.read_text())
+    data["created"] = datetime.datetime.now().isoformat()  # naive, local
+    cache_file.write_text(json.dumps(data))
+    assert await cache.aload() is not None
+
+    data["created"] = (datetime.datetime.now() - datetime.timedelta(hours=2)).isoformat()
+    cache_file.write_text(json.dumps(data))
+    assert await cache.aload() is None

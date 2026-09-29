@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import json
 import logging
 import os
 import stat
@@ -110,6 +109,12 @@ def _group_may_contain_others(gid: int, owner_uid: int) -> bool:
     return bool(members - {owner})
 
 
+def _as_utc(moment: datetime.datetime) -> datetime.datetime:
+    """``moment`` as an aware UTC datetime; naive ones (caches written before
+    fakts stamped them in UTC) are read as local time."""
+    return (moment if moment.tzinfo else moment.astimezone()).astimezone(datetime.UTC)
+
+
 class CacheFile(pydantic.BaseModel):
     """Cache file model"""
 
@@ -207,9 +212,10 @@ class FileCache(pydantic.BaseModel):
             # someone else planted.
             fd = os.open(self.cache_file, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             with os.fdopen(fd, "r") as f:
-                x = json.load(f)
-            cache = CacheFile(**x)
-        except (json.JSONDecodeError, pydantic.ValidationError, OSError) as e:
+                # One validation step: invalid JSON, JSON that is not an object
+                # and a wrong shape all land in ValidationError.
+                cache = CacheFile.model_validate_json(f.read())
+        except (pydantic.ValidationError, OSError, UnicodeDecodeError) as e:
             # A corrupt or unreadable cache should never break startup:
             # treat it as a cache miss and let the grant reload.
             #
@@ -231,11 +237,9 @@ class FileCache(pydantic.BaseModel):
         if self.hash and cache.hash != self.hash:
             return None
 
-        if (
-            self.expires_in
-            and cache.created + datetime.timedelta(seconds=self.expires_in)
-            < datetime.datetime.now()
-        ):
+        if self.expires_in and _as_utc(cache.created) + datetime.timedelta(
+            seconds=self.expires_in
+        ) < datetime.datetime.now(datetime.UTC):
             return None
 
         return cache.fakts
@@ -417,7 +421,7 @@ class FileCache(pydantic.BaseModel):
         The request object is used to pass information
         """
 
-        cache = CacheFile(fakts=value, created=datetime.datetime.now(), hash=self.hash)
+        cache = CacheFile(fakts=value, created=datetime.datetime.now(datetime.UTC), hash=self.hash)
 
         # This file holds a live, rotating refresh token, so it is created
         # 0600 *before* anything is written to it. The mode has to be right
