@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -25,4 +25,23 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests
-        run: uv run pytest -k "not integration"
+        run: uv run pytest -m "not integration"
+
+  # The extras (mesh, rath, crypto) are optional: without them fakts must still
+  # import and work, and the tests that need one skip.
+  no_extras:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv and set the python version
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          python-version: "3.12"
+
+      - name: Install the project without extras
+        run: uv sync --dev
+
+      - name: Run tests
+        run: uv run --no-sync pytest -m "not integration"

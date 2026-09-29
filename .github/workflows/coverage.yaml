@@ -8,7 +8,7 @@ on:
 
 jobs:
   run_tests:
-    name: Python (Pull Request Tests)
+    name: Unit test coverage
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,9 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run tests
-        run: uv run pytest --cov --cov-branch --cov-report=xml
+        # Unit tests only: the docker stacks (tests/integration, tests/mesh_lab)
+        # run in their own workflow and in the release gate.
+        run: uv run pytest -m "not integration" --cov --cov-branch --cov-report=xml
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

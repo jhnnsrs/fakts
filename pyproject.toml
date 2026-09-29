@@ -8,7 +8,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
-    "pydantic>2",
+    "pydantic>=2.11",
     "koil>=3.3.2",
     "certifi>=2025.4.26",
     "aiohttp>=3.11.18",
@@ -27,15 +27,15 @@ Homepage = "https://github.com/jhnnsrs/fakts"
 Repository = "https://github.com/jhnnsrs/fakts"
 Documentation = "https://jhnnsrs.github.io/fakts"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "cryptography>=42",
     "dokker>=2.8",
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
     "pytest>=8.3.5",
-    "python-semantic-release>=9.21.1",
     "basedpyright>=1.21",
+    "ruff>=0.15",
 ]
 
 [tool.basedpyright]
@@ -60,11 +60,29 @@ source = "vcs"
 fallback-version = "0.0.0"
 
 [tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
 markers = [
-    "integration: marks tests that require a running server",
-    "network: marks tests that require a network connection",
-    "mesh: marks tests that join a real mesh (needs arkitekt-mesh and ARKITEKT_TEST_MESH_*)",
+    "integration: marks tests that require a running server (docker)",
+    "mesh: marks tests that join a real mesh (tests/mesh_lab, needs arkitekt-mesh)",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+# pyflakes/pycodestyle errors, imports, pyupgrade, bugbear, simplify, ruff.
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",   # long lines: docstrings and messages read better whole
+    "RUF001", # ambiguous unicode in strings: the prompts use it on purpose
+    "RUF002",
+    "RUF003",
+    "UP042",  # (str, Enum) -> StrEnum changes str()/format output: behaviour, not style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011", "B017"]
 
 
 

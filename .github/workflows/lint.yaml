@@ -2,9 +2,9 @@ name: Lint
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
-    branches: [main]
+    branches: [main, next]
 
 jobs:
   ruff:
@@ -18,15 +18,12 @@ jobs:
           version: "latest"
           python-version: "3.12"
 
+      # ruff comes from the dev group, so its version is the lockfile's.
       - name: Install the project
         run: uv sync --all-extras --dev
 
-      # Advisory for now: report lint/format issues without failing the build.
-      # Flip continue-on-error to false (or remove it) once the debt is cleared.
       - name: Ruff check
         run: uv run ruff check .
-        continue-on-error: true
 
       - name: Ruff format check
         run: uv run ruff format --check .
-        continue-on-error: true
