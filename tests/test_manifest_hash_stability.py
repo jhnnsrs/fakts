@@ -68,3 +68,21 @@ def test_the_login_manifest_is_the_spec_manifest():
 def test_a_misspelled_field_is_still_refused():
     with pytest.raises(ValueError):
         Manifest(identifier="a", version="1", scopes=[], authr="x")
+
+
+def test_a_field_the_spec_adds_to_requirements_later_does_not_move_the_hash(monkeypatch):
+    """Requirements used to be hashed whole, so a new spec field would have
+    changed every app's hash -- one forced login for everyone."""
+    manifest = Manifest(**VECTORS[1]["manifest"])
+    real_dump = Manifest.model_dump
+
+    def dump_with_a_new_field(self, *args, **kwargs):
+        dumped = real_dump(self, *args, **kwargs)
+        for entry in dumped.get("requirements") or []:
+            entry["added_in_a_later_spec"] = "anything"
+        for entry in dumped.get("public_sources") or []:
+            entry["added_in_a_later_spec"] = "anything"
+        return dumped
+
+    monkeypatch.setattr(Manifest, "model_dump", dump_with_a_new_field)
+    assert manifest.hash() == VECTORS[1]["hash"]

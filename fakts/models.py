@@ -192,6 +192,11 @@ LOGIN_HASH_FIELDS = (
     "public_sources",
     "description",
 )
+#: What of each requirement / public source the login hash covers. Pinned: the
+#: fields that were hashed when these became fixed (see
+#: tests/test_manifest_hash_stability.py).
+REQUIREMENT_HASH_FIELDS = ("key", "service", "optional", "description")
+PUBLIC_SOURCE_HASH_FIELDS = ("kind", "url")
 
 
 class Manifest(AppManifest):
@@ -239,12 +244,21 @@ class Manifest(AppManifest):
         # invalidate it and force the user through the grant again.
         # `requirements` and `public_sources` are both Optional, so normalise
         # to a list before sorting rather than assuming one is there.
+        # Each entry is reduced to the fields that have always been hashed, so a
+        # field arkitekt-spec adds to Requirement later does not move every
+        # app's hash either.
         unsorted_dict["requirements"] = sorted(
-            unsorted_dict.get("requirements") or [],
+            (
+                {field: entry.get(field) for field in REQUIREMENT_HASH_FIELDS}
+                for entry in unsorted_dict.get("requirements") or []
+            ),
             key=lambda x: (x["key"], x["service"]),
         )
         unsorted_dict["public_sources"] = sorted(
-            unsorted_dict.get("public_sources") or [],
+            (
+                {field: entry.get(field) for field in PUBLIC_SOURCE_HASH_FIELDS}
+                for entry in unsorted_dict.get("public_sources") or []
+            ),
             key=lambda x: (x["kind"], x["url"]),
         )
         unsorted_dict["scopes"] = sorted(unsorted_dict.get("scopes") or [])
