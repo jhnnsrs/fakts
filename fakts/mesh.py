@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sys
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Self
 
@@ -24,6 +25,7 @@ from arkitekt_spec.declare.wiring import TurnInfo
 from pydantic import BaseModel
 
 from fakts.errors import FaktsError
+from fakts.models import ActiveFakts, Manifest
 
 logger = logging.getLogger(__name__)
 
@@ -181,3 +183,101 @@ class NativeNode:
 
     def close(self) -> None:
         self._node.close()
+
+
+class MeshRoute:
+    """How this process reaches mesh aliases, for one entered Fakts.
+
+    Either a running HTTP proxy (``proxy``, nothing to start) or a node this
+    process starts on first use (``options``) and closes on exit. A node that
+    cannot start is remembered (``error``), so lookups do not retry a join
+    that can take ``MeshOptions.timeout`` each.
+    """
+
+    def __init__(self, options: MeshOptions | None, proxy: str | None, manifest: Manifest) -> None:
+        self.options = options
+        self.proxy = proxy
+        self.manifest = manifest
+        self.node: NativeNode | None = None
+        self.error: MeshError | None = None
+
+    async def aroute(
+        self, fakts: ActiveFakts
+    ) -> tuple[str | None, NativeNode | None, MeshError | None]:
+        """The HTTP proxy mesh aliases are reached through, the node that runs
+        it, and why there is none: all ``None`` if the mesh is off, no node for
+        an external ``mesh_proxy``.
+
+        A node that fails to start is not fatal: aliases that do not need the
+        mesh still resolve, and the failure is remembered (and reported on the
+        mesh aliases) instead of being retried on every lookup.
+        """
+        if self.proxy:
+            return self.proxy, None, None
+        if not any(
+            alias.is_mesh() for instance in fakts.instances.values() for alias in instance.aliases
+        ):
+            return None, None, None
+        if self.error is not None:
+            return None, None, self.error
+        try:
+            node = await self._anode(fakts)
+        except MeshError as e:
+            logger.warning("The mesh node could not start: %s", e)
+            self.error = e
+            return None, None, e
+        return (node.proxy_url, node, None) if node else (None, None, None)
+
+    async def _anode(self, fakts: ActiveFakts) -> NativeNode | None:
+        """The mesh node, started on first use; it lives until the context
+        exits. Its state directory is keyed by the app's identity, so it is
+        joined once (with the key from the first token) and re-used after.
+        """
+        if self.options is None:
+            return None
+        if self.node is not None:
+            return self.node
+
+        me = fakts.self
+        if me.sub and me.organization and me.hub:
+            identity = f"{me.sub}-{me.organization}-{me.hub}"
+        else:
+            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[
+                :16
+            ]
+        statedir = self.options.node_dir(
+            f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
+        )
+
+        claim = fakts.mesh
+        if claim is None and not NativeNode.has_state(statedir):
+            logger.warning(
+                "The mesh is enabled, but this app holds no mesh key; mesh aliases "
+                "will be skipped (authorize again without the cache and allow mesh "
+                "access to join)."
+            )
+            return None
+        # The grant already filled a missing coord url from the well-known;
+        # a joined node remembers its coordination server.
+        coord_url = claim.ionscale_coord_url if claim else None
+        if claim is not None and not coord_url:
+            raise MeshError("The server sent a mesh key but no coordination url")
+
+        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[
+            :8
+        ]
+        hostname = self.options.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
+        self.node = await NativeNode.start(
+            self.options,
+            statedir,
+            hostname,
+            coord_url=coord_url,
+            auth_key=claim.ionscale_auth_key if claim else None,
+        )
+        return self.node
+
+    def close(self) -> None:
+        """Stop the node, if one was started."""
+        if self.node is not None:
+            node, self.node = self.node, None
+            node.close()

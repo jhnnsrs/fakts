@@ -312,8 +312,9 @@ async def test_fakts_runs_the_native_node(
         assert await alias.aforward(7880) == "127.0.0.1:5555"
         # Also when served again from the alias map.
         again = await fakts.aget_alias("test")
-        assert again._mesh is fakts._mesh_node
-        node = fakts._mesh_node
+        assert fakts._mesh_route is not None
+        assert again._mesh is fakts._mesh_route.node
+        node = fakts._mesh_route.node
         assert node is not None and node._node.forwards == [
             ("100.64.0.9", 8080),
             ("100.64.0.9", 7880),
@@ -374,7 +375,8 @@ async def test_no_key_and_no_node_skips_the_mesh(fake_arkitekt_mesh: Any, tmp_pa
         mesh=MeshOptions(state_root=tmp_path),
     )
     async with fakts:
-        assert await fakts._amesh_route(mesh_fakts()) == (None, None, None)
+        assert fakts._mesh_route is not None
+        assert await fakts._mesh_route.aroute(mesh_fakts()) == (None, None, None)
     assert FakeNode.started == []
 
 

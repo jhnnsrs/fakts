@@ -47,7 +47,6 @@ import random
 import ssl
 import time
 from enum import Enum
-from hashlib import sha256
 from ssl import SSLContext
 from typing import Any, ClassVar
 from urllib.parse import urlparse
@@ -70,7 +69,7 @@ from fakts.errors import (
 )
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshError, MeshOptions, NativeNode, hostname_label
+from .mesh import MeshError, MeshOptions, MeshRoute, NativeNode
 from .models import (
     ActiveFakts,
     Alias,
@@ -281,7 +280,7 @@ class Fakts(KoiledModel):
     mesh proxy`` at ``http://localhost:1055``). Aliases that need the mesh
     are skipped without one (or ``mesh``)."""
 
-    _mesh_node: NativeNode | None = None
+    _mesh_route: MeshRoute | None = None
     _load_lock: asyncio.Lock | None = None
     _token_lock: asyncio.Lock | None = None
     _alias_lock: asyncio.Lock | None = None
@@ -301,9 +300,6 @@ class Fakts(KoiledModel):
     """Bumped whenever the instances may have changed (a reload, an adopted or
     rotated credential). An alias refresh publishes itself as current only if
     this did not move while it ran, so an invalidation can never be lost."""
-    _mesh_error: MeshError | None = None
-    """Why the mesh node could not start, remembered so every lookup does not
-    retry a join that can take MeshOptions.timeout; cleared on exit."""
     _unchallenged_keys: set[str] = PrivateAttr(default_factory=set)
     """Keys whose cached alias was accepted without probing it.
 
@@ -1289,7 +1285,8 @@ class Fakts(KoiledModel):
         fakts = self.loaded_fakts or fakts
         generation = self._instances_gen
 
-        mesh_proxy, mesh_node, mesh_error = await self._amesh_route(fakts)
+        assert self._mesh_route is not None
+        mesh_proxy, mesh_node, mesh_error = await self._mesh_route.aroute(fakts)
         results = await asyncio.gather(
             *(
                 self._aresolve_requirement(
@@ -1372,81 +1369,6 @@ class Fakts(KoiledModel):
                 f"'{fakts.self.deployment_name}'):\n{joined_errors}\n"
                 f"Check that the services are running and reachable from this machine."
             )
-
-    async def _amesh_route(
-        self, fakts: ActiveFakts
-    ) -> tuple[str | None, NativeNode | None, MeshError | None]:
-        """The HTTP proxy mesh aliases are reached through, the node that runs
-        it, and why there is none: all ``None`` if the mesh is off, no node for
-        an external ``mesh_proxy``.
-
-        A node that fails to start is not fatal: aliases that do not need the
-        mesh still resolve, and the failure is remembered (and reported on the
-        mesh aliases) instead of being retried on every lookup.
-        """
-        if self.mesh_proxy:
-            return self.mesh_proxy, None, None
-        if not any(
-            alias.is_mesh() for instance in fakts.instances.values() for alias in instance.aliases
-        ):
-            return None, None, None
-        if self._mesh_error is not None:
-            return None, None, self._mesh_error
-        try:
-            node = await self._amesh_node(fakts)
-        except MeshError as e:
-            logger.warning("The mesh node could not start: %s", e)
-            self._mesh_error = e
-            return None, None, e
-        return (node.proxy_url, node, None) if node else (None, None, None)
-
-    async def _amesh_node(self, fakts: ActiveFakts) -> NativeNode | None:
-        """The mesh node, started on first use; it lives until the context
-        exits. Its state directory is keyed by the app's identity, so it is
-        joined once (with the key from the first token) and re-used after.
-        """
-        if self.mesh is None:
-            return None
-        if self._mesh_node is not None:
-            return self._mesh_node
-
-        me = fakts.self
-        if me.sub and me.organization and me.hub:
-            identity = f"{me.sub}-{me.organization}-{me.hub}"
-        else:
-            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[
-                :16
-            ]
-        statedir = self.mesh.node_dir(
-            f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
-        )
-
-        claim = fakts.mesh
-        if claim is None and not NativeNode.has_state(statedir):
-            logger.warning(
-                "The mesh is enabled, but this app holds no mesh key; mesh aliases "
-                "will be skipped (authorize again without the cache and allow mesh "
-                "access to join)."
-            )
-            return None
-        # The grant already filled a missing coord url from the well-known;
-        # a joined node remembers its coordination server.
-        coord_url = claim.ionscale_coord_url if claim else None
-        if claim is not None and not coord_url:
-            raise MeshError("The server sent a mesh key but no coordination url")
-
-        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[
-            :8
-        ]
-        hostname = self.mesh.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
-        self._mesh_node = await NativeNode.start(
-            self.mesh,
-            statedir,
-            hostname,
-            coord_url=coord_url,
-            auth_key=claim.ionscale_auth_key if claim else None,
-        )
-        return self._mesh_node
 
     async def _areport_aliases(
         self, fakts: ActiveFakts, composition_errors: list[str], token: str
@@ -1873,9 +1795,9 @@ class Fakts(KoiledModel):
     async def __aenter__(self) -> "Fakts":
         """Enter the context manager
 
-        This method will set the current fakts context variable to itself,
-        create the locks that serialize loading, token fetching and alias
-        resolution, and bind the manifest hash to the cache.
+        This creates the locks that serialize loading, token fetching and alias
+        resolution, sets up the mesh route, and binds the manifest hash to the
+        cache.
 
         Entering never runs the grant. Loading is lazy (see
         ``allow_auto_load``) or explicit via :meth:`aload` — so entering the
@@ -1898,6 +1820,7 @@ class Fakts(KoiledModel):
         self._load_lock = asyncio.Lock()
         self._token_lock = asyncio.Lock()
         self._alias_lock = asyncio.Lock()
+        self._mesh_route = MeshRoute(self.mesh, self.mesh_proxy, self.manifest)
 
         # Everything from here on runs with the locks already set, so it has to
         # be unwound by hand on failure: Python does not call __aexit__ when
@@ -1973,10 +1896,9 @@ class Fakts(KoiledModel):
         self.report_map = {}
         self._aliases_refreshed = False
         self._unchallenged_keys = set()
-        self._mesh_error = None
-        if self._mesh_node is not None:
-            node, self._mesh_node = self._mesh_node, None
-            node.close()
+        if self._mesh_route is not None:
+            route, self._mesh_route = self._mesh_route, None
+            route.close()
 
     def _repr_html_inline_(self) -> str:
         """(Internal) HTML representation for jupyter"""
