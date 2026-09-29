@@ -215,7 +215,13 @@ def mesh_lab() -> Iterator[MeshLab]:
             with setup as deployed:
                 deployed.pull()
                 deployed.up(services=["ionskale"])
-                _wait_healthy(f"{coord_url}/healthz", ca_file)
+                try:
+                    _wait_healthy(f"{coord_url}/healthz", ca_file)
+                except TimeoutError as e:
+                    # Say why: a runner's docker differs in ways a local run hides.
+                    state = deployed.ps(services=["ionskale"])
+                    logs = "\n".join(line for _, line in deployed.logs(services=["ionskale"], tail=60))
+                    raise TimeoutError(f"{e}\ncontainer: {state}\nlogs:\n{logs}") from None
 
                 cli_env = {
                     "IONSCALE_ADDR": "https://localhost:443",
