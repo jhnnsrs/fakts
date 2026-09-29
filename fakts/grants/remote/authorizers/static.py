@@ -24,9 +24,10 @@ def split_credential(value: str) -> tuple[str, str]:
     client_id, separator, refresh_token = value.partition(":")
     if not separator or not client_id or not refresh_token:
         raise RetrieveError(
-            "Expected a credential of the form 'client_id:refresh_token', got "
-            f"{value[:12]!r}... A bare refresh token is not enough: the token "
-            "endpoint authenticates the client before it validates the token."
+            "Expected a credential of the form 'client_id:refresh_token', got a "
+            f"value of {len(value)} characters without that shape. A bare refresh "
+            "token is not enough: the token endpoint authenticates the client "
+            "before it validates the token."
         )
     return client_id, refresh_token
 
@@ -65,4 +66,4 @@ class StaticAuthorizer(SSLContextModel):
             ) from e
 
         data.setdefault("client_id", client_id)
-        return TokenResponse(**data)
+        return oauth2.parse_token_response(data, str(endpoint.token_endpoint))

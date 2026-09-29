@@ -1,6 +1,8 @@
 from collections.abc import MutableMapping
 from typing import Any, cast
 
+from pydantic import ValidationError
+
 
 def truncate(text: str, max_length: int = 300) -> str:
     """Truncate text for inclusion in an error message.
@@ -53,3 +55,17 @@ def update_nested(
         else:
             d[k] = v
     return d
+
+
+def describe_validation_error(error: ValidationError) -> str:
+    """Summarise a validation failure without echoing the input.
+
+    What fakts validates is mostly credentials: a token response, the cache,
+    ``$FAKTS``. pydantic's ``str(e)`` renders the offending values, so it would
+    put (part of) a live refresh token into logs and tracebacks. Report only
+    where each problem is and what kind it was.
+    """
+    return "; ".join(
+        f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}"
+        for problem in error.errors()
+    )

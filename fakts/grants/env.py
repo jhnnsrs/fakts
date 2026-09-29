@@ -5,23 +5,9 @@ from pydantic import BaseModel, ValidationError
 
 from fakts.grants.errors import GrantError
 from fakts.models import ActiveFakts
+from fakts.utils import describe_validation_error
 
 logger = logging.getLogger(__name__)
-
-
-def _describe(error: ValidationError) -> str:
-    """Summarise a validation failure without echoing the document.
-
-    The document being validated is the app's credential. Both pydantic's
-    ``str(e)`` and the raw source render the offending values, so a single
-    malformed ``$FAKTS`` would otherwise put a live refresh token into
-    stdout — and from there into whatever collects the logs. Report only
-    where the problem is and what kind it was.
-    """
-    return "; ".join(
-        f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}"
-        for problem in error.errors()
-    )
 
 
 class EnvGrant(BaseModel):
@@ -93,7 +79,7 @@ class EnvGrant(BaseModel):
             except ValidationError as e:
                 raise GrantError(
                     f"${self.json_var} is set, but its content is not a valid "
-                    f"fakts configuration. Problems: {_describe(e)}"
+                    f"fakts configuration. Problems: {describe_validation_error(e)}"
                 ) from e
 
         path = os.environ.get(self.file_var)
@@ -115,7 +101,7 @@ class EnvGrant(BaseModel):
             except ValidationError as e:
                 raise GrantError(
                     f"The file '{path}' (from ${self.file_var}) does not contain "
-                    f"a valid fakts configuration. Problems: {_describe(e)}"
+                    f"a valid fakts configuration. Problems: {describe_validation_error(e)}"
                 ) from e
 
         raise GrantError(

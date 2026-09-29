@@ -34,10 +34,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 import aiohttp
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fakts.errors import FaktsError
 from fakts.models import ActiveFakts, AuthFakt, GrantStatus, Instance, MeshClaim, SelfFakt
+from fakts.utils import describe_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,21 @@ class TokenResponse(BaseModel):
         """The *granted* scopes. Never compare these against what was asked
         for: declining an optional requirement legitimately narrows them."""
         return self.scope.split(" ") if self.scope else []
+
+
+def parse_token_response(data: Mapping[str, Any], source: str) -> TokenResponse:
+    """Validate a token endpoint's answer without leaking it into an error.
+
+    The answer carries the access and refresh tokens; pydantic's own message
+    (and a chained ValidationError in a traceback) would echo part of them.
+    """
+    try:
+        return TokenResponse.model_validate(data)
+    except ValidationError as e:
+        raise FaktsError(
+            f"{source} answered with a token response fakts cannot use: "
+            f"{describe_validation_error(e)}"
+        ) from None
 
 
 def is_loopback(url: str) -> bool:

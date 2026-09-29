@@ -235,3 +235,30 @@ def test_a_refresh_that_omits_the_members_keeps_them() -> None:
     kept = _refresh(previous)
     assert kept.instances.keys() == previous.instances.keys()
     assert kept.statuses == previous.statuses
+
+
+# --------------------------------------------------------------------------- #
+# Errors name the problem, never the credential
+# --------------------------------------------------------------------------- #
+
+
+def test_an_unusable_token_response_does_not_echo_the_tokens() -> None:
+    from fakts.oauth2 import parse_token_response
+
+    secret = "rt_SECRET_0123456789abcdef"
+    with pytest.raises(FaktsError) as info:
+        # access_token missing: pydantic would render the whole input.
+        parse_token_response({"refresh_token": secret, "expires_in": "soon"}, "https://x/token")
+
+    rendered = f"{info.value!r} {info.value} {info.value.__cause__!r} {info.value.__context__!r}"
+    assert "access_token: missing" in str(info.value)
+    assert "SECRET" not in rendered and "0123456789" not in rendered
+
+
+def test_a_malformed_static_credential_does_not_echo_it() -> None:
+    from fakts.grants.remote.authorizers.static import split_credential
+    from fakts.grants.remote.errors import RetrieveError
+
+    with pytest.raises(RetrieveError) as info:
+        split_credential("rt_SECRET_bare_refresh_token")
+    assert "SECRET" not in str(info.value)

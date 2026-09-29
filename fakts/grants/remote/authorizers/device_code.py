@@ -167,7 +167,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
         if not device_code or not client_id:
             raise DeviceCodeError(
                 f"{endpoint.name} answered the device authorization request without "
-                f"a device_code and client_id: {started}"
+                f"a device_code and client_id (it sent: {sorted(started)})"
             )
 
         # The server hands back a complete approval URL; opening anything we
@@ -270,7 +270,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     ) from e
                 raise DeviceCodeError(f"The token endpoint refused the device code: {e}") from e
 
-            return TokenResponse(**data)
+            return oauth2.parse_token_response(data, token_endpoint)
 
         raise DeviceCodeTimeoutError(
             f"Gave up waiting for the device code to be approved after {budget}s."

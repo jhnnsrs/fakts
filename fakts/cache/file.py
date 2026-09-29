@@ -9,6 +9,7 @@ import uuid
 import pydantic
 
 from fakts.models import ActiveFakts
+from fakts.utils import describe_validation_error
 
 try:
     import grp
@@ -217,10 +218,7 @@ class FileCache(pydantic.BaseModel):
             # input — so logging `e` directly would emit part of the
             # credential on every start with a stale cache.
             if isinstance(e, pydantic.ValidationError):
-                detail = "; ".join(
-                    f"{'.'.join(str(p) for p in problem['loc']) or '<root>'}: {problem['type']}"
-                    for problem in e.errors()
-                )
+                detail = describe_validation_error(e)
             else:
                 detail = type(e).__name__
             logger.error(

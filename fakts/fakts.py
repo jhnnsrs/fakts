@@ -606,7 +606,7 @@ class Fakts(KoiledModel):
         disk stayed revoked — a breakage that surfaces at the next restart,
         far from its cause.
         """
-        response = oauth2.TokenResponse(**data)
+        response = oauth2.parse_token_response(data, previous.auth.token_endpoint)
         candidate = oauth2.merge_token_response(
             previous,
             response,

@@ -58,4 +58,4 @@ class RedeemAuthorizer(SSLContextModel):
                 f"often single-use and may already have been spent or expired."
             ) from e
 
-        return TokenResponse(**data)
+        return oauth2.parse_token_response(data, str(endpoint.token_endpoint))
