@@ -8,9 +8,8 @@ because it looks like coverage.
 """
 
 import asyncio
-import os
 import time
-from typing import AsyncIterator, Awaitable, Callable, Optional
+from typing import AsyncIterator, Awaitable, Callable
 
 import pytest
 import pytest_asyncio
@@ -336,44 +335,6 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(
     )
 
 
-async def test_file_cache_transaction_serializes_read_compare_write(
-    tmp_path,
-) -> None:
-    """The compare and the write have to be one step across *processes*.
-
-    `_load_lock` is an asyncio.Lock, so it orders nothing between siblings.
-    This drives two FileCache instances on one path through the same
-    interleaving a real pair of processes would hit.
-    """
-    path = str(tmp_path / "cache.json")
-    first = FileCache(cache_file=path, hash="static")
-    second = FileCache(cache_file=path, hash="static")
-
-    order: list[str] = []
-
-    async def writer(cache: FileCache, name: str, token: str) -> None:
-        async with cache.atransaction():
-            order.append(f"{name}:enter")
-            await cache.aload()
-            await asyncio.sleep(0.02)  # widen the window a lock must cover
-            value = make_fakts_value(refresh_token=token)
-            await cache.aset(value)
-            order.append(f"{name}:exit")
-
-    await asyncio.gather(
-        writer(first, "a", "token_a"),
-        writer(second, "b", "token_b"),
-    )
-
-    # Whoever went second wins, but neither may interleave with the other.
-    assert order in (
-        ["a:enter", "a:exit", "b:enter", "b:exit"],
-        ["b:enter", "b:exit", "a:enter", "a:exit"],
-    ), f"transactions interleaved: {order}"
-
-    assert os.path.exists(path)
-
-
 # --------------------------------------------------------------------------- #
 # Lifecycle
 # --------------------------------------------------------------------------- #
@@ -498,9 +459,8 @@ async def test_alogout_forgets_the_session(tmp_path) -> None:
         assert grant.load_count == 2
 
 
-async def test_alogout_leaves_no_lock_file(tmp_path) -> None:
-    """The advisory lock is an implementation detail of the cache; logging out
-    must not leave one sitting next to a cache file it just deleted."""
+async def test_alogout_leaves_nothing_behind(tmp_path) -> None:
+    """Logging out deletes the cache file and leaves nothing next to it."""
     cache_file = tmp_path / "cache.json"
     fakts = Fakts(
         grant=StaticGrant(fakts=make_fakts_value()),
@@ -561,33 +521,3 @@ async def test_alogout_concurrent_with_alias_resolution_does_not_deadlock(
 
     for r in results:
         assert not isinstance(r, (asyncio.TimeoutError, asyncio.CancelledError)), r
-
-
-async def test_cache_reset_cannot_race_a_concurrent_persist(tmp_path) -> None:
-    """`areset()` used to be a bare os.remove — the one cache mutation that
-    skipped the transaction every other write goes through, which is exactly
-    the sibling race the lock was added to close."""
-    path = str(tmp_path / "cache.json")
-    writer = FileCache(cache_file=path, hash="static")
-    resetter = FileCache(cache_file=path, hash="static")
-
-    order: list[str] = []
-
-    async def persist() -> None:
-        async with writer.atransaction():
-            order.append("write:enter")
-            await asyncio.sleep(0.02)
-            await writer.aset(make_fakts_value(refresh_token="written"))
-            order.append("write:exit")
-
-    async def reset() -> None:
-        await asyncio.sleep(0.005)  # start inside the writer's window
-        order.append("reset:start")
-        await resetter.areset()
-        order.append("reset:done")
-
-    await asyncio.gather(persist(), reset())
-
-    assert order.index("write:exit") < order.index("reset:done"), (
-        f"areset() tore into an in-flight write: {order}"
-    )

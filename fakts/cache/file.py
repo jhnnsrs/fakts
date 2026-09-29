@@ -1,25 +1,13 @@
 import asyncio
-import contextlib
 import os
 import stat
-import time
 import uuid
-from typing import AsyncIterator, Optional
+from typing import Optional
 import pydantic
 import datetime
 import logging
 import json
 from fakts.models import ActiveFakts
-
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows
-    fcntl = None  # type: ignore[assignment]
-
-try:
-    import msvcrt
-except ImportError:  # pragma: no cover - POSIX
-    msvcrt = None  # type: ignore[assignment]
 
 try:
     import grp
@@ -29,36 +17,6 @@ except ImportError:  # pragma: no cover - Windows
     pwd = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
-
-LOCK_POLL_INTERVAL = 0.02
-LOCK_TIMEOUT = 5.0
-"""How long to wait for a sibling's cache transaction before giving up and
-proceeding unlocked. A bounded wait is deliberate: the lock protects against
-a lost rotation, but blocking forever on a stale lock file would be a worse
-failure than the one it prevents."""
-
-
-def _try_lock(fd: int) -> None:
-    """Take the exclusive lock on ``fd`` without blocking; ``OSError`` if held.
-
-    ``flock`` on POSIX. On Windows a byte-range lock on the file's first byte
-    (``msvcrt.locking``): it conflicts across handles, so it orders both
-    sibling processes and two transactions of this one, as ``flock`` does.
-    """
-    if fcntl is not None:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    else:
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-
-
-def _unlock(fd: int) -> None:
-    if fcntl is not None:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-    else:
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
-
 
 def ensure_private_dir(path: str) -> None:
     """Create ``path`` (and its parents) and make it private to this user.
@@ -449,73 +407,6 @@ class FileCache(pydantic.BaseModel):
         except OSError:
             logger.debug("Could not tighten %s.", path, exc_info=True)
 
-    @contextlib.asynccontextmanager
-    async def atransaction(self) -> AsyncIterator[None]:
-        """Hold an exclusive advisory lock for one read-compare-write.
-
-        The file *write* is already atomic (temp file plus ``os.replace``), so
-        no reader ever sees a torn cache. What was unprotected is the sequence
-        around it: read the cache, decide our credential is not stale, write.
-        An ``asyncio.Lock`` only orders that within one process, and a
-        refresh-token cache is shared *between* processes by design — two
-        siblings could each read the same state, each conclude they were safe,
-        and the later rename would silently discard the other's rotation,
-        leaving a revoked token on disk.
-
-        The lock lives in a sibling ``.lock`` file rather than on the cache
-        itself, because ``os.replace`` swaps the inode out from under any lock
-        held on it.
-
-        Acquired non-blockingly in a poll loop (``flock``, or a byte-range
-        lock on Windows -- see :func:`_try_lock`): a blocking lock stalls the whole
-        thread, which in an event loop means every unrelated coroutine too.
-        After :data:`LOCK_TIMEOUT` we proceed anyway — a stale lock file must
-        degrade to the old behaviour, not wedge the client.
-        """
-        if fcntl is None and msvcrt is None:  # pragma: no cover
-            # Neither lock primitive: fall back to single-process behaviour.
-            yield
-            return
-
-        lock_path = f"{self.cache_file}.lock"
-        fd: Optional[int] = None
-        try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        except OSError:
-            logger.debug(
-                "Could not open %s; proceeding without a cross-process lock.",
-                lock_path,
-                exc_info=True,
-            )
-            yield
-            return
-
-        acquired = False
-        deadline = time.monotonic() + LOCK_TIMEOUT
-        try:
-            while True:
-                try:
-                    _try_lock(fd)
-                    acquired = True
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        logger.warning(
-                            "Timed out waiting for the cache lock at %s; writing "
-                            "without it. A concurrent rotation could be lost.",
-                            lock_path,
-                        )
-                        break
-                    await asyncio.sleep(LOCK_POLL_INTERVAL)
-            yield
-        finally:
-            if acquired:
-                try:
-                    _unlock(fd)
-                except OSError:
-                    pass
-            os.close(fd)
-
     async def aset(self, value: ActiveFakts) -> None:
         """Refreshes the configuration from the grant
 
@@ -595,29 +486,7 @@ class FileCache(pydantic.BaseModel):
                 await asyncio.sleep(0.05 * (attempt + 1))
 
     async def areset(self) -> None:
-        """Delete the cached session.
-
-        Runs inside :meth:`atransaction` like every other mutation: deleting
-        is a write too, and doing it unlocked would race a sibling's rotation
-        — the exact hazard the transaction exists to close. A sibling that
-        rotates *after* this still re-persists a fresh credential, which is
-        why :meth:`fakts.fakts.Fakts.alogout` cannot promise more than
-        forgetting locally.
-
-        The lock file itself is removed last, outside the lock it guards, so
-        a logout does not leave litter next to a cache it just deleted.
-        """
-        lock_path = f"{self.cache_file}.lock"
-
-        async with self.atransaction():
-            if os.path.exists(self.cache_file):
-                os.remove(self.cache_file)
-
-        # Best effort: a sibling may legitimately hold the lock right now, in
-        # which case it owns the file and will clean up after itself.
-        try:
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-        except OSError:
-            logger.debug("Could not remove %s.", lock_path, exc_info=True)
+        """Delete the cached session."""
+        if os.path.exists(self.cache_file):
+            os.remove(self.cache_file)
         return None

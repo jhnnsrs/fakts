@@ -61,17 +61,6 @@ class FaktsCache(Protocol):
     A FaktsCache stores a loaded configuration so it can be reused across
     runs without re-querying the grant. It can be backed by a file or any
     other persistent store.
-
-    **Optional:** a cache that is genuinely shared between processes may also
-    define ``atransaction()``, an async context manager giving the caller
-    exclusive access for one read-compare-write. :class:`Fakts` uses it to
-    make its "do not overwrite a newer credential" check and the write that
-    follows a single step; without it that pair is only ordered within one
-    process, and a sibling's rotation landing in between is overwritten with
-    an already-revoked token. It is not part of this Protocol because caches
-    with nothing to serialize (``NoCache``, in-memory ones) have no use for
-    it — :class:`~fakts.cache.file.FileCache` implements it with an
-    advisory ``flock``.
     """
 
     async def aload(self) -> ActiveFakts | None:

@@ -15,10 +15,11 @@ only deliberately:
 
 ``L3``
     Every cache write goes through :meth:`Fakts._apersist`, which refuses to
-    overwrite a newer credential — and does the check and the write inside
-    the cache's own transaction, so the pair is atomic against sibling
-    *processes* too, not just sibling tasks. Refresh tokens rotate, so a
-    stale writer can otherwise clobber a live token with a revoked one.
+    overwrite a newer credential, checking and writing under ``_load_lock``.
+    Refresh tokens rotate, so a stale writer could otherwise clobber a live
+    token with a revoked one. That orders sibling tasks, not sibling
+    processes: two processes on one cache refreshing at the same instant can
+    still lose a rotation, and the loser authenticates again.
 
     ``loaded_fakts`` is mutated under ``_load_lock`` *or* ``_token_lock``
     (:meth:`_acommit_token_response` and :meth:`_aadopt_cached_credentials`
@@ -28,9 +29,7 @@ only deliberately:
 
 ``L4``
     A refresh-based grant needs a shared, persistent cache. Without one,
-    every process holds its own credential and they revoke each other. The
-    cache must implement ``atransaction`` for L3's cross-process half to
-    hold; :class:`~fakts.cache.file.FileCache` does.
+    every process holds its own credential and they revoke each other.
 
 ``L5``
     Alias state (``alias_map``, ``report_map``, ``_aliases_refreshed``,
@@ -43,7 +42,6 @@ only deliberately:
 """
 
 import asyncio
-import contextlib
 import logging
 import random
 import ssl
@@ -831,52 +829,37 @@ class Fakts(KoiledModel):
         nothing stamped it. Every other caller has to prove it is not going
         backwards.
         """
-        # _load_lock orders this within the process; the cache's own
-        # transaction (when it has one) orders it against sibling processes.
-        # Both are needed: the compare and the write have to be one step, or a
-        # sibling's rotation lands between them and we overwrite it with a
+        # The compare and the write are one step under _load_lock, or a
+        # sibling task's rotation lands between them and we overwrite it with a
         # credential the server has already revoked.
-        async with self._acache_transaction():
-            try:
-                existing = await self.cache.aload()
-            except Exception:
-                existing = None
+        try:
+            existing = await self.cache.aload()
+        except Exception:
+            existing = None
 
-            if (
-                existing is not None
-                and not fresh_from_grant
-                and self._is_stale_auth(fakts, existing)
-            ):
-                logger.debug(
-                    "Skipping cache write: the cache holds a newer credential than "
-                    "the one we are about to persist."
+        if (
+            existing is not None
+            and not fresh_from_grant
+            and self._is_stale_auth(fakts, existing)
+        ):
+            logger.debug(
+                "Skipping cache write: the cache holds a newer credential than "
+                "the one we are about to persist."
+            )
+            return
+
+        try:
+            await self.cache.aset(fakts)
+            self._cache_write_failed = False
+        except Exception:
+            if not self._cache_write_failed:
+                self._cache_write_failed = True
+                logger.error(
+                    "Could not persist the fakts to the cache. If a refresh token "
+                    "was just rotated, the credential on disk is now revoked and "
+                    "the next start of this app will need to authenticate again.",
+                    exc_info=True,
                 )
-                return
-
-            try:
-                await self.cache.aset(fakts)
-                self._cache_write_failed = False
-            except Exception:
-                if not self._cache_write_failed:
-                    self._cache_write_failed = True
-                    logger.error(
-                        "Could not persist the fakts to the cache. If a refresh token "
-                        "was just rotated, the credential on disk is now revoked and "
-                        "the next start of this app will need to authenticate again.",
-                        exc_info=True,
-                    )
-
-    def _acache_transaction(self) -> Any:
-        """The cache's cross-process transaction, or a no-op.
-
-        ``atransaction`` is optional on :class:`FaktsCache` so that caches with
-        nothing to serialize — NoCache, in-memory ones — need not
-        implement it.
-        """
-        transaction = getattr(self.cache, "atransaction", None)
-        if transaction is None:
-            return contextlib.nullcontext()
-        return transaction()
 
     @staticmethod
     def _is_stale_auth(candidate: ActiveFakts, existing: ActiveFakts) -> bool:
