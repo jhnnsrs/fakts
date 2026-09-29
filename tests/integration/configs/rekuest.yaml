@@ -95,6 +95,12 @@ provenance:
     -----BEGIN PUBLIC KEY-----
     MCowBQYDK2VwAyEA6lDpKZJ0ManLzreBg43+fZPoPP5lHOVk2E23pFDzNck=
     -----END PUBLIC KEY-----
+# rekuest >= 4.0 proves its identity with an instance key (required).
+instance:
+  private_key: |
+    -----BEGIN PRIVATE KEY-----
+    MC4CAQAwBQYDK2VwBCIEILK+rl9gVEjfKGiye+mLLjfEUGIdoP0WPC8lMZS3NYK2
+    -----END PRIVATE KEY-----
 scopes:
   rekuest_agent: Act as an agent
   rekuest_call: Call other apps with rekuest
