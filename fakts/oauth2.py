@@ -214,10 +214,6 @@ def _env_opt_in() -> bool:
     return raw.strip().lower() not in ("", "0", "false", "no", "off")
 
 
-def _connector(ssl_context: ssl.SSLContext) -> aiohttp.TCPConnector:
-    return aiohttp.TCPConnector(ssl=ssl_context)
-
-
 async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     """Parse an OAuth2 response body, raising :class:`OAuth2ErrorResponse`.
 
@@ -268,6 +264,48 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     return data
 
 
+def client_session(
+    ssl_context: ssl.SSLContext,
+    *,
+    timeout: float,
+    headers: Mapping[str, str] | None = None,
+) -> aiohttp.ClientSession:
+    """The one way fakts opens an HTTP session: this TLS context and a total
+    timeout. A request that carries a credential must also pass
+    ``allow_redirects=False`` (see :func:`_handle`)."""
+    return aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(ssl=ssl_context),
+        timeout=aiohttp.ClientTimeout(total=timeout),
+        headers=dict(headers or {}),
+    )
+
+
+async def _apost(
+    url: str,
+    *,
+    form: Mapping[str, str] | None = None,
+    json: Mapping[str, Any] | None = None,
+    ssl_context: ssl.SSLContext,
+    allow_insecure_transport: bool,
+    bearer: str | None,
+    timeout: float,
+) -> dict[str, Any]:
+    check_transport(url, allow_insecure_transport)
+    headers = {"Accept": "application/json"}
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    async with (
+        client_session(ssl_context, timeout=timeout, headers=headers) as session,
+        session.post(
+            url,
+            data=dict(form) if form is not None else None,
+            json=dict(json) if json is not None else None,
+            allow_redirects=False,
+        ) as response,
+    ):
+        return await _handle(response, url)
+
+
 async def apost_form(
     url: str,
     data: Mapping[str, str],
@@ -275,22 +313,17 @@ async def apost_form(
     ssl_context: ssl.SSLContext,
     allow_insecure_transport: bool = False,
     bearer: str | None = None,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
     """POST ``application/x-www-form-urlencoded`` to an OAuth2 endpoint."""
-    check_transport(url, allow_insecure_transport)
-    headers = {"Accept": "application/json"}
-    if bearer:
-        headers["Authorization"] = f"Bearer {bearer}"
-
-    async with (
-        aiohttp.ClientSession(
-            connector=_connector(ssl_context),
-            timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as session,
-        session.post(url, data=dict(data), headers=headers, allow_redirects=False) as response,
-    ):
-        return await _handle(response, url)
+    return await _apost(
+        url,
+        form=data,
+        ssl_context=ssl_context,
+        allow_insecure_transport=allow_insecure_transport,
+        bearer=bearer,
+        timeout=timeout,
+    )
 
 
 async def apost_json(
@@ -300,7 +333,7 @@ async def apost_json(
     ssl_context: ssl.SSLContext,
     allow_insecure_transport: bool = False,
     bearer: str | None = None,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
     """POST a JSON body.
 
@@ -308,19 +341,32 @@ async def apost_json(
     object, while the redeem grant takes form data with the manifest as a
     JSON *string*. They are genuinely different encodings.
     """
-    check_transport(url, allow_insecure_transport)
-    headers = {"Accept": "application/json"}
-    if bearer:
-        headers["Authorization"] = f"Bearer {bearer}"
+    return await _apost(
+        url,
+        json=payload,
+        ssl_context=ssl_context,
+        allow_insecure_transport=allow_insecure_transport,
+        bearer=bearer,
+        timeout=timeout,
+    )
 
-    async with (
-        aiohttp.ClientSession(
-            connector=_connector(ssl_context),
-            timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as session,
-        session.post(url, json=dict(payload), headers=headers, allow_redirects=False) as response,
-    ):
-        return await _handle(response, url)
+
+async def arefresh(
+    token_endpoint: str,
+    *,
+    client_id: str,
+    refresh_token: str,
+    ssl_context: ssl.SSLContext,
+    allow_insecure_transport: bool = False,
+) -> dict[str, Any]:
+    """POST the refresh grant. Rotates: the old refresh token is dead once the
+    server has processed this."""
+    return await apost_form(
+        token_endpoint,
+        {"grant_type": REFRESH_GRANT, "refresh_token": refresh_token, "client_id": client_id},
+        ssl_context=ssl_context,
+        allow_insecure_transport=allow_insecure_transport,
+    )
 
 
 def resolve_expiry(expires_in: int | None, skew: int, now: float | None = None) -> float | None:

@@ -6,6 +6,7 @@ import aiohttp
 
 from fakts.grants.remote.errors import DiscoveryError
 from fakts.grants.remote.models import FaktsEndpoint
+from fakts.oauth2 import client_session
 from fakts.utils import truncate
 
 logger = logging.getLogger(__name__)
@@ -76,14 +77,12 @@ async def check_wellknown(
     url = f"{url}.well-known/fakts"
 
     async with (
-        aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=ssl_context),
+        client_session(
+            ssl_context,
+            timeout=timeout,
             headers={"User-Agent": "Fakts/0.1", "Accept": "application/json"},
         ) as session,
-        session.get(
-            url,
-            timeout=aiohttp.ClientTimeout(total=timeout),
-        ) as resp,
+        session.get(url) as resp,
     ):
         if resp.status == 200:
             try:

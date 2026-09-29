@@ -9,7 +9,6 @@ import ssl
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-import aiohttp
 from pydantic import BaseModel
 
 from fakts import oauth2
@@ -104,13 +103,10 @@ async def areport_aliases(
 
     try:
         async with (
-            aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=ssl_context),
-                headers={
-                    "Accept": "application/json",
-                    "Authorization": f"Bearer {token}",
-                },
-                timeout=aiohttp.ClientTimeout(total=REPORT_TIMEOUT),
+            oauth2.client_session(
+                ssl_context,
+                timeout=REPORT_TIMEOUT,
+                headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
             ) as session,
             session.post(
                 fakts.auth.report_endpoint,

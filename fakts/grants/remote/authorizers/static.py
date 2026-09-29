@@ -48,13 +48,10 @@ class StaticAuthorizer(SSLContextModel):
         client_id, refresh_token = split_credential(self.token)
 
         try:
-            data = await oauth2.apost_form(
+            data = await oauth2.arefresh(
                 endpoint.token_endpoint,
-                {
-                    "grant_type": oauth2.REFRESH_GRANT,
-                    "refresh_token": refresh_token,
-                    "client_id": client_id,
-                },
+                client_id=client_id,
+                refresh_token=refresh_token,
                 ssl_context=self.ssl_context,
                 allow_insecure_transport=self.allow_insecure_transport,
             )

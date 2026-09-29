@@ -14,12 +14,12 @@ import ssl
 from ssl import SSLContext
 from typing import Any, ClassVar
 
-import aiohttp
 import certifi
 from koil.bridge import unkoil
 from koil.composition import KoiledModel
 from pydantic import Field, PrivateAttr
 
+from fakts import oauth2
 from fakts.aliases import AliasResolver
 from fakts.cache.nocache import NoCache
 from fakts.errors import AliasNotFoundError, CompositionError, FaktsError, NotEnteredError
@@ -360,14 +360,10 @@ class Fakts(KoiledModel):
         nonce = generate_nonce() if challenge_key else None
 
         async with (
-            aiohttp.ClientSession(
-                connector=(
-                    aiohttp.TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
-                ),
-                headers={
-                    "Accept": "application/json",
-                },
-                timeout=aiohttp.ClientTimeout(total=self.alias_challenge_timeout),
+            oauth2.client_session(
+                self.ssl_context,
+                timeout=self.alias_challenge_timeout,
+                headers={"Accept": "application/json"},
             ) as session,
             session.get(
                 alias.challenge_path,

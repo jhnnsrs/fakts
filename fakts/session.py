@@ -285,13 +285,10 @@ class TokenSession:
         """
         for attempt in range(TOKEN_CONNECT_RETRIES + 1):
             try:
-                return await oauth2.apost_form(
+                return await oauth2.arefresh(
                     auth.token_endpoint,
-                    {
-                        "grant_type": oauth2.REFRESH_GRANT,
-                        "refresh_token": auth.refresh_token,
-                        "client_id": auth.client_id,
-                    },
+                    client_id=auth.client_id,
+                    refresh_token=auth.refresh_token,
                     ssl_context=self._settings.ssl_context,
                     allow_insecure_transport=self._settings.allow_insecure_transport,
                 )
