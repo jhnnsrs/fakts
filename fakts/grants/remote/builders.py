@@ -42,6 +42,35 @@ def _build_cache(url: str, manifest: Manifest, cache_file: str, no_cache: bool) 
     return FileCache(cache_file=cache_file, hash=bound_hash)
 
 
+def _build_remote_fakts(
+    url: str,
+    manifest: Manifest,
+    authorizer: DeviceCodeAuthorizer | RedeemAuthorizer,
+    *,
+    context: ssl.SSLContext,
+    cache_file: str,
+    no_cache: bool,
+    allow_insecure_transport: bool,
+    mesh: MeshOptions | MeshProxy | None,
+) -> Fakts:
+    """What every remote builder assembles: discovery against ``url`` with
+    the one TLS context, the given authorizer, and the url+manifest-bound
+    cache."""
+    return Fakts(
+        grant=RemoteGrant(
+            discovery=WellKnownDiscovery(
+                url=url, auto_protocols=["https", "http"], ssl_context=context
+            ),
+            authorizer=authorizer,
+        ),
+        cache=_build_cache(url, manifest, cache_file, no_cache),
+        manifest=manifest,
+        allow_insecure_transport=allow_insecure_transport,
+        ssl_context=context,
+        mesh=mesh,
+    )
+
+
 def build_device_code_fakts(
     url: str,
     manifest: Manifest,
@@ -121,26 +150,24 @@ def build_device_code_fakts(
         A fully wired Fakts instance (use it as a context manager).
     """
     context = _resolve_ssl(ssl_context)
-    return Fakts(
-        grant=RemoteGrant(
-            discovery=WellKnownDiscovery(
-                url=url, auto_protocols=["https", "http"], ssl_context=context
-            ),
-            authorizer=DeviceCodeAuthorizer(
-                manifest=manifest,
-                open_browser=not headless,
-                requested_client_kind=requested_client_kind,
-                requested_client_role=requested_client_role,
-                timeout=timeout,
-                allow_insecure_transport=allow_insecure_transport,
-                ssl_context=context,
-                request_auth_key=isinstance(mesh, MeshOptions),
-            ),
+    return _build_remote_fakts(
+        url,
+        manifest,
+        DeviceCodeAuthorizer(
+            manifest=manifest,
+            open_browser=not headless,
+            requested_client_kind=requested_client_kind,
+            requested_client_role=requested_client_role,
+            timeout=timeout,
+            allow_insecure_transport=allow_insecure_transport,
+            ssl_context=context,
+            # Only a node of our own needs a key; a proxy is already on the mesh.
+            request_auth_key=isinstance(mesh, MeshOptions),
         ),
-        cache=_build_cache(url, manifest, cache_file, no_cache),
-        manifest=manifest,
+        context=context,
+        cache_file=cache_file,
+        no_cache=no_cache,
         allow_insecure_transport=allow_insecure_transport,
-        ssl_context=context,
         mesh=mesh,
     )
 
@@ -154,6 +181,7 @@ def build_redeem_fakts(
     no_cache: bool = False,
     allow_insecure_transport: bool = False,
     ssl_context: ssl.SSLContext | None = None,
+    mesh: MeshOptions | MeshProxy | None = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the redeem flow (headless/CI).
 
@@ -176,6 +204,11 @@ def build_redeem_fakts(
         app is started from varying directories.
     no_cache : bool, optional
         Disable caching entirely, by default False.
+    mesh : MeshOptions | MeshProxy, optional
+        Reach mesh-only aliases. The redeem grant cannot ask for a mesh key
+        (only the device-code flow can), so ``MeshOptions()`` works for a node
+        that already joined on this machine, and ``MeshProxy(url=...)``
+        through a proxy that is running.
 
     Returns
     -------
@@ -183,20 +216,18 @@ def build_redeem_fakts(
         A fully wired Fakts instance (use it as a context manager).
     """
     context = _resolve_ssl(ssl_context)
-    return Fakts(
-        grant=RemoteGrant(
-            discovery=WellKnownDiscovery(
-                url=url, auto_protocols=["https", "http"], ssl_context=context
-            ),
-            authorizer=RedeemAuthorizer(
-                manifest=manifest,
-                token=token,
-                allow_insecure_transport=allow_insecure_transport,
-                ssl_context=context,
-            ),
+    return _build_remote_fakts(
+        url,
+        manifest,
+        RedeemAuthorizer(
+            manifest=manifest,
+            token=token,
+            allow_insecure_transport=allow_insecure_transport,
+            ssl_context=context,
         ),
-        cache=_build_cache(url, manifest, cache_file, no_cache),
-        manifest=manifest,
+        context=context,
+        cache_file=cache_file,
+        no_cache=no_cache,
         allow_insecure_transport=allow_insecure_transport,
-        ssl_context=context,
+        mesh=mesh,
     )
