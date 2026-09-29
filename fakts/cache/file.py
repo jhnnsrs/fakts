@@ -17,6 +17,11 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None  # type: ignore[assignment]
 
 try:
+    import msvcrt
+except ImportError:  # pragma: no cover - POSIX
+    msvcrt = None  # type: ignore[assignment]
+
+try:
     import grp
     import pwd
 except ImportError:  # pragma: no cover - Windows
@@ -31,6 +36,28 @@ LOCK_TIMEOUT = 5.0
 proceeding unlocked. A bounded wait is deliberate: the lock protects against
 a lost rotation, but blocking forever on a stale lock file would be a worse
 failure than the one it prevents."""
+
+
+def _try_lock(fd: int) -> None:
+    """Take the exclusive lock on ``fd`` without blocking; ``OSError`` if held.
+
+    ``flock`` on POSIX. On Windows a byte-range lock on the file's first byte
+    (``msvcrt.locking``): it conflicts across handles, so it orders both
+    sibling processes and two transactions of this one, as ``flock`` does.
+    """
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    else:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+
+
+def _unlock(fd: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    else:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
 def ensure_private_dir(path: str) -> None:
@@ -439,13 +466,14 @@ class FileCache(pydantic.BaseModel):
         itself, because ``os.replace`` swaps the inode out from under any lock
         held on it.
 
-        Acquired non-blockingly in a poll loop: ``flock`` blocks the whole
+        Acquired non-blockingly in a poll loop (``flock``, or a byte-range
+        lock on Windows -- see :func:`_try_lock`): a blocking lock stalls the whole
         thread, which in an event loop means every unrelated coroutine too.
         After :data:`LOCK_TIMEOUT` we proceed anyway — a stale lock file must
         degrade to the old behaviour, not wedge the client.
         """
-        if fcntl is None:  # pragma: no cover - Windows
-            # No flock; fall back to the previous single-process behaviour.
+        if fcntl is None and msvcrt is None:  # pragma: no cover
+            # Neither lock primitive: fall back to single-process behaviour.
             yield
             return
 
@@ -467,7 +495,7 @@ class FileCache(pydantic.BaseModel):
         try:
             while True:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    _try_lock(fd)
                     acquired = True
                     break
                 except OSError:
@@ -483,7 +511,7 @@ class FileCache(pydantic.BaseModel):
         finally:
             if acquired:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
+                    _unlock(fd)
                 except OSError:
                     pass
             os.close(fd)
