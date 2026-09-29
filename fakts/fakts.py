@@ -1,52 +1,16 @@
 """The Fakts client: configuration, alias resolution and OAuth2 tokens.
 
-Concurrency invariants — the whole file depends on these, so change them
-only deliberately:
+:class:`Fakts` is the facade. The work is done by collaborators that share one
+:class:`~fakts.state.SessionState` (the loaded configuration, the token and the
+three locks, whose invariants L1-L5 are documented there):
 
-``L1``
-    Lock order is strictly ``_alias_lock -> _token_lock -> _load_lock``.
-    Nothing reached while holding ``_token_lock`` or ``_load_lock`` may
-    acquire ``_alias_lock``.
-
-``L2``
-    :class:`asyncio.Lock` is not reentrant. Nothing reached from inside
-    :meth:`Fakts._afetch_token` may acquire ``_token_lock`` again — in
-    particular, never call :meth:`Fakts.aget_token` from there.
-
-``L3``
-    Every cache write goes through :meth:`Fakts._apersist`, which refuses to
-    overwrite a newer credential, checking and writing under ``_load_lock``.
-    Refresh tokens rotate, so a stale writer could otherwise clobber a live
-    token with a revoked one. That orders sibling tasks, not sibling
-    processes: two processes on one cache refreshing at the same instant can
-    still lose a rotation, and the loser authenticates again.
-
-    ``loaded_fakts`` is mutated under ``_load_lock`` *or* ``_token_lock``
-    (:meth:`_acommit_token_response` and :meth:`_aadopt_cached_credentials`
-    reassign it while renewing). Readers must therefore re-read it after
-    every await rather than holding a local across one — a reload landing in
-    between leaves the local pointing at a revoked credential.
-
-``L4``
-    A refresh-based grant needs a shared, persistent cache. Without one,
-    every process holds its own credential and they revoke each other.
-
-``L5``
-    Alias state (``alias_map``, ``report_map``, ``_aliases_refreshed``,
-    ``_unchallenged_keys``) is written only under ``_alias_lock`` — the
-    public :meth:`Fakts.arefresh_aliases` takes it, and everything already
-    holding it calls :meth:`Fakts._arefresh_aliases_locked` instead. The one
-    exception is invalidation from the token path, which may only *clear*
-    ``_aliases_refreshed`` (never touch the maps), because L1 puts
-    ``_alias_lock`` out of reach from there.
+- :class:`~fakts.session.TokenSession` -- the token lifecycle;
+- :class:`~fakts.aliases.AliasResolver` -- alias resolution and its report;
+- :class:`~fakts.mesh.MeshRoute` -- how mesh aliases are reached.
 """
 
-import asyncio
 import logging
-import random
 import ssl
-import time
-from enum import Enum
 from ssl import SSLContext
 from typing import Any, ClassVar
 
@@ -57,30 +21,17 @@ from koil.composition import KoiledModel
 from pydantic import Field, PrivateAttr
 
 from fakts import oauth2
+from fakts.aliases import AliasResolver
 from fakts.cache.nocache import NoCache
-from fakts.errors import (
-    AliasNotFoundError,
-    CompositionError,
-    FaktsError,
-    NeedsReauthenticationError,
-    NotEnteredError,
-    ServiceNotGrantedError,
-)
+from fakts.errors import AliasNotFoundError, CompositionError, FaktsError, NotEnteredError
+from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshError, MeshOptions, MeshRoute, NativeNode
-from .models import (
-    ActiveFakts,
-    Alias,
-    AuthFakt,
-    ChallengeKey,
-    GrantStatus,
-    Instance,
-    Manifest,
-    Requirement,
-)
+from .mesh import MeshOptions, MeshRoute
+from .models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Manifest
 from .protocols import FaktsCache, FaktsGrant
-from .report import AliasReport, PendingReport, areport_aliases
+from .report import AliasReport
+from .state import SessionState
 from .utils import truncate
 
 logger = logging.getLogger(__name__)
@@ -90,54 +41,7 @@ TOKEN_EXPIRY_SKEW = oauth2.TOKEN_EXPIRY_SKEW
 
 Re-exported from :mod:`fakts.oauth2`, which owns the value."""
 
-REFRESH_TOKEN_MAX_AGE = 30 * 24 * 3600
-"""How long a single refresh token is assumed to stay usable. Servers
-enforce their own value; this is only used to fail fast with a truthful
-message instead of a doomed round trip."""
-
-REFRESH_CHAIN_MAX_AGE = 180 * 24 * 3600
-"""How long a refresh *chain* may keep being renewed before the
-authorization has to be granted afresh. Rotating does not reset it, which
-is why even a permanently running app eventually needs a human."""
-
-REFRESH_RETRY_DELAY = 0.25
-REFRESH_RETRY_ROUNDS = 4
-MAX_ADOPTIONS = 4
-"""How many distinct credentials one renewal will try before giving up.
-Bounded by the set of credentials actually seen, so it cannot spin."""
-
-TOKEN_CONNECT_RETRIES = 2
-"""How often a refresh is retried when the token endpoint could not be reached
-at all (or answered 5xx) -- failures that cannot have rotated the token."""
-
-_REAUTH_REASONS = {
-    "idle": "This app's authorization has been unused for too long.",
-    "chain_expired": "This app's authorization has reached its maximum age.",
-    "superseded": "This app's registration was replaced, most likely by a fresh approval elsewhere.",
-    "rejected": "The server rejected this app's stored credential.",
-    "exhausted": "None of the stored credentials were accepted.",
-}
-
-
-class ReauthPolicy(str, Enum):
-    """When the token path may run an interactive grant on its own.
-
-    A single boolean cannot express this, because the same client is used
-    from places with very different tolerances: a 401 inside a GraphQL
-    request must never open a browser, while a user typing ``fakts.load()``
-    at a REPL reasonably expects one.
-    """
-
-    NEVER = "never"
-    """Always raise :class:`NeedsReauthenticationError` instead of prompting."""
-
-    ON_EXPLICIT_LOAD = "on_explicit_load"
-    """The default. Only an explicit load or refresh may prompt; automatic
-    token renewal never does."""
-
-    ALWAYS = "always"
-    """Legacy behaviour: let any token renewal prompt. Convenient for
-    single-process interactive apps, hazardous anywhere else."""
+__all__ = ["Fakts", "ReauthPolicy"]
 
 
 class Fakts(KoiledModel):
@@ -202,24 +106,6 @@ class Fakts(KoiledModel):
     grant: FaktsGrant
     """The grant to load the configuration from"""
 
-    loaded_fakts: ActiveFakts | None = Field(default=None, exclude=True)
-    """The currently loaded fakts. Please use `get` to access the fakts"""
-
-    alias_map: dict[str, Alias] = Field(
-        default_factory=dict,
-        exclude=True,
-        description="Map of service names to active aliases",
-    )
-    report_map: dict[str, AliasReport] = Field(
-        default_factory=dict,
-        exclude=True,
-        description="Map of service names to the outcome of their alias challenges",
-    )
-
-    loaded_token: str | None = Field(
-        default=None, exclude=True, description="The currently loaded token"
-    )
-
     allow_auto_load: bool = Field(default=True, description="Should we autoload on get?")
     """Should we autoload the grants on a call to get?"""
 
@@ -257,52 +143,92 @@ class Fakts(KoiledModel):
     mesh proxy`` at ``http://localhost:1055``). Aliases that need the mesh
     are skipped without one (or ``mesh``)."""
 
-    _mesh_route: MeshRoute | None = None
-    _load_lock: asyncio.Lock | None = None
-    _token_lock: asyncio.Lock | None = None
-    _alias_lock: asyncio.Lock | None = None
-    _token_expires_at: float | None = None
-    _loaded_from_cache: bool = False
-    """Whether the *configuration* came from the cache rather than the grant.
+    _state: SessionState | None = PrivateAttr(default=None)
+    _session: TokenSession | None = PrivateAttr(default=None)
+    _resolver: AliasResolver | None = PrivateAttr(default=None)
+    _mesh_route: MeshRoute | None = PrivateAttr(default=None)
 
-    Only :meth:`aload` writes this. It gates the alias self-heal, which is a
-    statement about how stale the instance list might be — adopting a
-    sibling's credential says nothing about that, so it must not flip this
-    (see ``_credential_adopted``)."""
-    _credential_adopted: bool = False
-    """Whether we took over a credential another process rotated. Diagnostic
-    only; kept separate so it cannot be mistaken for a stale instance list."""
-    _aliases_refreshed: bool = False
-    _instances_gen: int = 0
-    """Bumped whenever the instances may have changed (a reload, an adopted or
-    rotated credential). An alias refresh publishes itself as current only if
-    this did not move while it ran, so an invalidation can never be lost."""
-    _unchallenged_keys: set[str] = PrivateAttr(default_factory=set)
-    """Keys whose cached alias was accepted without probing it.
+    # ------------------------------------------------------------------ #
+    # Shared state                                                       #
+    # ------------------------------------------------------------------ #
 
-    ``omit_challenge=True`` stores an alias nobody verified. Serving that
-    back to a later caller who *did* want a challenge would silently skip
-    the probe — and, where the instance pins a key, the signature check with
-    it — for the rest of the process."""
-    _cache_write_failed: bool = False
-    _pending_report: "PendingReport | None" = None
+    def _get_state(self) -> SessionState:
+        """The session state, created on first use and kept across re-entry."""
+        if self._state is None:
+            self._state = SessionState(
+                manifest=self.manifest,
+                grant=self.grant,
+                cache=self.cache,
+                allow_auto_load=self.allow_auto_load,
+            )
+        return self._state
+
+    def _state_session(self) -> TokenSession:
+        self._ensure_entered()
+        assert self._session is not None
+        return self._session
+
+    def _state_resolver(self) -> AliasResolver:
+        self._ensure_entered()
+        assert self._resolver is not None
+        return self._resolver
+
+    @property
+    def loaded_fakts(self) -> ActiveFakts | None:
+        """The currently loaded configuration."""
+        return self._get_state().loaded_fakts
+
+    @loaded_fakts.setter
+    def loaded_fakts(self, value: ActiveFakts | None) -> None:
+        self._get_state().loaded_fakts = value
+
+    @property
+    def loaded_token(self) -> str | None:
+        """The access token currently held."""
+        return self._get_state().loaded_token
+
+    @loaded_token.setter
+    def loaded_token(self, value: str | None) -> None:
+        self._get_state().loaded_token = value
+
+    @property
+    def alias_map(self) -> dict[str, Alias]:
+        """The resolved aliases, by requirement key."""
+        return self._resolver.alias_map if self._resolver else {}
+
+    @alias_map.setter
+    def alias_map(self, value: dict[str, Alias]) -> None:
+        if self._resolver is not None:
+            self._resolver.alias_map = value
+
+    @property
+    def report_map(self) -> dict[str, AliasReport]:
+        """The outcome of the last resolution, by requirement key."""
+        return self._resolver.report_map if self._resolver else {}
+
+    @report_map.setter
+    def report_map(self, value: dict[str, AliasReport]) -> None:
+        if self._resolver is not None:
+            self._resolver.report_map = value
 
     def _ensure_entered(self) -> None:
-        """Raise if the context manager was not entered yet"""
-        if self._load_lock is None or self._token_lock is None or self._alias_lock is None:
+        """Raise if the context manager was not entered yet."""
+        if self._state is None or not self._state.entered:
             raise NotEnteredError(
                 "You need to enter the Fakts context (`with`/`async with`) before calling this function"
             )
 
     async def _aensure_loaded(self) -> ActiveFakts:
-        """Return the loaded fakts, auto-loading them if allowed"""
-        if self.loaded_fakts:
-            return self.loaded_fakts
-        if not self.allow_auto_load:
-            raise FaktsError(
-                "No fakts loaded and allow_auto_load is disabled. Please call load() explicitly first."
-            )
-        return await self.aload()
+        """Return the loaded fakts, auto-loading them if allowed."""
+        return await self._get_state().aensure_loaded()
+
+    def _grant_requires_interaction(self) -> bool:
+        """Whether reloading the grant would need a human."""
+        return self._get_state().grant_requires_interaction()
+
+    # ------------------------------------------------------------------ #
+    # Loading and the session                                            #
+    # ------------------------------------------------------------------ #
 
     async def aload(self, reload: bool = False) -> ActiveFakts:
         """Load the fakts from the cache or the grant (async)
@@ -320,53 +246,7 @@ class Fakts(KoiledModel):
             ActiveFakts: The loaded fakts
         """
         self._ensure_entered()
-        assert self._load_lock is not None
-        async with self._load_lock:
-            if self.loaded_fakts and not reload:
-                return self.loaded_fakts
-
-            if not reload:
-                cached_fakts = await self.cache.aload()
-                if cached_fakts:
-                    self.loaded_fakts = cached_fakts
-                    self._loaded_from_cache = True
-                    self._seed_token_from(cached_fakts)
-                    return self.loaded_fakts
-
-            self.loaded_fakts = await self.grant.aload()
-            self._loaded_from_cache = False
-
-            # The grant may have registered a brand new client: any
-            # previously selected aliases and tokens are stale now.
-            self.loaded_token = None
-            self._token_expires_at = None
-            self._invalidate_aliases()
-            self._seed_token_from(self.loaded_fakts)
-
-            # Persisting is best effort: the fakts are valid even if the
-            # cache cannot be written (read-only directory, full disk, ...).
-            # The grant just ran, so this credential supersedes whatever is
-            # on disk even when nothing stamped it with an issue time.
-            await self._apersist_locked(self.loaded_fakts, fresh_from_grant=True)
-            return self.loaded_fakts
-
-    def _seed_token_from(self, fakts: ActiveFakts) -> None:
-        """Reuse a still-valid access token that was persisted alongside.
-
-        This is the single most effective defence against a refresh
-        stampede: without it, every process starting up at once would
-        immediately renew, and each renewal revokes the last. With it they
-        share one access token for its full lifetime and simply do not
-        contend.
-        """
-        access_token = fakts.auth.access_token
-        if not access_token:
-            return
-        expires_at = fakts.auth.expires_at
-        if expires_at is not None and time.time() >= expires_at:
-            return
-        self.loaded_token = access_token
-        self._token_expires_at = expires_at
+        return await self._get_state().aload(reload=reload)
 
     async def alogin(self) -> ActiveFakts:
         """Ensure this app has a working session, prompting only if it must.
@@ -415,30 +295,23 @@ class Fakts(KoiledModel):
         for an interactive grant means prompting again.
         """
         self._ensure_entered()
-        assert self._alias_lock is not None
-        assert self._token_lock is not None
-        assert self._load_lock is not None
+        state = self._get_state()
+        assert state.alias_lock is not None
+        assert state.token_lock is not None
+        assert state.load_lock is not None
         # Logout is the one operation that legitimately touches all three
-        # state domains, so it takes all three locks — in L1 order.
-        async with self._alias_lock, self._token_lock, self._load_lock:
+        # state domains, so it takes all three locks -- in L1 order.
+        async with state.alias_lock, state.token_lock, state.load_lock:
             await self._alogout_locked()
 
     async def _alogout_locked(self) -> None:
         """Drop every trace of the session. Callers hold the relevant locks.
 
-        Shared with ``delete_on_exit`` so the two cannot drift: this used to
-        be inlined in :meth:`__aexit__`, where it ran under no lock at all.
+        Shared with ``delete_on_exit`` so the two cannot drift.
         """
-        await self.cache.areset()
-        self.loaded_fakts = None
-        self.loaded_token = None
-        self._token_expires_at = None
-        self.alias_map = {}
-        self.report_map = {}
-        self._aliases_refreshed = False
-        self._unchallenged_keys = set()
-        self._loaded_from_cache = False
-        self._credential_adopted = False
+        await self._get_state().areset()
+        if self._resolver is not None:
+            self._resolver.reset()
 
     async def arefresh(self) -> ActiveFakts:
         """Refresh the fakts (async)
@@ -453,492 +326,38 @@ class Fakts(KoiledModel):
         """
         return await self.aload(reload=True)
 
+    # ------------------------------------------------------------------ #
+    # Tokens                                                             #
+    # ------------------------------------------------------------------ #
+
     async def _afetch_token(self, interactive: bool = False) -> str:
-        """Renew the access token using the refresh grant.
+        """The renewal seam: renew the access token (caller holds token_lock).
 
-        Must be called while holding ``_token_lock`` (L2: nothing here may
-        take it again).
-
-        The awkward part is not the HTTP call, it is that refresh tokens
-        rotate: every use revokes its predecessor, and sibling processes
-        share one cache file. Three cheap measures keep that from turning
-        into a stampede, in order of how much they buy:
-
-        1. *Read before refreshing.* Our in-memory token may have been
-           rotated away by a sibling hours ago; noticing costs one file read
-           and saves a guaranteed-doomed round trip.
-        2. *Adopt by untried credential, not by retry count.* A herd of
-           processes starting on the same token converges one per round, so
-           a fixed "retry once" strands most of them. Looping while the
-           cache still offers something we have not tried is self-limiting
-           and actually converges.
-        3. *Escalate on content, never on a timer.* Giving up because a
-           sibling's write had not landed yet would re-run the grant, which
-           deletes that sibling's client — a millisecond of bad luck
-           cascading into an outage for everyone.
+        Subclasses may override it (:class:`~fakts.testing.TestingFakts` does);
+        the token session calls it at call time.
         """
-        # Note on "never interactive": that contract governs *re*-authentication
-        # (see _areauthenticate), not the first load. When nothing is loaded
-        # yet, _aensure_loaded() below runs the grant — which for a device-code
-        # grant can prompt. That is `allow_auto_load`'s decision to make, not
-        # this method's, so set allow_auto_load=False if a 401 must never be
-        # able to trigger an initial grant.
-        fakts = await self._aensure_loaded()
-
-        # (1) our credential may already be stale.
-        adopted = await self._aadopt_cached_credentials(set())
-        if adopted is not None:
-            fakts = adopted
-            # The adopted entry may carry an access token that is still good.
-            # Spending a rotation on top of it would be pure loss.
-            if self._token_is_valid() and self.loaded_token:
-                return self.loaded_token
-
-        tried: set[tuple[str, str]] = set()
-        # What we came in holding. Every await below can yield to a concurrent
-        # aload(reload=True), which replaces loaded_fakts wholesale; comparing
-        # against this is how we notice that happened.
-        entry_token = self.loaded_token
-
-        for _ in range(MAX_ADOPTIONS):
-            # Re-read rather than trusting the local. A reload that landed
-            # while we were blocked leaves `fakts` pointing at a credential
-            # the server has already revoked — and _aadopt_cached_credentials
-            # will not rescue us, because the cache now matches loaded_fakts
-            # and it correctly reports "nothing new". We would then spend
-            # every round posting a dead token and end up demanding a
-            # reauthentication that nothing actually required.
-            fakts = self.loaded_fakts or fakts
-
-            # Deliberately "did it change", never "is it valid": arefresh_token
-            # gets here precisely when loaded_token is the token the server
-            # just rejected, and a rejected token is usually not expired.
-            if (
-                self.loaded_token is not None
-                and self.loaded_token != entry_token
-                and self._token_is_valid()
-            ):
-                return self.loaded_token
-
-            auth = fakts.auth
-
-            # Cheap local check before spending a round trip, and it yields
-            # a truthful message instead of a guess at what went wrong.
-            expiry_reason = self._classify_refresh_expiry(auth)
-            if expiry_reason:
-                return await self._areauthenticate(reason=expiry_reason, interactive=interactive)
-
-            tried.add((auth.client_id, auth.refresh_token))
-
-            try:
-                data = await self._apost_refresh(auth)
-            except oauth2.OAuth2ErrorResponse as e:
-                if e.error not in ("invalid_grant", "invalid_client"):
-                    raise FaktsError(
-                        f"The token endpoint {auth.token_endpoint} refused to renew "
-                        f"the session for client '{auth.client_id}': {e}"
-                    ) from e
-
-                logger.debug(
-                    "Refresh rejected (%s); looking for a credential another "
-                    "process may have written.",
-                    e.error,
-                )
-                adopted = await self._aawait_untried_credentials(tried)
-                if adopted is None:
-                    return await self._areauthenticate(
-                        reason=("superseded" if e.error == "invalid_client" else "rejected"),
-                        interactive=interactive,
-                    )
-                fakts = adopted
-                # The credential we just adopted may already carry a usable
-                # access token — the sibling that rotated ahead of us got one.
-                # Rotating again on top of it would revoke the very token we
-                # adopted and push the sibling into the same recovery, which
-                # is how a stampede sustains itself.
-                if self._token_is_valid() and self.loaded_token:
-                    return self.loaded_token
-                continue
-            except FaktsError:
-                raise
-            except Exception as e:
-                raise FaktsError(
-                    f"Could not reach the token endpoint {auth.token_endpoint} to "
-                    f"renew the session: {e}"
-                ) from e
-
-            return await self._acommit_token_response(fakts, data)
-
-        return await self._areauthenticate(reason="exhausted", interactive=interactive)
-
-    async def _apost_refresh(self, auth: AuthFakt) -> dict[str, Any]:
-        """POST the refresh grant, retrying only failures the server never saw.
-
-        A refresh rotates: once the server has processed it, the old token is
-        dead, so repeating it after an ambiguous failure (a timeout, a reset
-        mid-response) would read as a rejected credential and push the app into
-        reauthentication. A connection that never opened, or a 5xx, did not
-        rotate anything -- those are retried a couple of times.
-        """
-        for attempt in range(TOKEN_CONNECT_RETRIES + 1):
-            try:
-                return await oauth2.apost_form(
-                    auth.token_endpoint,
-                    {
-                        "grant_type": oauth2.REFRESH_GRANT,
-                        "refresh_token": auth.refresh_token,
-                        "client_id": auth.client_id,
-                    },
-                    ssl_context=self.ssl_context,
-                    allow_insecure_transport=self.allow_insecure_transport,
-                )
-            except (aiohttp.ClientConnectorError, oauth2.TransientHTTPError) as e:
-                if attempt == TOKEN_CONNECT_RETRIES:
-                    raise
-                logger.info("Token endpoint unavailable (%s); retrying.", e)
-                await asyncio.sleep(REFRESH_RETRY_DELAY * (attempt + 1))
-        raise AssertionError("unreachable")
-
-    async def _acommit_token_response(self, previous: ActiveFakts, data: dict[str, Any]) -> str:
-        """Persist a rotated credential, *then* start using it.
-
-        The order matters and is not merely tidy. The server commits the
-        rotation when it answers, so from that instant the old refresh token
-        is dead. If we adopted the new one in memory and only then failed to
-        write it, this process would keep working while the credential on
-        disk stayed revoked — a breakage that surfaces at the next restart,
-        far from its cause.
-        """
-        response = oauth2.parse_token_response(data, previous.auth.token_endpoint)
-        candidate = oauth2.merge_token_response(
-            previous,
-            response,
-            token_endpoint=previous.auth.token_endpoint,
-            report_endpoint=previous.auth.report_endpoint,
-            skew=TOKEN_EXPIRY_SKEW,
-            fallback_client_id=previous.auth.client_id,
-        )
-
-        await self._apersist(candidate)
-
-        aliases_changed = oauth2.instances_changed(previous, candidate)
-
-        self.loaded_fakts = candidate
-        self.loaded_token = candidate.auth.access_token
-        self._token_expires_at = candidate.auth.expires_at
-
-        if aliases_changed:
-            # Only flag it: clearing alias_map here would race with a
-            # resolution in flight, and L1 forbids taking _alias_lock from
-            # under _token_lock.
-            self._invalidate_aliases()
-
-        if not self.loaded_token:
-            raise FaktsError(
-                f"The token endpoint {candidate.auth.token_endpoint} answered "
-                f"without an access_token."
-            )
-        return self.loaded_token
-
-    def _classify_refresh_expiry(self, auth: AuthFakt) -> str | None:
-        """Name a locally-detectable expiry, if there is one.
-
-        Servers enforce two independent limits: how long one refresh token
-        stays usable, and how long a chain may keep being renewed. Both are
-        computable from what we persisted, so we can fail with a true
-        explanation instead of asking and then guessing at ``invalid_grant``.
-        """
-        now = time.time()
-        if auth.refresh_issued_at and now - auth.refresh_issued_at > REFRESH_TOKEN_MAX_AGE:
-            return "idle"
-        if auth.chain_started_at and now - auth.chain_started_at > REFRESH_CHAIN_MAX_AGE:
-            return "chain_expired"
-        return None
-
-    async def _aawait_untried_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
-        """Wait briefly for a sibling's rotation to land, then adopt it.
-
-        Terminates for the right reason: we only ever accept a credential we
-        have not already tried, so this cannot spin. The sleep is jittered so
-        that N processes racing on the same file do not re-read in lockstep.
-        """
-        if isinstance(self.cache, NoCache):
-            # Nothing is shared, so no sibling can have written anything: the
-            # waits below would only hold _token_lock for nothing.
-            return None
-        for round_index in range(REFRESH_RETRY_ROUNDS):
-            adopted = await self._aadopt_cached_credentials(tried)
-            if adopted is not None:
-                return adopted
-            if round_index == REFRESH_RETRY_ROUNDS - 1:
-                # Nothing re-reads the cache after this, so sleeping here only
-                # holds _token_lock — and every other token consumer in the
-                # process with it — for nothing.
-                break
-            await asyncio.sleep(REFRESH_RETRY_DELAY * (1 + random.random()))
-        return None
-
-    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
-        """Adopt the cached credential if it is one we have not tried.
-
-        The key is the whole ``(client_id, refresh_token)`` pair, not the
-        token alone: re-approval rotates the client identity too, and a
-        refresh token is only ever valid for the client it was issued to.
-
-        Must be called while holding ``_token_lock``; takes ``_load_lock``
-        (L1: token before load).
-        """
-        assert self._load_lock is not None
-        async with self._load_lock:
-            try:
-                cached = await self.cache.aload()
-            except Exception:
-                logger.warning(
-                    "Could not re-read the cache while renewing the session.",
-                    exc_info=True,
-                )
-                return None
-
-            if not cached:
-                return None
-
-            key = (cached.auth.client_id, cached.auth.refresh_token)
-            if key in tried:
-                return None
-
-            current = self.loaded_fakts
-            if current is not None and key == (
-                current.auth.client_id,
-                current.auth.refresh_token,
-            ):
-                return None
-
-            logger.info(
-                "Adopting the credential another process wrote to the cache "
-                "instead of renewing our own."
-            )
-            # Adopting replaces the whole ActiveFakts, instances included, so
-            # any alias resolved against the old ones may now point at a
-            # service this credential does not reach. Under multi-process load
-            # this is the *common* path, not an edge case — invalidating only
-            # in _acommit_token_response would miss it every time.
-            #
-            # Flag only: L1 forbids taking _alias_lock from under _token_lock,
-            # and clearing alias_map here would race a resolution in flight.
-            if current is not None and oauth2.instances_changed(current, cached):
-                self._invalidate_aliases()
-            self.loaded_fakts = cached
-            self._credential_adopted = True
-            # Keep the access token that came with it. Discarding it and
-            # rotating anyway is the stampede this whole read-before-refresh
-            # step exists to avoid: we would revoke the very credential we
-            # just adopted, forcing the process we adopted it from to adopt
-            # in turn, and so on around the ring.
-            self.loaded_token = None
-            self._token_expires_at = None
-            self._seed_token_from(cached)
-            return cached
-
-    async def _areauthenticate(self, *, reason: str, interactive: bool) -> str:
-        """Last resort: re-run the grant, but only when that is safe.
-
-        Re-running an *interactive* grant is not a quiet retry. It opens a
-        browser and makes the server mint a replacement client, deleting the
-        old one — which severs every sibling process sharing this cache. So
-        it happens only when a human actually asked for it.
-
-        Non-interactive grants (redeem, a supplied credential) carry no such
-        cost, which is what keeps headless deployments recoverable.
-        """
-        explanation = _REAUTH_REASONS.get(reason, "The session could not be renewed.")
-
-        if not self._grant_requires_interaction():
-            logger.info("Re-running the non-interactive grant: %s", explanation)
-            await self.aload(reload=True)
-            return await self._afetch_after_reload()
-
-        if interactive and self.reauth_policy is not ReauthPolicy.NEVER:
-            logger.info("Re-running the interactive grant: %s", explanation)
-            await self.aload(reload=True)
-            return await self._afetch_after_reload()
-
-        if self.reauth_policy is ReauthPolicy.NEVER:
-            raise NeedsReauthenticationError(
-                f"{explanation} This app must be authorized again, and "
-                f"reauth_policy=ReauthPolicy.NEVER forbids prompting from this "
-                f"process: authorize it elsewhere (or provision a fresh credential)."
-            )
-        raise NeedsReauthenticationError(
-            f"{explanation} This app must be authorized again, which needs "
-            f"someone at a browser. Call fakts.alogin() when prompting is "
-            f"appropriate, or set reauth_policy=ReauthPolicy.ALWAYS to let the "
-            f"token path prompt on its own."
-        )
-
-    async def _afetch_after_reload(self) -> str:
-        """Return the token the freshly reloaded grant produced."""
-        fakts = await self._aensure_loaded()
-        if fakts.auth.access_token:
-            self.loaded_token = fakts.auth.access_token
-            self._token_expires_at = fakts.auth.expires_at
-            return fakts.auth.access_token
-        raise FaktsError("The grant completed but produced no access token.")
-
-    def _grant_requires_interaction(self) -> bool:
-        """Whether reloading the grant would need a human."""
-        return bool(getattr(self.grant, "requires_user_interaction", True))
-
-    async def _apersist(self, fakts: ActiveFakts) -> None:
-        """Write fakts to the cache without clobbering a newer credential.
-
-        Every cache write funnels through here (L3). The hazard it closes is
-        not the obvious one: a process that never refreshed at all can still
-        overwrite a sibling's freshly rotated token just by persisting the
-        preferred alias order it happens to be holding. That leaves a
-        revoked credential on disk and breaks everyone.
-        """
-        assert self._load_lock is not None
-        async with self._load_lock:
-            await self._apersist_locked(fakts)
-
-    async def _apersist_locked(self, fakts: ActiveFakts, fresh_from_grant: bool = False) -> None:
-        """As :meth:`_apersist`, for callers already holding ``_load_lock``.
-
-        ``fresh_from_grant`` marks the one write that is allowed to replace a
-        timed credential with an untimed one: the grant just ran and produced
-        this, so it is newer than anything on disk by construction even though
-        nothing stamped it. Every other caller has to prove it is not going
-        backwards.
-        """
-        # The compare and the write are one step under _load_lock, or a
-        # sibling task's rotation lands between them and we overwrite it with a
-        # credential the server has already revoked.
-        try:
-            existing = await self.cache.aload()
-        except Exception:
-            # Unknowable either way: skipping would lose a fresh rotation,
-            # writing may replace a sibling's newer one. Write, but say so.
-            logger.warning(
-                "Could not read the fakts cache before writing it; writing without "
-                "the stale-credential check.",
-                exc_info=True,
-            )
-            existing = None
-
-        if existing is not None and not fresh_from_grant and self._is_stale_auth(fakts, existing):
-            logger.debug(
-                "Skipping cache write: the cache holds a newer credential than "
-                "the one we are about to persist."
-            )
-            return
-
-        try:
-            await self.cache.aset(fakts)
-            self._cache_write_failed = False
-        except Exception:
-            if not self._cache_write_failed:
-                self._cache_write_failed = True
-                logger.error(
-                    "Could not persist the fakts to the cache. If a refresh token "
-                    "was just rotated, the credential on disk is now revoked and "
-                    "the next start of this app will need to authenticate again.",
-                    exc_info=True,
-                )
-
-    @staticmethod
-    def _is_stale_auth(candidate: ActiveFakts, existing: ActiveFakts) -> bool:
-        """Whether ``candidate`` would overwrite a newer credential.
-
-        An absent ``refresh_issued_at`` means *unknown*, not "issued at the
-        epoch". Coercing it to 0.0 made every freshly injected EnvGrant
-        credential look older than whatever was already cached, so a
-        re-provisioned container would refuse to persist its new token and
-        then adopt the stale one back.
-
-        But "unknown" must not mean "safe to write" either. Only
-        :func:`fakts.oauth2.merge_token_response` ever stamps this
-        field, so *every* credential straight from a grant carries ``None`` —
-        which turned the guard off in exactly the case it was written for. An
-        untimed candidate therefore loses to a timed one; the caller that
-        legitimately needs to install a fresh grant says so explicitly via
-        ``fresh_from_grant``.
-        """
-        if candidate.auth.refresh_token == existing.auth.refresh_token:
-            return False
-        candidate_at = candidate.auth.refresh_issued_at
-        existing_at = existing.auth.refresh_issued_at
-        if existing_at is None:
-            # Nothing to lose to: the cache itself is untimed.
-            return False
-        if candidate_at is None:
-            # The cache holds a credential someone demonstrably rotated and
-            # we cannot show ours is newer. Yield rather than revoke it.
-            return True
-        return candidate_at < existing_at
-
-    def _token_is_valid(self) -> bool:
-        """Check whether the loaded token exists and is not (about to be) expired.
-
-        ``_token_expires_at`` already has the safety skew folded in (see
-        :func:`fakts.oauth2.resolve_expiry`, which clamps it so a
-        short-lived token is neither treated as eternal nor as instantly
-        stale). ``None`` means the server declared no lifetime, so the token
-        is opaque and we only find out by being rejected.
-        """
-        if not self.loaded_token:
-            return False
-        if self._token_expires_at is None:
-            return True
-        return time.time() < self._token_expires_at
+        return await self._state_session().afetch_token(interactive)
 
     async def arefresh_token(self, stale_token: str | None = None) -> str:
-        """Renew the access token (async).
+        """Renew the access token (async); never interactive.
 
-        Never interactive: this is what a transport layer calls after a 401,
-        and a browser opening in the middle of an unrelated request is not
-        an acceptable outcome.
-
-        ``stale_token`` makes repeated 401s idempotent. Transports retry a
-        rejected operation several times, and each retry that reached the
-        token endpoint would rotate the refresh token again — burning
-        credentials and worsening contention — even though the first renewal
-        already produced a good token. Passing the token that was rejected
-        lets us notice it is no longer the current one and hand back what we
-        already have.
+        This is what a transport layer calls after a 401. ``stale_token`` makes
+        repeated 401s idempotent: pass the token that was just rejected and a
+        renewal that already happened is reused instead of rotating again.
         """
-        self._ensure_entered()
-        assert self._token_lock is not None
-        async with self._token_lock:
-            if (
-                stale_token is not None
-                and self.loaded_token is not None
-                and self.loaded_token != stale_token
-            ):
-                return self.loaded_token
-            return await self._afetch_token(interactive=False)
+        return await self._state_session().arefresh_token(stale_token)
 
     async def aget_token(self, interactive: bool = False) -> str:
         """Get the authentication token for a service (async)
 
-        Returns the currently loaded token, renewing it if it is missing
-        or expired.
+        Returns the currently loaded token, renewing it if it is missing or
+        expired.
         """
-        self._ensure_entered()
-        assert self._token_lock is not None
-        async with self._token_lock:
-            if not self._token_is_valid():
-                # Load before deciding to renew: the cache may already hold a
-                # perfectly good access token that a sibling process obtained,
-                # and renewing on top of it would rotate for nothing.
-                await self._aensure_loaded()
+        return await self._state_session().aget_token(interactive)
 
-            if self._token_is_valid() and self.loaded_token:
-                return self.loaded_token
-
-            # ALWAYS lets an ordinary token fetch prompt; the default policy
-            # confines that to an explicit load.
-            permit = interactive or self.reauth_policy is ReauthPolicy.ALWAYS
-            return await self._afetch_token(interactive=permit)
+    # ------------------------------------------------------------------ #
+    # Aliases                                                            #
+    # ------------------------------------------------------------------ #
 
     async def achallenge_alias(
         self,
@@ -1023,182 +442,6 @@ class Fakts(KoiledModel):
 
             return True
 
-    def _invalidate_aliases(self) -> None:
-        """The instances may have changed: resolved aliases are no longer current.
-
-        Only the flag and the generation, never the maps -- this is reached
-        from under _token_lock and _load_lock, which may not take _alias_lock
-        (L1); the next lookup resolves again.
-        """
-        self._aliases_refreshed = False
-        self._instances_gen += 1
-
-    async def _aflush_report(self) -> None:
-        """Send the report of the last resolution, if any, outside every lock."""
-        pending, self._pending_report = self._pending_report, None
-        if pending is not None:
-            await areport_aliases(
-                pending,
-                ssl_context=self.ssl_context,
-                allow_insecure_transport=self.allow_insecure_transport,
-            )
-
-    def _is_granted(self, fakts_key: str) -> bool:
-        """Whether an instance with aliases was granted for the key."""
-        instance = self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
-        return bool(instance and instance.aliases)
-
-    def _grant_status_for(self, fakts_key: str) -> GrantStatus:
-        """The grant status of a requirement key on the loaded fakts.
-
-        An explicit server-reported status wins. Without one, a granted
-        instance is unambiguously GRANTED; anything else is UNKNOWN (denied
-        and unavailable cannot be told apart without server support).
-        """
-        if not self.loaded_fakts:
-            return GrantStatus.UNKNOWN
-        explicit = self.loaded_fakts.statuses.get(fakts_key)
-        if explicit is not None:
-            return explicit
-        instance = self.loaded_fakts.instances.get(fakts_key)
-        if instance and instance.aliases:
-            return GrantStatus.GRANTED
-        return GrantStatus.UNKNOWN
-
-    def _not_granted_why(self, fakts_key: str, service: str) -> str:
-        """A human readable clause explaining why no instance was granted"""
-        status = self._grant_status_for(fakts_key)
-        if status == GrantStatus.DENIED:
-            return "the user declined access to it"
-        if status == GrantStatus.UNAVAILABLE:
-            return f"the deployment does not offer the service '{service}'"
-        return (
-            "the user may have declined access, or the deployment does not "
-            f"offer the service '{service}'"
-        )
-
-    def _undeclared_key_error(self, fakts_key: str) -> AliasNotFoundError:
-        """The error for a key that is not declared in the manifest"""
-        requirement_keys = [req.key for req in (self.manifest.requirements or [])]
-        return AliasNotFoundError(
-            f"Alias for key '{fakts_key}' not found. "
-            f"The manifest of '{self.manifest.identifier}' declares the requirement keys: "
-            f"{', '.join(requirement_keys) or 'none'}. "
-            f"Resolved aliases: {', '.join(self.alias_map.keys()) or 'none'}. "
-            f"Add '{fakts_key}' to the manifest requirements if this app should use it."
-        )
-
-    async def _aresolve_requirement(
-        self,
-        req: Requirement,
-        omit_challenge: bool = False,
-        mesh_proxy: str | None = None,
-        mesh_node: NativeNode | None = None,
-        mesh_error: MeshError | None = None,
-    ) -> tuple[Alias | None, AliasReport, str | None]:
-        """Resolve a single requirement to a working alias.
-
-        Tries the instance's aliases in order (the first alias is the last
-        known good one, see :meth:`arefresh_aliases`) and returns the first
-        one that passes its challenge. Mesh aliases are challenged through
-        ``mesh_proxy`` and returned carrying it (``Alias.proxy``) and, if this
-        process runs it, the ``mesh_node`` (for ``Alias.aforward`` and
-        ``Alias.aturn``); without a
-        mesh proxy they are skipped.
-
-        Returns:
-            A tuple of (selected alias or None, report, composition error
-            message or None). The composition error is only set for
-            required services that could not be resolved.
-        """
-        assert self.loaded_fakts, "Fakts need to be loaded before resolving aliases"
-
-        kind = "optional" if req.optional else "required"
-
-        instance = self.loaded_fakts.instances.get(req.key)
-        if not instance:
-            reason = (
-                f"No instance granted for {kind} service {req.key}: "
-                f"{self._not_granted_why(req.key, req.service)}."
-            )
-            logger.log(logging.WARNING if req.optional else logging.ERROR, reason)
-            return (
-                None,
-                AliasReport(alias_id=None, reason=reason, valid=req.optional),
-                None if req.optional else reason,
-            )
-
-        if not instance.aliases:
-            reason = f"No aliases listed for {kind} service {req.key}."
-            logger.log(logging.WARNING if req.optional else logging.ERROR, reason)
-            return (
-                None,
-                AliasReport(alias_id=None, reason=reason, valid=req.optional),
-                None if req.optional else reason,
-            )
-
-        errors_in_alias: list[str] = []
-
-        for alias in instance.aliases:
-            selected = alias
-            if alias.is_mesh():
-                if mesh_proxy is None:
-                    errors_in_alias.append(
-                        f"Alias {alias.id} of service {req.key} is only reachable over "
-                        f"the mesh, and the mesh node could not start: {mesh_error}"
-                        if mesh_error is not None
-                        else f"Alias {alias.id} of service {req.key} is only reachable "
-                        f"over the mesh, which is off: pass mesh=MeshOptions() (with "
-                        f'fakts[mesh] installed) or mesh_proxy="http://..." to Fakts.'
-                    )
-                    continue
-                # A copy: the route is this process's, never the cached instance's.
-                selected = alias.through_mesh(mesh_proxy, mesh_node)
-
-            if omit_challenge:
-                # If we omit the challenge, we just return the first alias
-                return (
-                    selected,
-                    AliasReport(alias_id=alias.id, reason=None, valid=True),
-                    None,
-                )
-
-            try:
-                challenge_ok = await asyncio.wait_for(
-                    self.achallenge_alias(
-                        alias,
-                        challenge_key=instance.challenge_key,
-                        # Only when set, so overrides without it keep working.
-                        **({"proxy": selected.proxy} if selected.proxy else {}),
-                    ),
-                    timeout=self.alias_challenge_timeout,
-                )
-                if challenge_ok:
-                    return (
-                        selected,
-                        AliasReport(alias_id=alias.id, reason=None, valid=True),
-                        None,
-                    )
-            except TimeoutError:
-                errors_in_alias.append(
-                    f"Timeout while challenging alias {alias.id} for service {req.key}."
-                )
-            except Exception as e:
-                errors_in_alias.append(
-                    f"Error while challenging alias {alias.challenge_path} for service {req.key}: {e!s}"
-                )
-
-        error_message = (
-            f"All {len(instance.aliases)} alias(es) of service {req.key} "
-            f"(instance '{instance.identifier}') failed their challenge:\n  - "
-            + "\n  - ".join(errors_in_alias)
-        )
-        return (
-            None,
-            AliasReport(alias_id=None, reason=error_message, valid=False),
-            None if req.optional else error_message,
-        )
-
     async def arefresh_aliases(
         self,
         omit_challenge: bool = False,
@@ -1223,185 +466,9 @@ class Fakts(KoiledModel):
         Raises:
             CompositionError: If a required service could not be resolved.
         """
-        self._ensure_entered()
-        assert self._alias_lock is not None
-        try:
-            async with self._alias_lock:
-                await self._arefresh_aliases_locked(
-                    omit_challenge=omit_challenge, omit_report=omit_report
-                )
-        finally:
-            await self._aflush_report()
-
-    async def _arefresh_aliases_locked(
-        self,
-        omit_challenge: bool = False,
-        omit_report: bool = False,
-    ) -> None:
-        """As :meth:`arefresh_aliases`, for callers already holding
-        ``_alias_lock``.
-
-        The lock lives on the public method rather than here because
-        :meth:`aget_alias` already holds it and :class:`asyncio.Lock` is not
-        reentrant (L2). Without the split, the public entry point published
-        ``alias_map``, ``report_map``, ``_aliases_refreshed`` and
-        ``_unchallenged_keys`` — and sorted each instance's alias list *in
-        place* — with no synchronization at all, while ``aget_alias`` read
-        them under a lock that no writer took.
-        """
-        fakts = await self._aensure_loaded()
-
-        requirements = self.manifest.requirements or []
-
-        # Take the report token up front, before any alias state is
-        # published. Fetching it *after* resolution would be a trap:
-        # renewing can adopt a credential another process wrote, which
-        # resets the resolved aliases — and doing that between publishing
-        # alias_map and reading it back makes a successful resolution look
-        # like a failed one. Telemetry must never be able to do that, so it
-        # also swallows its own failures rather than blocking resolution.
-        report_token: str | None = None
-        if not omit_report:
-            try:
-                report_token = await self.aget_token()
-            except Exception:
-                logger.debug(
-                    "No token available for the alias report; skipping it.",
-                    exc_info=True,
-                )
-
-        # The token fetch above may have rotated or adopted a credential, which
-        # rebinds loaded_fakts (with possibly different instances): resolve
-        # against what is current, and remember which generation that was.
-        fakts = self.loaded_fakts or fakts
-        generation = self._instances_gen
-
-        assert self._mesh_route is not None
-        mesh_proxy, mesh_node, mesh_error = await self._mesh_route.aroute(fakts)
-        results = await asyncio.gather(
-            *(
-                self._aresolve_requirement(
-                    req,
-                    omit_challenge=omit_challenge,
-                    mesh_proxy=mesh_proxy,
-                    mesh_node=mesh_node,
-                    mesh_error=mesh_error,
-                )
-                for req in requirements
-            )
+        await self._state_resolver().arefresh_aliases(
+            omit_challenge=omit_challenge, omit_report=omit_report
         )
-
-        new_alias_map: dict[str, Alias] = {}
-        new_report_map: dict[str, AliasReport] = {}
-        composition_errors: list[str] = []
-
-        for req, (selected_alias, report, error) in zip(requirements, results, strict=True):
-            new_report_map[req.key] = report
-            if selected_alias:
-                new_alias_map[req.key] = selected_alias
-            if error:
-                composition_errors.append(error)
-
-        # Publish the new maps atomically, so concurrent readers never see
-        # a half-populated alias map.
-        self.alias_map = new_alias_map
-        self.report_map = new_report_map
-        # Current only if nothing invalidated the instances meanwhile; otherwise
-        # the next lookup resolves again instead of trusting these.
-        self._aliases_refreshed = self._instances_gen == generation
-        if omit_challenge:
-            self._unchallenged_keys = self._unchallenged_keys | set(new_alias_map)
-        else:
-            self._unchallenged_keys = self._unchallenged_keys - set(new_alias_map)
-
-        # Remember the working alias as the preferred one: move it to the
-        # front of the instance's alias list and persist it, so the next
-        # (cached) session challenges the last known good alias first.
-        reordered: dict[str, Instance] = {}
-        for key, alias in new_alias_map.items():
-            instance = fakts.instances.get(key)
-            if instance and instance.aliases and instance.aliases[0].id != alias.id:
-                reordered[key] = instance.model_copy(
-                    update={"aliases": sorted(instance.aliases, key=lambda a: a.id != alias.id)}
-                )
-        if reordered:
-            # Persisting the preferred alias order is an optimization for the
-            # next session: a failing cache write must not break this one.
-            # It goes through _apersist because this writes the *whole*
-            # ActiveFakts — credentials included — and this process may be
-            # holding an older refresh token than the one on disk. Writing
-            # it blindly would replace a live credential with a revoked one
-            # without any refresh having taken place here at all.
-            #
-            # Persist what is current, not the local captured before the
-            # report token was fetched: aget_token() above can rotate the
-            # credential (or adopt a sibling's), which rebinds loaded_fakts
-            # and leaves `fakts` pointing at a superseded object.
-            #
-            # A copy, swapped in under _load_lock: loaded_fakts is only ever
-            # replaced there (L3), never sorted in place from the alias path.
-            assert self._load_lock is not None
-            async with self._load_lock:
-                current = self.loaded_fakts or fakts
-                updated = current.model_copy(
-                    update={"instances": {**current.instances, **reordered}}
-                )
-                self.loaded_fakts = updated
-                await self._apersist_locked(updated)
-
-        if report_token:
-            # Sent by the caller once _alias_lock is released: a slow report
-            # endpoint must not stall every alias lookup in the process. A
-            # later resolution (the self-heal retry) replaces this one.
-            self._pending_report = PendingReport(
-                fakts=fakts,
-                report_map=dict(new_report_map),
-                functional=not composition_errors,
-                token=report_token,
-            )
-
-        if composition_errors:
-            joined_errors = "\n".join(composition_errors)
-            raise CompositionError(
-                f"Could not resolve all required services for app "
-                f"'{self.manifest.identifier}' (deployment "
-                f"'{fakts.self.deployment_name}'):\n{joined_errors}\n"
-                f"Check that the services are running and reachable from this machine."
-            )
-
-    async def _arefresh_aliases_with_selfheal(
-        self,
-        omit_challenge: bool = False,
-        omit_report: bool = True,
-    ) -> None:
-        """Refresh the aliases, reloading stale cached fakts once on failure.
-
-        If the alias resolution fails while the fakts were loaded from the
-        cache (services may have moved since), the fakts are reloaded from
-        the grant and the aliases are resolved once more.
-        """
-        try:
-            await self._arefresh_aliases_locked(
-                omit_challenge=omit_challenge, omit_report=omit_report
-            )
-        except CompositionError:
-            # Re-running an interactive grant opens a browser and replaces the
-            # client, severing sibling processes -- a failed lookup is never
-            # reason enough (ReauthPolicy governs that, via alogin()).
-            if not (
-                self.refetch_on_alias_failure
-                and self._loaded_from_cache
-                and not self._grant_requires_interaction()
-            ):
-                raise
-
-            logger.warning(
-                "Alias resolution from cached fakts failed. Reloading fakts from the grant and retrying."
-            )
-            await self.aload(reload=True)
-            await self._arefresh_aliases_locked(
-                omit_challenge=omit_challenge, omit_report=omit_report
-            )
 
     async def aget_alias(
         self,
@@ -1430,74 +497,12 @@ class Fakts(KoiledModel):
         Raises:
             AliasNotFoundError: If no alias could be resolved for the key.
         """
-        self._ensure_entered()
-        assert self._alias_lock is not None
-        try:
-            async with self._alias_lock:
-                stale_unchallenged = not omit_challenge and fakts_key in self._unchallenged_keys
-                # ``_aliases_refreshed`` has to be part of the fast path, not just
-                # the refresh condition below it. The token path invalidates
-                # aliases by clearing that flag and deliberately leaving
-                # ``alias_map`` alone (it cannot take _alias_lock, see L1) — so a
-                # fast path that consults only ``alias_map`` would serve exactly
-                # the entries the invalidation was meant to retire.
-                if (
-                    not force_refresh
-                    and not stale_unchallenged
-                    and self._aliases_refreshed
-                    and fakts_key in self.alias_map
-                ):
-                    return self.alias_map[fakts_key]
-
-                # A granted key that failed to resolve last time (its service was
-                # briefly down) is tried again, not failed for the process's life.
-                unresolved = fakts_key not in self.alias_map and self._is_granted(fakts_key)
-                if force_refresh or stale_unchallenged or unresolved or not self._aliases_refreshed:
-                    try:
-                        await self._arefresh_aliases_with_selfheal(
-                            omit_challenge=omit_challenge, omit_report=omit_report
-                        )
-                    except CompositionError:
-                        # Even if some *other* required service failed, the
-                        # requested key may have resolved fine -- or not have been
-                        # granted at all, which has its own error below. Only the
-                        # requested key's own failure is this composition error.
-                        if fakts_key not in self.alias_map and self._is_granted(fakts_key):
-                            raise
-
-                if fakts_key in self.alias_map:
-                    return self.alias_map[fakts_key]
-
-                requirement = next(
-                    (req for req in (self.manifest.requirements or []) if req.key == fakts_key),
-                    None,
-                )
-
-                if requirement is not None:
-                    # The key is declared: distinguish "the server did not grant
-                    # an instance" (expected for declined optional services) from
-                    # "an instance was granted but is unreachable".
-                    instance = (
-                        self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
-                    )
-                    if instance is None or not instance.aliases:
-                        kind = "optional" if requirement.optional else "required"
-                        raise ServiceNotGrantedError(
-                            f"The {kind} service '{fakts_key}' is declared in the manifest of "
-                            f"'{self.manifest.identifier}', but the server did not grant an "
-                            f"instance for it "
-                            f"({self._not_granted_why(fakts_key, requirement.service)})."
-                        )
-
-                    report = self.report_map.get(fakts_key)
-                    if report and report.reason:
-                        raise AliasNotFoundError(
-                            f"Could not resolve alias for {fakts_key}: {report.reason}"
-                        )
-
-                raise self._undeclared_key_error(fakts_key)
-        finally:
-            await self._aflush_report()
+        return await self._state_resolver().aget_alias(
+            fakts_key,
+            omit_challenge=omit_challenge,
+            omit_report=omit_report,
+            force_refresh=force_refresh,
+        )
 
     async def aget_alias_or_none(
         self,
@@ -1522,7 +527,7 @@ class Fakts(KoiledModel):
         that is a bug in the app, not a runtime condition.
         """
         if not any(req.key == fakts_key for req in (self.manifest.requirements or [])):
-            raise self._undeclared_key_error(fakts_key)
+            raise self._state_resolver().undeclared_key_error(fakts_key)
 
         try:
             return await self.aget_alias(
@@ -1548,7 +553,7 @@ class Fakts(KoiledModel):
         """
         self._ensure_entered()
         await self._aensure_loaded()
-        return self._grant_status_for(fakts_key)
+        return self._state_resolver().grant_status_for(fakts_key)
 
     async def agranted(self, fakts_key: str) -> bool:
         """Whether the server granted an instance for a service key (async)
@@ -1725,22 +730,30 @@ class Fakts(KoiledModel):
         call that needed it rather than at the ``async with``.
         """
 
-        # Re-entering would install three *fresh* locks while the outer body
-        # may be inside a critical section, orphaning the lock object its
-        # holder is waiting on — mutual exclusion would be lost silently, and
-        # the inner __aexit__ would then null the locks out from under the
-        # outer body. Nothing here needs nesting, so refuse it outright.
-        if self._load_lock is not None:
+        # Re-entering would install fresh locks while the outer body may be
+        # inside a critical section, orphaning the lock object its holder is
+        # waiting on -- mutual exclusion would be lost silently. Nothing here
+        # needs nesting, so refuse it outright.
+        if self._state is not None and self._state.entered:
             raise NotEnteredError(
                 "This Fakts context is already entered. Enter it once and share "
                 "the instance; nesting `async with` on the same object would "
                 "silently drop the locks the outer scope is relying on."
             )
 
-        self._load_lock = asyncio.Lock()
-        self._token_lock = asyncio.Lock()
-        self._alias_lock = asyncio.Lock()
+        state = self._get_state()
+        state.enter()
         self._mesh_route = MeshRoute(self.mesh, self.mesh_proxy, self.manifest)
+        self._session = TokenSession(
+            state, self, fetch=lambda interactive: self._afetch_token(interactive)
+        )
+        self._resolver = AliasResolver(
+            state,
+            self._session,
+            self._mesh_route,
+            self,
+            challenge=lambda alias, **kwargs: self.achallenge_alias(alias, **kwargs),
+        )
 
         # Everything from here on runs with the locks already set, so it has to
         # be unwound by hand on failure: Python does not call __aexit__ when
@@ -1764,7 +777,7 @@ class Fakts(KoiledModel):
             # L4: a refresh-based session is credential state, not just config.
             # Without somewhere to persist it, every restart re-authenticates
             # and every sibling process revokes the others by rotating.
-            if isinstance(self.cache, NoCache) and self._grant_requires_interaction():
+            if isinstance(self.cache, NoCache) and state.grant_requires_interaction():
                 logger.warning(
                     "Fakts is configured with NoCache but the grant needs user "
                     "interaction. Refresh tokens rotate on every use, so nothing "
@@ -1798,24 +811,19 @@ class Fakts(KoiledModel):
             self._teardown()
 
     def _teardown(self) -> None:
-        """Invalidate the locks.
+        """Drop the locks and everything bound to this block.
 
         Clearing the locks is what makes ``_ensure_entered`` mean something
-        after the block ends. Left in place, a post-exit call either quietly
-        succeeds against stale state or fails much later with a confusing
-        "attached to a different loop".
+        after the block ends. Aliases resolved in this block may be bound to
+        its mesh node, which closes here; a second ``async with`` resolves
+        afresh.
         """
-        self._load_lock = None
-        self._token_lock = None
-        self._alias_lock = None
-        self._loaded_from_cache = False
-        self._cache_write_failed = False
-        # Aliases resolved in this block may be bound to its mesh node, which
-        # closes below; a second `async with` must resolve afresh.
-        self.alias_map = {}
-        self.report_map = {}
-        self._aliases_refreshed = False
-        self._unchallenged_keys = set()
+        if self._state is not None:
+            self._state.exit()
+        if self._resolver is not None:
+            self._resolver.reset()
+        self._resolver = None
+        self._session = None
         if self._mesh_route is not None:
             route, self._mesh_route = self._mesh_route, None
             route.close()

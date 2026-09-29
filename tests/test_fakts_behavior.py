@@ -455,7 +455,7 @@ async def test_rejected_credential_adopts_fresh_cached_one():
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._aadopt_cached_credentials(set())
+        adopted = await fakts._state_session()._aadopt_cached_credentials(set())
 
         assert adopted is not None
         assert fakts.loaded_fakts is not None
@@ -474,7 +474,7 @@ async def test_already_tried_credential_is_not_adopted_again():
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._aadopt_cached_credentials({("cid_a", "tok_a")})
+        adopted = await fakts._state_session()._aadopt_cached_credentials({("cid_a", "tok_a")})
 
     assert adopted is None
 
@@ -489,7 +489,7 @@ async def test_reapproval_rotating_client_id_is_adopted():
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._aadopt_cached_credentials({("old_client", "same_token")})
+        adopted = await fakts._state_session()._aadopt_cached_credentials({("old_client", "same_token")})
 
     assert adopted is not None
     assert adopted.auth.client_id == "rotated_client"
@@ -558,7 +558,7 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
 async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pytest.MonkeyPatch):
     """A slow report endpoint used to stall every alias lookup in the process
     for up to REPORT_TIMEOUT, because the report ran under _alias_lock."""
-    import fakts.fakts as fakts_module
+    import fakts.aliases as aliases_module
 
     held: list[bool] = []
 
@@ -566,10 +566,11 @@ async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pyte
         return True
 
     async def report(pending, **kwargs) -> None:
-        held.append(fakts._alias_lock.locked())
+        assert fakts._state is not None and fakts._state.alias_lock is not None
+        held.append(fakts._state.alias_lock.locked())
 
     monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
-    monkeypatch.setattr(fakts_module, "areport_aliases", report)
+    monkeypatch.setattr(aliases_module, "areport_aliases", report)
     value = make_fakts_value()
     value.auth.access_token = "a-token"
     value.auth.expires_at = 10**10

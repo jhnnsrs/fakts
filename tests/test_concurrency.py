@@ -323,11 +323,12 @@ async def test_nested_enter_is_refused() -> None:
     )
 
     async with fakts:
-        outer_lock = fakts._load_lock
+        assert fakts._state is not None
+        outer_lock = fakts._state.load_lock
         with pytest.raises(NotEnteredError):
             async with fakts:
                 pass
-        assert fakts._load_lock is outer_lock, (
+        assert fakts._state.load_lock is outer_lock, (
             "the refused re-entry must leave the outer scope's locks intact"
         )
 

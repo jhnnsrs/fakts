@@ -19,9 +19,9 @@ from pydantic import BaseModel
 from fakts import Fakts, ReauthPolicy, oauth2
 from fakts.cache.file import FileCache, ensure_private_dir
 from fakts.errors import FaktsError, NeedsReauthenticationError
-from fakts.fakts import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
 from fakts.models import ActiveFakts
 from fakts.oauth2 import resolve_expiry
+from fakts.session import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
 
 from .helpers import (
     MemoryCache,

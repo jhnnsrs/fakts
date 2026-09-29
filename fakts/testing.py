@@ -78,12 +78,13 @@ class TestingFakts(Fakts):
 
     async def _afetch_token(self, interactive: bool = False) -> str:
         # Contract inherited from Fakts._afetch_token: runs while the caller
-        # holds _token_lock (take nothing, call no public token method) and
-        # must leave loaded_token and _token_expires_at consistent.
+        # holds token_lock (take nothing, call no public token method) and
+        # must leave the state's token and its expiry consistent.
         token = self.tokens[min(self._token_index, len(self.tokens) - 1)]
         self._token_index += 1
-        self.loaded_token = token
-        self._token_expires_at = (
+        state = self._get_state()
+        state.loaded_token = token
+        state.token_expires_at = (
             time.time() + self.token_lifetime if self.token_lifetime is not None else None
         )
         return token

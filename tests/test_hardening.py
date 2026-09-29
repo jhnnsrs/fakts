@@ -567,7 +567,7 @@ async def test_env_grant_recovers_unattended_when_credential_ages(
     """An aged env credential must reload from the environment rather than
     raise — that is the whole headless story."""
 
-    from fakts.fakts import REFRESH_TOKEN_MAX_AGE
+    from fakts.session import REFRESH_TOKEN_MAX_AGE
 
     fresh = make_fakts_value(refresh_token="from_env")
     fresh.auth.refresh_issued_at = time.time()
