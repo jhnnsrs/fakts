@@ -374,7 +374,7 @@ async def test_no_key_and_no_node_skips_the_mesh(fake_arkitekt_mesh: Any, tmp_pa
         mesh=MeshOptions(state_root=tmp_path),
     )
     async with fakts:
-        assert await fakts._amesh_route(mesh_fakts()) == (None, None)
+        assert await fakts._amesh_route(mesh_fakts()) == (None, None, None)
     assert FakeNode.started == []
 
 
@@ -393,3 +393,34 @@ def test_a_node_is_shared_by_deep_copies() -> None:
     alias = Alias(id="a", host="db", kind="mesh").through_mesh("http://127.0.0.1:1", node)
     assert "_mesh" not in alias.model_dump_json()
     assert deepcopy(alias)._mesh is node
+
+
+@pytest.mark.asyncio
+async def test_a_node_that_cannot_start_does_not_block_plain_aliases(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One MeshError used to abort resolution of every alias, and every later
+    lookup retried the join (up to MeshOptions.timeout each)."""
+
+    async def cannot_start(statedir, hostname, control_url=None, auth_key=None, timeout=90):
+        FakeNode.started.append({"statedir": statedir})
+        raise FakeTimeout("the coordination server did not answer")
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        return True
+
+    monkeypatch.setattr(FakeNode, "start", staticmethod(cannot_start))
+    monkeypatch.setattr(Fakts, "achallenge_alias", challenge)
+    value = mesh_fakts()
+    value.mesh = MeshClaim(ionscale_auth_key="k", ionscale_coord_url="https://mesh.example")
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path),
+    )
+
+    async with fakts:
+        alias = await fakts.aget_alias("test", omit_report=True)
+        assert alias.id == "direct"  # the plain fallback, not an exception
+        await fakts.aget_alias("test", omit_report=True, force_refresh=True)
+    assert len(FakeNode.started) == 1, "the failed join was retried"

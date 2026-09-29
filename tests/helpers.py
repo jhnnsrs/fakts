@@ -70,6 +70,7 @@ class CountingGrant(BaseModel):
     fakts: ActiveFakts
     load_count: int = 0
     delay: float = 0
+    requires_user_interaction: bool = True
 
     async def aload(self) -> ActiveFakts:
         self.load_count += 1

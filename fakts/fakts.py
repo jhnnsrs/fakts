@@ -77,6 +77,7 @@ from .models import (
     AuthFakt,
     ChallengeKey,
     GrantStatus,
+    Instance,
     Manifest,
     Requirement,
 )
@@ -292,6 +293,13 @@ class Fakts(KoiledModel):
     """Whether we took over a credential another process rotated. Diagnostic
     only; kept separate so it cannot be mistaken for a stale instance list."""
     _aliases_refreshed: bool = False
+    _instances_gen: int = 0
+    """Bumped whenever the instances may have changed (a reload, an adopted or
+    rotated credential). An alias refresh publishes itself as current only if
+    this did not move while it ran, so an invalidation can never be lost."""
+    _mesh_error: MeshError | None = None
+    """Why the mesh node could not start, remembered so every lookup does not
+    retry a join that can take MeshOptions.timeout; cleared on exit."""
     _unchallenged_keys: set[str] = PrivateAttr(default_factory=set)
     """Keys whose cached alias was accepted without probing it.
 
@@ -354,9 +362,7 @@ class Fakts(KoiledModel):
             # previously selected aliases and tokens are stale now.
             self.loaded_token = None
             self._token_expires_at = None
-            self.alias_map = {}
-            self.report_map = {}
-            self._aliases_refreshed = False
+            self._invalidate_aliases()
             self._seed_token_from(self.loaded_fakts)
 
             # Persisting is best effort: the fakts are valid even if the
@@ -628,7 +634,7 @@ class Fakts(KoiledModel):
             # Only flag it: clearing alias_map here would race with a
             # resolution in flight, and L1 forbids taking _alias_lock from
             # under _token_lock.
-            self._aliases_refreshed = False
+            self._invalidate_aliases()
 
         if not self.loaded_token:
             raise FaktsError(
@@ -719,7 +725,7 @@ class Fakts(KoiledModel):
             # Flag only: L1 forbids taking _alias_lock from under _token_lock,
             # and clearing alias_map here would race a resolution in flight.
             if current is not None and oauth2.instances_changed(current, cached):
-                self._aliases_refreshed = False
+                self._invalidate_aliases()
             self.loaded_fakts = cached
             self._credential_adopted = True
             # Keep the access token that came with it. Discarding it and
@@ -755,6 +761,12 @@ class Fakts(KoiledModel):
             await self.aload(reload=True)
             return await self._afetch_after_reload()
 
+        if self.reauth_policy is ReauthPolicy.NEVER:
+            raise NeedsReauthenticationError(
+                f"{explanation} This app must be authorized again, and "
+                f"reauth_policy=ReauthPolicy.NEVER forbids prompting from this "
+                f"process: authorize it elsewhere (or provision a fresh credential)."
+            )
         raise NeedsReauthenticationError(
             f"{explanation} This app must be authorized again, which needs "
             f"someone at a browser. Call fakts.alogin() when prompting is "
@@ -1004,6 +1016,21 @@ class Fakts(KoiledModel):
 
             return True
 
+    def _invalidate_aliases(self) -> None:
+        """The instances may have changed: resolved aliases are no longer current.
+
+        Only the flag and the generation, never the maps -- this is reached
+        from under _token_lock and _load_lock, which may not take _alias_lock
+        (L1); the next lookup resolves again.
+        """
+        self._aliases_refreshed = False
+        self._instances_gen += 1
+
+    def _is_granted(self, fakts_key: str) -> bool:
+        """Whether an instance with aliases was granted for the key."""
+        instance = self.loaded_fakts.instances.get(fakts_key) if self.loaded_fakts else None
+        return bool(instance and instance.aliases)
+
     def _grant_status_for(self, fakts_key: str) -> GrantStatus:
         """The grant status of a requirement key on the loaded fakts.
 
@@ -1050,6 +1077,7 @@ class Fakts(KoiledModel):
         omit_challenge: bool = False,
         mesh_proxy: str | None = None,
         mesh_node: NativeNode | None = None,
+        mesh_error: MeshError | None = None,
     ) -> tuple[Alias | None, AliasReport, str | None]:
         """Resolve a single requirement to a working alias.
 
@@ -1100,8 +1128,11 @@ class Fakts(KoiledModel):
                 if mesh_proxy is None:
                     errors_in_alias.append(
                         f"Alias {alias.id} of service {req.key} is only reachable over "
-                        f"the mesh, which is off (set ARKITEKT_MESH=1, or "
-                        f"ARKITEKT_MESH_PROXY to a running mesh proxy)."
+                        f"the mesh, and the mesh node could not start: {mesh_error}"
+                        if mesh_error is not None
+                        else f"Alias {alias.id} of service {req.key} is only reachable "
+                        f"over the mesh, which is off: pass mesh=MeshOptions() (with "
+                        f'fakts[mesh] installed) or mesh_proxy="http://..." to Fakts.'
                     )
                     continue
                 # A copy: the route is this process's, never the cached instance's.
@@ -1219,7 +1250,13 @@ class Fakts(KoiledModel):
                     exc_info=True,
                 )
 
-        mesh_proxy, mesh_node = await self._amesh_route(fakts)
+        # The token fetch above may have rotated or adopted a credential, which
+        # rebinds loaded_fakts (with possibly different instances): resolve
+        # against what is current, and remember which generation that was.
+        fakts = self.loaded_fakts or fakts
+        generation = self._instances_gen
+
+        mesh_proxy, mesh_node, mesh_error = await self._amesh_route(fakts)
         results = await asyncio.gather(
             *(
                 self._aresolve_requirement(
@@ -1227,6 +1264,7 @@ class Fakts(KoiledModel):
                     omit_challenge=omit_challenge,
                     mesh_proxy=mesh_proxy,
                     mesh_node=mesh_node,
+                    mesh_error=mesh_error,
                 )
                 for req in requirements
             )
@@ -1247,7 +1285,9 @@ class Fakts(KoiledModel):
         # a half-populated alias map.
         self.alias_map = new_alias_map
         self.report_map = new_report_map
-        self._aliases_refreshed = True
+        # Current only if nothing invalidated the instances meanwhile; otherwise
+        # the next lookup resolves again instead of trusting these.
+        self._aliases_refreshed = self._instances_gen == generation
         if omit_challenge:
             self._unchallenged_keys = self._unchallenged_keys | set(new_alias_map)
         else:
@@ -1256,13 +1296,14 @@ class Fakts(KoiledModel):
         # Remember the working alias as the preferred one: move it to the
         # front of the instance's alias list and persist it, so the next
         # (cached) session challenges the last known good alias first.
-        changed = False
+        reordered: dict[str, Instance] = {}
         for key, alias in new_alias_map.items():
             instance = fakts.instances.get(key)
             if instance and instance.aliases and instance.aliases[0].id != alias.id:
-                instance.aliases.sort(key=lambda a: a.id != alias.id)
-                changed = True
-        if changed:
+                reordered[key] = instance.model_copy(
+                    update={"aliases": sorted(instance.aliases, key=lambda a: a.id != alias.id)}
+                )
+        if reordered:
             # Persisting the preferred alias order is an optimization for the
             # next session: a failing cache write must not break this one.
             # It goes through _apersist because this writes the *whole*
@@ -1275,7 +1316,17 @@ class Fakts(KoiledModel):
             # report token was fetched: aget_token() above can rotate the
             # credential (or adopt a sibling's), which rebinds loaded_fakts
             # and leaves `fakts` pointing at a superseded object.
-            await self._apersist(self.loaded_fakts or fakts)
+            #
+            # A copy, swapped in under _load_lock: loaded_fakts is only ever
+            # replaced there (L3), never sorted in place from the alias path.
+            assert self._load_lock is not None
+            async with self._load_lock:
+                current = self.loaded_fakts or fakts
+                updated = current.model_copy(
+                    update={"instances": {**current.instances, **reordered}}
+                )
+                self.loaded_fakts = updated
+                await self._apersist_locked(updated)
 
         if report_token:
             await self._areport_aliases(fakts, composition_errors, report_token)
@@ -1289,18 +1340,32 @@ class Fakts(KoiledModel):
                 f"Check that the services are running and reachable from this machine."
             )
 
-    async def _amesh_route(self, fakts: ActiveFakts) -> tuple[str | None, NativeNode | None]:
-        """The HTTP proxy mesh aliases are reached through and the node that
-        runs it: both ``None`` if the mesh is off, no node for an external
-        ``mesh_proxy``."""
+    async def _amesh_route(
+        self, fakts: ActiveFakts
+    ) -> tuple[str | None, NativeNode | None, MeshError | None]:
+        """The HTTP proxy mesh aliases are reached through, the node that runs
+        it, and why there is none: all ``None`` if the mesh is off, no node for
+        an external ``mesh_proxy``.
+
+        A node that fails to start is not fatal: aliases that do not need the
+        mesh still resolve, and the failure is remembered (and reported on the
+        mesh aliases) instead of being retried on every lookup.
+        """
         if self.mesh_proxy:
-            return self.mesh_proxy, None
+            return self.mesh_proxy, None, None
         if not any(
             alias.is_mesh() for instance in fakts.instances.values() for alias in instance.aliases
         ):
-            return None, None
-        node = await self._amesh_node(fakts)
-        return (node.proxy_url, node) if node else (None, None)
+            return None, None, None
+        if self._mesh_error is not None:
+            return None, None, self._mesh_error
+        try:
+            node = await self._amesh_node(fakts)
+        except MeshError as e:
+            logger.warning("The mesh node could not start: %s", e)
+            self._mesh_error = e
+            return None, None, e
+        return (node.proxy_url, node, None) if node else (None, None, None)
 
     async def _amesh_node(self, fakts: ActiveFakts) -> NativeNode | None:
         """The mesh node, started on first use; it lives until the context
@@ -1450,7 +1515,14 @@ class Fakts(KoiledModel):
                 omit_challenge=omit_challenge, omit_report=omit_report
             )
         except CompositionError:
-            if not (self.refetch_on_alias_failure and self._loaded_from_cache):
+            # Re-running an interactive grant opens a browser and replaces the
+            # client, severing sibling processes -- a failed lookup is never
+            # reason enough (ReauthPolicy governs that, via alogin()).
+            if not (
+                self.refetch_on_alias_failure
+                and self._loaded_from_cache
+                and not self._grant_requires_interaction()
+            ):
                 raise
 
             logger.warning(
@@ -1506,16 +1578,20 @@ class Fakts(KoiledModel):
             ):
                 return self.alias_map[fakts_key]
 
-            if force_refresh or stale_unchallenged or not self._aliases_refreshed:
+            # A granted key that failed to resolve last time (its service was
+            # briefly down) is tried again, not failed for the process's life.
+            unresolved = fakts_key not in self.alias_map and self._is_granted(fakts_key)
+            if force_refresh or stale_unchallenged or unresolved or not self._aliases_refreshed:
                 try:
                     await self._arefresh_aliases_with_selfheal(
                         omit_challenge=omit_challenge, omit_report=omit_report
                     )
                 except CompositionError:
                     # Even if some *other* required service failed, the
-                    # requested key may have resolved fine. Only raise if
-                    # the requested key itself is unresolved.
-                    if fakts_key not in self.alias_map:
+                    # requested key may have resolved fine -- or not have been
+                    # granted at all, which has its own error below. Only the
+                    # requested key's own failure is this composition error.
+                    if fakts_key not in self.alias_map and self._is_granted(fakts_key):
                         raise
 
             if fakts_key in self.alias_map:
@@ -1607,10 +1683,7 @@ class Fakts(KoiledModel):
         challenging it. Use :meth:`aget_alias` (or
         :meth:`aget_alias_or_none`) to obtain a working alias.
         """
-        self._ensure_entered()
-        fakts = await self._aensure_loaded()
-        instance = fakts.instances.get(fakts_key)
-        return bool(instance and instance.aliases)
+        return await self.aget_grant_status(fakts_key) is GrantStatus.GRANTED
 
     async def aget_self_alias(self) -> Alias:
         """Get the alias for the application itself (async)
@@ -1861,6 +1934,13 @@ class Fakts(KoiledModel):
         self._alias_lock = None
         self._loaded_from_cache = False
         self._cache_write_failed = False
+        # Aliases resolved in this block may be bound to its mesh node, which
+        # closes below; a second `async with` must resolve afresh.
+        self.alias_map = {}
+        self.report_map = {}
+        self._aliases_refreshed = False
+        self._unchallenged_keys = set()
+        self._mesh_error = None
         if self._mesh_node is not None:
             node, self._mesh_node = self._mesh_node, None
             node.close()

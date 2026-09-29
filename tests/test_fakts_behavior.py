@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from fakts import Fakts
 from fakts.cache.file import FileCache
-from fakts.errors import AliasNotFoundError, ServiceNotGrantedError
+from fakts.errors import AliasNotFoundError, CompositionError, ServiceNotGrantedError
 from fakts.fakts import Fakts as FaktsClass
 from fakts.models import (
     ActiveFakts,
@@ -120,7 +120,7 @@ async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
 
-    grant = CountingGrant(fakts=make_fakts_value())
+    grant = CountingGrant(fakts=make_fakts_value(), requires_user_interaction=False)
     cache = MemoryCache(value=make_fakts_value(host="stale-host"), hash="static")
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
@@ -129,6 +129,29 @@ async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
 
     assert alias.host == "localhost"
     assert grant.load_count == 1, "The stale cache should have been reloaded once"
+
+
+async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: pytest.MonkeyPatch):
+    """Self-heal re-ran whatever grant there was: for a device-code app, one
+    unreachable service opened a browser and replaced the client, cutting
+    off every sibling process. Only a non-interactive grant self-heals."""
+
+    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+        if alias.host == "stale-host":
+            raise Exception("unreachable")
+        return True
+
+    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+
+    grant = CountingGrant(fakts=make_fakts_value(), requires_user_interaction=True)
+    cache = MemoryCache(value=make_fakts_value(host="stale-host"), hash="static")
+    fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
+
+    async with fakts:
+        with pytest.raises(CompositionError):
+            await fakts.aget_alias("test", omit_report=True)
+
+    assert grant.load_count == 0, "a failed lookup must not re-run the interactive grant"
 
 
 async def test_optional_missing_service_does_not_refresh_every_time():
@@ -488,3 +511,45 @@ async def test_delete_on_exit(tmp_path: Path):
 
     assert not os.path.exists(cache_file)
     assert fakts.loaded_fakts is None
+
+
+async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatch):
+    """Aliases resolved in one `async with` may be bound to that block's mesh
+    node, closed on exit: a second block must not serve them."""
+    challenged: list[str] = []
+
+    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+        challenged.append(alias.id)
+        return True
+
+    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
+
+    async with fakts:
+        await fakts.aget_alias("test", omit_report=True)
+    async with fakts:
+        await fakts.aget_alias("test", omit_report=True)
+
+    assert challenged == ["primary", "primary"]
+
+
+async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.MonkeyPatch):
+    """A required service unreachable at the first lookup used to stay failed
+    for the life of the process: nothing ever challenged it again."""
+    up = False
+
+    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+        if not up:
+            raise Exception("connection refused")
+        return True
+
+    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
+
+    async with fakts:
+        with pytest.raises(CompositionError):
+            await fakts.aget_alias("test", omit_report=True)
+        up = True
+        alias = await fakts.aget_alias("test", omit_report=True)
+
+    assert alias.id == "primary"
