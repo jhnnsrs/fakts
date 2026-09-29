@@ -5,6 +5,7 @@ This is the part of the client that holds a live credential, so most of
 these are about *not* losing or leaking it rather than about happy paths.
 """
 
+import asyncio
 import os
 import stat
 import time
@@ -15,9 +16,9 @@ import pytest
 from aiohttp import web
 from pydantic import BaseModel
 
-from fakts import Fakts, ReauthPolicy
+from fakts import Fakts, ReauthPolicy, oauth2
 from fakts.cache.file import FileCache, ensure_private_dir
-from fakts.errors import NeedsReauthenticationError
+from fakts.errors import FaktsError, NeedsReauthenticationError
 from fakts.fakts import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
 from fakts.models import ActiveFakts
 from fakts.oauth2 import resolve_expiry
@@ -627,3 +628,51 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
     assert cache.value.instances["test"].aliases[0].id == "fallback", (
         "The working alias must still be persisted as the preferred one"
     )
+
+
+async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_server) -> None:
+    """A 5xx rotated nothing: retry instead of failing the token path."""
+    calls = {"n": 0}
+
+    async def handler(request: web.Request) -> web.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return web.Response(status=502, text="<html>bad gateway</html>")
+        return web.json_response(token_body("new_access", "rotated_token"))
+
+    endpoint = await token_server(handler)
+    value = fakts_pointing_at(endpoint, refresh_token="original_token")
+    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+
+    async with fakts:
+        assert await fakts.aget_token() == "new_access"
+    assert calls["n"] == 2
+
+
+async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(
+    token_server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server may have rotated before the connection broke: repeating the
+    refresh would present a dead token. It fails instead of retrying."""
+    calls = {"n": 0}
+
+    async def handler(request: web.Request) -> web.Response:
+        calls["n"] += 1
+        await asyncio.sleep(0.5)  # longer than the client waits below
+        return web.json_response(token_body("late", "rotated_token"))
+
+    endpoint = await token_server(handler)
+    value = fakts_pointing_at(endpoint, refresh_token="original_token")
+    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+
+    real_post = oauth2.apost_form
+
+    async def impatient(*args, **kwargs):
+        kwargs["timeout"] = 0.1
+        return await real_post(*args, **kwargs)
+
+    monkeypatch.setattr(oauth2, "apost_form", impatient)
+    async with fakts:
+        with pytest.raises(FaktsError):
+            await fakts.aget_token()
+    assert calls["n"] == 1, "an ambiguous refresh was repeated"

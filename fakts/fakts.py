@@ -113,6 +113,10 @@ MAX_ADOPTIONS = 4
 """How many distinct credentials one renewal will try before giving up.
 Bounded by the set of credentials actually seen, so it cannot spin."""
 
+TOKEN_CONNECT_RETRIES = 2
+"""How often a refresh is retried when the token endpoint could not be reached
+at all (or answered 5xx) -- failures that cannot have rotated the token."""
+
 _REAUTH_REASONS = {
     "idle": "This app's authorization has been unused for too long.",
     "chain_expired": "This app's authorization has reached its maximum age.",
@@ -553,16 +557,7 @@ class Fakts(KoiledModel):
             tried.add((auth.client_id, auth.refresh_token))
 
             try:
-                data = await oauth2.apost_form(
-                    auth.token_endpoint,
-                    {
-                        "grant_type": oauth2.REFRESH_GRANT,
-                        "refresh_token": auth.refresh_token,
-                        "client_id": auth.client_id,
-                    },
-                    ssl_context=self.ssl_context,
-                    allow_insecure_transport=self.allow_insecure_transport,
-                )
+                data = await self._apost_refresh(auth)
             except oauth2.OAuth2ErrorResponse as e:
                 if e.error not in ("invalid_grant", "invalid_client"):
                     raise FaktsError(
@@ -601,6 +596,34 @@ class Fakts(KoiledModel):
             return await self._acommit_token_response(fakts, data)
 
         return await self._areauthenticate(reason="exhausted", interactive=interactive)
+
+    async def _apost_refresh(self, auth: AuthFakt) -> dict[str, Any]:
+        """POST the refresh grant, retrying only failures the server never saw.
+
+        A refresh rotates: once the server has processed it, the old token is
+        dead, so repeating it after an ambiguous failure (a timeout, a reset
+        mid-response) would read as a rejected credential and push the app into
+        reauthentication. A connection that never opened, or a 5xx, did not
+        rotate anything -- those are retried a couple of times.
+        """
+        for attempt in range(TOKEN_CONNECT_RETRIES + 1):
+            try:
+                return await oauth2.apost_form(
+                    auth.token_endpoint,
+                    {
+                        "grant_type": oauth2.REFRESH_GRANT,
+                        "refresh_token": auth.refresh_token,
+                        "client_id": auth.client_id,
+                    },
+                    ssl_context=self.ssl_context,
+                    allow_insecure_transport=self.allow_insecure_transport,
+                )
+            except (aiohttp.ClientConnectorError, oauth2.TransientHTTPError) as e:
+                if attempt == TOKEN_CONNECT_RETRIES:
+                    raise
+                logger.info("Token endpoint unavailable (%s); retrying.", e)
+                await asyncio.sleep(REFRESH_RETRY_DELAY * (attempt + 1))
+        raise AssertionError("unreachable")
 
     async def _acommit_token_response(self, previous: ActiveFakts, data: dict[str, Any]) -> str:
         """Persist a rotated credential, *then* start using it.
@@ -665,6 +688,10 @@ class Fakts(KoiledModel):
         have not already tried, so this cannot spin. The sleep is jittered so
         that N processes racing on the same file do not re-read in lockstep.
         """
+        if isinstance(self.cache, NoCache):
+            # Nothing is shared, so no sibling can have written anything: the
+            # waits below would only hold _token_lock for nothing.
+            return None
         for round_index in range(REFRESH_RETRY_ROUNDS):
             adopted = await self._aadopt_cached_credentials(tried)
             if adopted is not None:
@@ -815,6 +842,13 @@ class Fakts(KoiledModel):
         try:
             existing = await self.cache.aload()
         except Exception:
+            # Unknowable either way: skipping would lose a fresh rotation,
+            # writing may replace a sibling's newer one. Write, but say so.
+            logger.warning(
+                "Could not read the fakts cache before writing it; writing without "
+                "the stale-credential check.",
+                exc_info=True,
+            )
             existing = None
 
         if existing is not None and not fresh_from_grant and self._is_stale_auth(fakts, existing):
@@ -985,7 +1019,6 @@ class Fakts(KoiledModel):
         ):
             if resp.status != 200:
                 body = await resp.text()
-                logger.error(f"Failed to challenge alias {alias} with status code {resp.status}")
                 raise FaktsError(
                     f"Challenge of alias '{alias.id}' at {alias.challenge_path} "
                     f"answered with status code {resp.status} (expected 200). "
