@@ -154,8 +154,6 @@ class FileCache(pydantic.BaseModel):
 
     Attributes
     ----------
-    grant : FaktsGrant
-        The grant to cache
     cache_file : str
         The path to the cache file
     hash : str
@@ -167,7 +165,6 @@ class FileCache(pydantic.BaseModel):
     """
 
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
-    """The grant to cache"""
 
     cache_file: str = ".fakts_cache.json"
     """The path to the cache file"""
@@ -181,23 +178,11 @@ class FileCache(pydantic.BaseModel):
     """When should the cache expire"""
 
     async def aload(self) -> ActiveFakts | None:
-        """Loads the configuration from the grant
+        """The cached fakts, or None.
 
-        It will try to load the configuration from the cache file.
-        If the cache is expired, or the hash value is different from
-        the one in the cache, it will load the grant again.
-
-        Parameters
-        ----------
-        request : FaktsRequest
-            The request object that may contain additional information needed for loading the configuration.
-
-        Returns
-        -------
-        dict
-            The configuration loaded from the grant.
-
-
+        Returns ``None`` -- a miss, so the grant runs -- when there is no
+        cache file, when it is unreadable or corrupt, when it was written for
+        another manifest (hash mismatch), or when it expired.
         """
 
         if not os.path.exists(self.cache_file):
@@ -412,14 +397,7 @@ class FileCache(pydantic.BaseModel):
             logger.debug("Could not tighten %s.", path, exc_info=True)
 
     async def aset(self, value: ActiveFakts) -> None:
-        """Refreshes the configuration from the grant
-
-        This function is used to refresh the configuration from the grant.
-        This is used to refresh the configuration from the grant, and should
-        be used to refresh the configuration from the grant.
-
-        The request object is used to pass information
-        """
+        """Write ``value`` to the cache file, atomically and private (0600)."""
 
         cache = CacheFile(fakts=value, created=datetime.datetime.now(datetime.UTC), hash=self.hash)
 

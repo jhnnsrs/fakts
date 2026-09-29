@@ -6,7 +6,6 @@ import certifi
 from fakts.cache.file import FileCache
 from fakts.cache.nocache import NoCache
 from fakts.fakts import Fakts
-from fakts.grants.hard import HardFaktsGrant
 from fakts.grants.remote import RemoteGrant
 from fakts.grants.remote.authorizers.device_code import (
     ClientKind,
@@ -16,7 +15,7 @@ from fakts.grants.remote.authorizers.device_code import (
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts.mesh import MeshOptions, MeshProxy
-from fakts.models import ActiveFakts, Manifest
+from fakts.models import Manifest
 from fakts.protocols import FaktsCache
 
 
@@ -200,41 +199,4 @@ def build_redeem_fakts(
         manifest=manifest,
         allow_insecure_transport=allow_insecure_transport,
         ssl_context=context,
-    )
-
-
-def build_remote_testing(value: ActiveFakts) -> "HardFaktsGrant":
-    """Builds a grant for testing purposes.
-
-    Always yields the same configuration, without touching the network. No
-    longer a `RemoteGrant`: under protocol v2 even a static session has to
-    come from somewhere, and pretending otherwise meant faking a token
-    endpoint. `HardFaktsGrant` says the same thing honestly.
-    """
-    return HardFaktsGrant(fakts=value)
-
-
-def build_redeem_grant(
-    url: str,
-    manifest: Manifest,
-    redeem_token: str,
-    *,
-    allow_insecure_transport: bool = False,
-) -> RemoteGrant:
-    """Builds a remote grant that redeems a token (grant only, no Fakts).
-
-    Prefer :func:`build_redeem_fakts` unless you need to wire the Fakts
-    instance yourself.
-
-    Discovery is well-known rather than static: under protocol v2 the token
-    endpoint is published by the server, and a static endpoint would have to
-    guess it.
-    """
-    return RemoteGrant(
-        discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"]),
-        authorizer=RedeemAuthorizer(
-            manifest=manifest,
-            token=redeem_token,
-            allow_insecure_transport=allow_insecure_transport,
-        ),
     )

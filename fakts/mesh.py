@@ -33,8 +33,7 @@ logger = logging.getLogger(__name__)
 class MeshError(FaktsError, AliasMeshError):
     """The mesh node could not be started, or did not connect.
 
-    ``code`` is the node's own error code, as the Rust client and
-    ``arkitekt-meshd`` report it: ``needs_login``, ``locked``, ``login``,
+    ``code`` is the node's own error code, as the Rust client reports it: ``needs_login``, ``locked``, ``login``,
     ``timeout``, ``locked_out``, ``start``, or ``None`` when fakts itself
     refused (the bindings are missing, the mesh is not running, ...).
     """

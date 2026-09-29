@@ -89,10 +89,9 @@ class Fakts(KoiledModel):
 
     cache: FaktsCache = Field(default_factory=NoCache, exclude=True)
 
-    """" Requirmements """
     manifest: Manifest
+    """What the app is and which services it requires."""
 
-    """"The manifest of the fakts. This is used to describe the fakts and its capabilities."""
     ssl_context: SSLContext = Field(
         default_factory=lambda: ssl.create_default_context(cafile=certifi.where())
     )

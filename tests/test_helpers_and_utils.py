@@ -1,7 +1,7 @@
 """Unit tests for the pure-logic utilities (``utils.py``) and the context
 helpers (``helpers.py``)."""
 
-from fakts.utils import truncate, update_nested
+from fakts.utils import truncate
 
 # --------------------------------------------------------------------------- #
 # utils.truncate
@@ -28,24 +28,3 @@ def test_truncate_over_limit_adds_note():
 
 
 # --------------------------------------------------------------------------- #
-# utils.update_nested
-# --------------------------------------------------------------------------- #
-
-
-def test_update_nested_shallow():
-    d = {"a": 1, "b": 2}
-    update_nested(d, {"b": 3})
-    assert d == {"a": 1, "b": 3}
-
-
-def test_update_nested_recursive_merge():
-    d = {"a": {"x": 1, "y": 2}}
-    update_nested(d, {"a": {"y": 3, "z": 4}})
-    assert d == {"a": {"x": 1, "y": 3, "z": 4}}
-
-
-def test_update_nested_is_inplace_and_returns_same_object():
-    d = {"a": 1}
-    result = update_nested(d, {"b": 2})
-    assert result is d
-    assert d == {"a": 1, "b": 2}
