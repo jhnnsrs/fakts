@@ -20,14 +20,13 @@ from koil.bridge import unkoil
 from koil.composition import KoiledModel
 from pydantic import Field, PrivateAttr
 
-from fakts import oauth2
 from fakts.aliases import AliasResolver
 from fakts.cache.nocache import NoCache
 from fakts.errors import AliasNotFoundError, CompositionError, FaktsError, NotEnteredError
 from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshOptions, MeshRoute
+from .mesh import MeshConfig, MeshRoute
 from .models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Manifest
 from .protocols import FaktsCache, FaktsGrant
 from .report import AliasReport
@@ -35,11 +34,6 @@ from .state import SessionState
 from .utils import truncate
 
 logger = logging.getLogger(__name__)
-
-TOKEN_EXPIRY_SKEW = oauth2.TOKEN_EXPIRY_SKEW
-"""Seconds before the actual expiry at which a token is considered expired.
-
-Re-exported from :mod:`fakts.oauth2`, which owns the value."""
 
 __all__ = ["Fakts", "ReauthPolicy"]
 
@@ -120,7 +114,7 @@ class Fakts(KoiledModel):
     alias_challenge_timeout: float = 3
     """Timeout (in seconds) for a single alias challenge request"""
 
-    reauth_policy: ReauthPolicy = ReauthPolicy.ON_EXPLICIT_LOAD
+    reauth_policy: ReauthPolicy = ReauthPolicy.ON_LOGIN
     """When automatic token renewal is allowed to fall back to running the
     grant interactively. The default keeps browsers out of the token path;
     see :class:`ReauthPolicy`."""
@@ -131,17 +125,13 @@ class Fakts(KoiledModel):
     puts a rotating refresh token on the wire it has to be chosen, not
     stumbled into. Loopback never needs this."""
 
-    mesh: MeshOptions | None = None
-    """Join the deployment's mesh: run a node in this process (once an
-    instance has a mesh alias; ``pip install "fakts[mesh]"``) and reach mesh
-    aliases through it. The grant should ask for a mesh key
-    (``request_auth_key``) so a fresh node can join. Ignored when
-    ``mesh_proxy`` is set."""
-
-    mesh_proxy: str | None = None
-    """Reach mesh aliases through this running HTTP proxy (e.g. ``arkitekt
-    mesh proxy`` at ``http://localhost:1055``). Aliases that need the mesh
-    are skipped without one (or ``mesh``)."""
+    mesh: MeshConfig | None = None
+    """How to reach aliases that are only on the deployment's mesh:
+    ``MeshOptions()`` runs a node in this process (``pip install
+    "fakts[mesh]"``; the grant should ask for a mesh key with
+    ``request_auth_key`` so a fresh node can join), ``MeshProxy(url=...)`` goes
+    through a proxy that is already running. Without either, mesh aliases are
+    skipped."""
 
     _state: SessionState | None = PrivateAttr(default=None)
     _session: TokenSession | None = PrivateAttr(default=None)
@@ -178,38 +168,20 @@ class Fakts(KoiledModel):
         """The currently loaded configuration."""
         return self._get_state().loaded_fakts
 
-    @loaded_fakts.setter
-    def loaded_fakts(self, value: ActiveFakts | None) -> None:
-        self._get_state().loaded_fakts = value
-
     @property
     def loaded_token(self) -> str | None:
         """The access token currently held."""
         return self._get_state().loaded_token
-
-    @loaded_token.setter
-    def loaded_token(self, value: str | None) -> None:
-        self._get_state().loaded_token = value
 
     @property
     def alias_map(self) -> dict[str, Alias]:
         """The resolved aliases, by requirement key."""
         return self._resolver.alias_map if self._resolver else {}
 
-    @alias_map.setter
-    def alias_map(self, value: dict[str, Alias]) -> None:
-        if self._resolver is not None:
-            self._resolver.alias_map = value
-
     @property
     def report_map(self) -> dict[str, AliasReport]:
         """The outcome of the last resolution, by requirement key."""
         return self._resolver.report_map if self._resolver else {}
-
-    @report_map.setter
-    def report_map(self, value: dict[str, AliasReport]) -> None:
-        if self._resolver is not None:
-            self._resolver.report_map = value
 
     def _ensure_entered(self) -> None:
         """Raise if the context manager was not entered yet."""
@@ -359,7 +331,7 @@ class Fakts(KoiledModel):
     # Aliases                                                            #
     # ------------------------------------------------------------------ #
 
-    async def achallenge_alias(
+    async def _achallenge_alias(
         self,
         alias: Alias,
         challenge_key: ChallengeKey | None = None,
@@ -555,16 +527,6 @@ class Fakts(KoiledModel):
         await self._aensure_loaded()
         return self._state_resolver().grant_status_for(fakts_key)
 
-    async def agranted(self, fakts_key: str) -> bool:
-        """Whether the server granted an instance for a service key (async)
-
-        Granted does not imply reachable: this only checks that an
-        instance with aliases was composed for the key, without
-        challenging it. Use :meth:`aget_alias` (or
-        :meth:`aget_alias_or_none`) to obtain a working alias.
-        """
-        return await self.aget_grant_status(fakts_key) is GrantStatus.GRANTED
-
     async def aget_self_alias(self) -> Alias:
         """Get the alias for the application itself (async)
 
@@ -584,24 +546,6 @@ class Fakts(KoiledModel):
         Synchronous wrapper around :meth:`aload`.
         """
         return unkoil(self.aload, reload=reload)
-
-    def refresh_aliases(
-        self,
-        omit_challenge: bool = False,
-        omit_report: bool = False,
-    ) -> None:
-        """Refresh all aliases (sync)
-
-        Synchronous wrapper around :meth:`arefresh_aliases`. The defaults
-        match the async method: reporting used to be suppressed here and not
-        there, so the same call behaved differently depending on which
-        surface you reached it through.
-        """
-        return unkoil(
-            self.arefresh_aliases,
-            omit_challenge=omit_challenge,
-            omit_report=omit_report,
-        )
 
     def get_self_alias(self) -> Alias:
         """Get the alias for the application itself (sync)
@@ -639,39 +583,6 @@ class Fakts(KoiledModel):
             force_refresh=force_refresh,
         )
 
-    def get_alias_or_none(
-        self,
-        fakts_key: str,
-        omit_challenge: bool = False,
-        omit_report: bool = False,
-        force_refresh: bool = False,
-    ) -> Alias | None:
-        """Get the alias for a service key, or None if unavailable (sync)
-
-        Synchronous wrapper around :meth:`aget_alias_or_none`.
-        """
-        return unkoil(
-            self.aget_alias_or_none,
-            fakts_key,
-            omit_challenge=omit_challenge,
-            omit_report=omit_report,
-            force_refresh=force_refresh,
-        )
-
-    def get_grant_status(self, fakts_key: str) -> GrantStatus:
-        """Get the grant status for a service key (sync)
-
-        Synchronous wrapper around :meth:`aget_grant_status`.
-        """
-        return unkoil(self.aget_grant_status, fakts_key)
-
-    def granted(self, fakts_key: str) -> bool:
-        """Whether the server granted an instance for a service key (sync)
-
-        Synchronous wrapper around :meth:`agranted`.
-        """
-        return unkoil(self.agranted, fakts_key)
-
     def get_token(self, interactive: bool = False) -> str:
         """Get the authentication token for a service (sync).
 
@@ -680,7 +591,7 @@ class Fakts(KoiledModel):
         Raises :class:`NeedsReauthenticationError` when the session can only
         be recovered by a human — pass ``interactive=True`` (and use an
         interactive grant) if prompting is appropriate at this call site, or
-        catch it and call :meth:`login`.
+        catch it and call :meth:`alogin`.
         """
         return unkoil(self.aget_token, interactive=interactive)
 
@@ -694,26 +605,11 @@ class Fakts(KoiledModel):
         """
         return unkoil(self.arefresh_token, stale_token=stale_token)
 
-    def login(self) -> ActiveFakts:
-        """Ensure this app has a working session, prompting only if it must (sync).
-
-        Synchronous wrapper around :meth:`alogin`.
-        """
-        return unkoil(self.alogin)
-
-    def logout(self) -> None:
-        """Forget this app's session on this machine (sync).
-
-        Synchronous wrapper around :meth:`alogout`, including its contract:
-        this does not revoke the credential server-side.
-        """
-        return unkoil(self.alogout)
-
     def refresh(self) -> ActiveFakts:
         """Reload the configuration from the grant (sync).
 
         Synchronous wrapper around :meth:`arefresh`. For recovering a dead
-        session, prefer :meth:`login` — this always re-runs the grant.
+        session, prefer :meth:`alogin` — this always re-runs the grant.
         """
         return unkoil(self.arefresh)
 
@@ -743,7 +639,7 @@ class Fakts(KoiledModel):
 
         state = self._get_state()
         state.enter()
-        self._mesh_route = MeshRoute(self.mesh, self.mesh_proxy, self.manifest)
+        self._mesh_route = MeshRoute(self.mesh, self.manifest)
         self._session = TokenSession(
             state, self, fetch=lambda interactive: self._afetch_token(interactive)
         )
@@ -752,7 +648,7 @@ class Fakts(KoiledModel):
             self._session,
             self._mesh_route,
             self,
-            challenge=lambda alias, **kwargs: self.achallenge_alias(alias, **kwargs),
+            challenge=lambda alias, **kwargs: self._achallenge_alias(alias, **kwargs),
         )
 
         # Everything from here on runs with the locks already set, so it has to

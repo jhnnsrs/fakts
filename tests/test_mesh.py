@@ -18,7 +18,7 @@ from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from fakts import Fakts
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.models import FaktsEndpoint
-from fakts.mesh import MeshError, MeshOptions, NativeNode, hostname_label
+from fakts.mesh import MeshError, MeshOptions, MeshProxy, NativeNode, hostname_label
 from fakts.models import ActiveFakts, Alias, Instance, MeshClaim, SelfFakt
 from fakts.oauth2 import TokenResponse, merge_token_response
 
@@ -156,7 +156,7 @@ async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: Any) ->
     fakts = Fakts(
         grant=CountingGrant(fakts=mesh_fakts()),
         manifest=make_manifest(),
-        mesh_proxy=proxy,
+        mesh=MeshProxy(url=proxy),
     )
     async with fakts:
         alias = await fakts.aget_alias("test")
@@ -184,7 +184,7 @@ async def test_mesh_aliases_are_skipped_without_the_mesh(
         challenged.append(alias.id)
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
     fakts = Fakts(grant=CountingGrant(fakts=mesh_fakts()), manifest=make_manifest())
     async with fakts:
         alias = await fakts.aget_alias("test")
@@ -412,7 +412,7 @@ async def test_a_node_that_cannot_start_does_not_block_plain_aliases(
         return True
 
     monkeypatch.setattr(FakeNode, "start", staticmethod(cannot_start))
-    monkeypatch.setattr(Fakts, "achallenge_alias", challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
     value = mesh_fakts()
     value.mesh = MeshClaim(ionscale_auth_key="k", ionscale_coord_url="https://mesh.example")
     fakts = Fakts(
@@ -426,3 +426,28 @@ async def test_a_node_that_cannot_start_does_not_block_plain_aliases(
         assert alias.id == "direct"  # the plain fallback, not an exception
         await fakts.aget_alias("test", omit_report=True, force_refresh=True)
     assert len(FakeNode.started) == 1, "the failed join was retried"
+
+
+def test_the_mesh_config_is_one_tagged_union() -> None:
+    """One `mesh` field replaced `mesh` + `mesh_proxy` (and its precedence rule);
+    the tag decides, so a plain config cannot validate as the wrong kind."""
+    from fakts.grants.remote.builders import build_device_code_fakts
+
+    grant = CountingGrant(fakts=mesh_fakts())
+    by_dict = Fakts(
+        grant=grant, manifest=make_manifest(), mesh={"kind": "proxy", "url": "http://p:1055"}
+    )
+    assert isinstance(by_dict.mesh, MeshProxy) and by_dict.mesh.url == "http://p:1055"
+    assert isinstance(
+        Fakts(grant=grant, manifest=make_manifest(), mesh={"kind": "node"}).mesh, MeshOptions
+    )
+
+    def asks_for_a_key(mesh: Any) -> bool:
+        fakts = build_device_code_fakts(
+            "https://x.example", make_manifest(), mesh=mesh, no_cache=True
+        )
+        return fakts.grant.authorizer.request_auth_key  # type: ignore[attr-defined]
+
+    assert asks_for_a_key(MeshOptions()) is True
+    assert asks_for_a_key(MeshProxy(url="http://p:1055")) is False
+    assert asks_for_a_key(None) is False

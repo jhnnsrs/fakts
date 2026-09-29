@@ -77,7 +77,7 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, m
         return web.json_response(body)
 
     endpoint = await token_server(handler)
-    monkeypatch.setattr(Fakts, "achallenge_alias", _always_pass)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", _always_pass)
 
     value = fakts_pointing_at(endpoint, access_token="access_1", expires_at=time.time() + 3600)
     fakts = Fakts(
@@ -112,7 +112,7 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, mo
         return web.json_response({"error": "invalid_grant"}, status=400)
 
     endpoint = await token_server(handler)
-    monkeypatch.setattr(Fakts, "achallenge_alias", _always_pass)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", _always_pass)
 
     ours = fakts_pointing_at(endpoint, refresh_token="ours")
 
@@ -179,7 +179,7 @@ async def test_concurrent_reload_does_not_force_a_spurious_reauth(
         return web.json_response(token_body("access_new", "rotated"))
 
     endpoint = await token_server(handler)
-    monkeypatch.setattr(Fakts, "achallenge_alias", _always_pass)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", _always_pass)
 
     stale = fakts_pointing_at(endpoint, refresh_token="superseded")
     fresh = fakts_pointing_at(endpoint, refresh_token="current")
@@ -189,7 +189,7 @@ async def test_concurrent_reload_does_not_force_a_spurious_reauth(
 
     async with fakts:
         # Start out holding the credential the reload is about to supersede.
-        fakts.loaded_fakts = stale
+        fakts._get_state().loaded_fakts = stale
 
         reload_task = asyncio.create_task(fakts.arefresh())
         await asyncio.sleep(0)  # let the reload take _load_lock first
@@ -231,7 +231,7 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
         in_flight -= 1
         return alias.id == "fallback"
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", yielding_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", yielding_challenge)
 
     fakts = Fakts(
         grant=StaticGrant(fakts=make_fakts_value()),
@@ -282,7 +282,7 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, mon
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
 
     # Straight from a grant: no issue time, as is normal.
     ours = fakts_pointing_at(endpoint, refresh_token="old_token")
@@ -295,7 +295,7 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, mon
     fakts = Fakts(grant=StaticGrant(fakts=ours), cache=cache, manifest=make_manifest())
 
     async with fakts:
-        fakts.loaded_fakts = ours
+        fakts._get_state().loaded_fakts = ours
         # Resolving moves "fallback" to the front, which persists the whole
         # ActiveFakts — credential included.
         await fakts.aget_alias("test", omit_report=True)
@@ -390,11 +390,11 @@ async def test_alogin_recovers_a_dead_session_in_one_call(token_server) -> None:
     fakts = Fakts(grant=grant, cache=MemoryCache(), manifest=make_manifest())
 
     async with fakts:
-        fakts.loaded_fakts = dead
+        fakts._get_state().loaded_fakts = dead
         with pytest.raises(NeedsReauthenticationError):
             await fakts.aget_token()
 
-        fakts.loaded_fakts = dead
+        fakts._get_state().loaded_fakts = dead
         result = await fakts.alogin()
         assert result.auth.access_token == "fresh_access"
         assert await fakts.aget_token() == "fresh_access"
@@ -464,7 +464,7 @@ async def test_alogout_concurrent_with_alias_resolution_does_not_deadlock(
         await proceed.wait()
         return alias.id == "fallback"
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", gated_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", gated_challenge)
 
     value = make_fakts_value(access_token="tok", expires_at=time.time() + 3600)
     fakts = Fakts(

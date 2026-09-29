@@ -67,9 +67,9 @@ class ReauthPolicy(str, Enum):
     NEVER = "never"
     """Always raise :class:`NeedsReauthenticationError` instead of prompting."""
 
-    ON_EXPLICIT_LOAD = "on_explicit_load"
-    """The default. Only an explicit load or refresh may prompt; automatic
-    token renewal never does."""
+    ON_LOGIN = "on_login"
+    """The default. Only an explicit ``alogin()`` (or load or refresh) may
+    prompt; automatic token renewal never does."""
 
     ALWAYS = "always"
     """Legacy behaviour: let any token renewal prompt. Convenient for

@@ -102,7 +102,7 @@ async def test_challenge_does_not_follow_redirects(server) -> None:
 
     async with fakts:
         with pytest.raises(Exception):
-            await fakts.achallenge_alias(alias)
+            await fakts._achallenge_alias(alias)
 
     assert not signed_by_real_service["hit"], (
         "the probe was relayed to the genuine service — a redirector could "
@@ -121,7 +121,7 @@ async def test_omit_challenge_does_not_disable_later_verification(
         challenged.append(alias.id)
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
 
     value = make_fakts_value()
     value.instances["test"].challenge_key = ChallengeKey(kind="ed25519", key="AAAA")
@@ -584,7 +584,7 @@ async def test_env_grant_recovers_unattended_when_credential_ages(
 
     fakts = Fakts(grant=EnvGrant(), manifest=make_manifest())
     async with fakts:
-        fakts.loaded_fakts = aged
+        fakts._get_state().loaded_fakts = aged
         # Must not raise NeedsReauthenticationError: the grant is unattended.
         try:
             await fakts.aget_token()

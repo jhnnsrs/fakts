@@ -142,7 +142,7 @@ async def test_invalid_grant_adopts_sibling_credential(token_server) -> None:
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        fakts.loaded_fakts = ours
+        fakts._get_state().loaded_fakts = ours
         token = await fakts.aget_token()
 
     assert token == "access_via_sibling"
@@ -322,7 +322,7 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, m
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
 
     ours = fakts_pointing_at(endpoint, refresh_token="old_token")
     ours.auth.refresh_issued_at = time.time() - 100
@@ -334,7 +334,7 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, m
     fakts = Fakts(grant=StaticGrant(fakts=ours), cache=cache, manifest=make_manifest())
 
     async with fakts:
-        fakts.loaded_fakts = ours
+        fakts._get_state().loaded_fakts = ours
         await fakts.aget_alias("test", omit_report=True)
 
     assert cache.value is not None
@@ -356,7 +356,7 @@ async def test_report_cannot_wipe_resolved_aliases(token_server, monkeypatch) ->
     async def fake_challenge(self, alias, challenge_key=None) -> bool:
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
 
     ours = fakts_pointing_at(endpoint, refresh_token="ours")
     sibling = fakts_pointing_at(endpoint, refresh_token="sibling_rotated")
@@ -614,7 +614,7 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(Fakts, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
 
     value = fakts_pointing_at(endpoint, refresh_token="same_token")
     cache = MemoryCache(value=value)

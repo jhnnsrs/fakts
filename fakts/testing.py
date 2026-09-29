@@ -67,7 +67,7 @@ class TestingFakts(Fakts):
         """How many times a token was fetched through the renewal seam."""
         return self._token_index
 
-    async def achallenge_alias(
+    async def _achallenge_alias(
         self,
         alias: Alias,
         challenge_key: ChallengeKey | None = None,

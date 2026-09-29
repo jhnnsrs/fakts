@@ -32,7 +32,7 @@ class AliasResolver:
     """Resolves the manifest's requirements to working aliases.
 
     ``settings`` is the owning :class:`~fakts.fakts.Fakts`, read for its
-    settings only. ``challenge`` is the probe seam (``Fakts.achallenge_alias``),
+    settings only. ``challenge`` is the probe seam (``Fakts._achallenge_alias``),
     called at call time so a subclass overriding it is honoured.
     """
 
@@ -434,7 +434,7 @@ class AliasResolver:
                         if mesh_error is not None
                         else f"Alias {alias.id} of service {req.key} is only reachable "
                         f"over the mesh, which is off: pass mesh=MeshOptions() (with "
-                        f'fakts[mesh] installed) or mesh_proxy="http://..." to Fakts.'
+                        f'fakts[mesh] installed) or mesh=MeshProxy(url="http://...") to Fakts.'
                     )
                     continue
                 # A copy: the route is this process's, never the cached instance's.

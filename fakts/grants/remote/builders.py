@@ -15,7 +15,7 @@ from fakts.grants.remote.authorizers.device_code import (
 )
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
-from fakts.mesh import MeshOptions
+from fakts.mesh import MeshOptions, MeshProxy
 from fakts.models import ActiveFakts, Manifest
 from fakts.protocols import FaktsCache
 
@@ -55,8 +55,7 @@ def build_device_code_fakts(
     timeout: int | None = None,
     allow_insecure_transport: bool = False,
     ssl_context: ssl.SSLContext | None = None,
-    mesh: MeshOptions | None = None,
-    mesh_proxy: str | None = None,
+    mesh: MeshOptions | MeshProxy | None = None,
 ) -> Fakts:
     """Build a ready-to-use Fakts for the device code flow.
 
@@ -111,13 +110,11 @@ def build_device_code_fakts(
         TLS context used for *every* call — discovery, the device flow, the
         token endpoint, alias challenges and the report. Pass one to trust a
         private CA; without it, certifi's bundle applies throughout.
-    mesh : Optional[MeshOptions], optional
-        Join the deployment's mesh: ask for a mesh key when authorizing, and
-        run the mesh node in this process to reach mesh-only aliases
-        (``pip install "fakts[mesh]"``).
-    mesh_proxy : Optional[str], optional
-        Reach mesh-only aliases through this already running HTTP proxy
-        instead (e.g. ``arkitekt mesh proxy``); ``mesh`` is then ignored.
+    mesh : MeshOptions | MeshProxy, optional
+        Reach mesh-only aliases. ``MeshOptions()`` asks for a mesh key when
+        authorizing and runs the node in this process (``pip install
+        "fakts[mesh]"``); ``MeshProxy(url=...)`` uses a proxy that is already
+        running (e.g. ``arkitekt mesh proxy``).
 
     Returns
     -------
@@ -138,7 +135,7 @@ def build_device_code_fakts(
                 timeout=timeout,
                 allow_insecure_transport=allow_insecure_transport,
                 ssl_context=context,
-                request_auth_key=mesh is not None and mesh_proxy is None,
+                request_auth_key=isinstance(mesh, MeshOptions),
             ),
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),
@@ -146,7 +143,6 @@ def build_device_code_fakts(
         allow_insecure_transport=allow_insecure_transport,
         ssl_context=context,
         mesh=mesh,
-        mesh_proxy=mesh_proxy,
     )
 
 

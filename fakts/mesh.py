@@ -18,11 +18,11 @@ import re
 import sys
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from arkitekt_spec.declare.wiring import TurnInfo
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fakts.errors import FaktsError
 from fakts.models import ActiveFakts, Manifest
@@ -55,8 +55,10 @@ NOT_INSTALLED = (
 
 
 class MeshOptions(BaseModel):
-    """Where the mesh node keeps its state, and how long it may take to join."""
+    """Run a mesh node in this process (``pip install "fakts[mesh]"``): where it
+    keeps its state, and how long it may take to join."""
 
+    kind: Literal["node"] = "node"
     state_root: Path | None = None
     """Where node state lives (default: ``<state dir>/arkitekt/mesh``)."""
     hostname: str | None = None
@@ -75,6 +77,19 @@ class MeshOptions(BaseModel):
         node's own lock keeps two processes from running it at once).
         """
         return self.resolved_state_root() / f"{name}-native"
+
+
+class MeshProxy(BaseModel):
+    """Reach mesh-only aliases through an HTTP proxy that is already running
+    (e.g. ``arkitekt mesh proxy``); this process starts no node."""
+
+    kind: Literal["proxy"] = "proxy"
+    url: str
+    """The proxy, e.g. ``http://localhost:1055``."""
+
+
+MeshConfig = Annotated[MeshOptions | MeshProxy, Field(discriminator="kind")]
+"""How a Fakts reaches mesh aliases: its own node, or a running proxy."""
 
 
 def _state_dir() -> Path:
@@ -194,9 +209,9 @@ class MeshRoute:
     that can take ``MeshOptions.timeout`` each.
     """
 
-    def __init__(self, options: MeshOptions | None, proxy: str | None, manifest: Manifest) -> None:
-        self.options = options
-        self.proxy = proxy
+    def __init__(self, mesh: MeshOptions | MeshProxy | None, manifest: Manifest) -> None:
+        self.options = mesh if isinstance(mesh, MeshOptions) else None
+        self.proxy = mesh.url if isinstance(mesh, MeshProxy) else None
         self.manifest = manifest
         self.node: NativeNode | None = None
         self.error: MeshError | None = None
@@ -206,7 +221,7 @@ class MeshRoute:
     ) -> tuple[str | None, NativeNode | None, MeshError | None]:
         """The HTTP proxy mesh aliases are reached through, the node that runs
         it, and why there is none: all ``None`` if the mesh is off, no node for
-        an external ``mesh_proxy``.
+        a MeshProxy.
 
         A node that fails to start is not fatal: aliases that do not need the
         mesh still resolve, and the failure is remembered (and reported on the

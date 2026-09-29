@@ -66,7 +66,7 @@ async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.Monkey
         challenge_count += 1
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -94,7 +94,7 @@ async def test_last_used_alias_is_moved_to_front_and_persisted(
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     grant = CountingGrant(fakts=make_fakts_value())
     cache = MemoryCache()
@@ -118,7 +118,7 @@ async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     grant = CountingGrant(fakts=make_fakts_value(), requires_user_interaction=False)
     cache = MemoryCache(value=make_fakts_value(host="stale-host"), hash="static")
@@ -141,7 +141,7 @@ async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: py
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     grant = CountingGrant(fakts=make_fakts_value(), requires_user_interaction=True)
     cache = MemoryCache(value=make_fakts_value(host="stale-host"), hash="static")
@@ -214,7 +214,7 @@ async def test_unreachable_granted_service_is_not_a_grant_problem(
     async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
         raise Exception("unreachable")
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     manifest = make_manifest()
     assert manifest.requirements is not None
@@ -252,8 +252,8 @@ async def test_grant_status_explicit_derived_and_unknown():
         assert await fakts.aget_grant_status("test") == GrantStatus.GRANTED
         assert await fakts.aget_grant_status("declined") == GrantStatus.DENIED
         assert await fakts.aget_grant_status("mystery") == GrantStatus.UNKNOWN
-        assert await fakts.agranted("test") is True
-        assert await fakts.agranted("declined") is False
+        assert await fakts.aget_grant_status("test") is GrantStatus.GRANTED
+        assert await fakts.aget_grant_status("declined") is not GrantStatus.GRANTED
 
 
 async def test_explicit_status_is_reflected_in_error_message():
@@ -429,7 +429,7 @@ async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch)
             raise Exception("unreachable")
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", fake_challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, cache=FailingSetCache(), manifest=make_manifest())
@@ -489,7 +489,9 @@ async def test_reapproval_rotating_client_id_is_adopted():
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._state_session()._aadopt_cached_credentials({("old_client", "same_token")})
+        adopted = await fakts._state_session()._aadopt_cached_credentials(
+            {("old_client", "same_token")}
+        )
 
     assert adopted is not None
     assert adopted.auth.client_id == "rotated_client"
@@ -522,7 +524,7 @@ async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatc
         challenged.append(alias.id)
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", challenge)
     fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
 
     async with fakts:
@@ -543,7 +545,7 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
             raise Exception("connection refused")
         return True
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", challenge)
     fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
 
     async with fakts:
@@ -569,7 +571,7 @@ async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pyte
         assert fakts._state is not None and fakts._state.alias_lock is not None
         held.append(fakts._state.alias_lock.locked())
 
-    monkeypatch.setattr(FaktsClass, "achallenge_alias", challenge)
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", challenge)
     monkeypatch.setattr(aliases_module, "areport_aliases", report)
     value = make_fakts_value()
     value.auth.access_token = "a-token"

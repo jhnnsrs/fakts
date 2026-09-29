@@ -50,7 +50,7 @@ from .grants import EnvGrant, GrantError, RemoteGrant
 from .grants.hard import HardFaktsGrant
 from .grants.remote.builders import build_device_code_fakts, build_redeem_fakts
 from .handle import TokenLoader
-from .mesh import MeshError, MeshOptions, TurnInfo
+from .mesh import MeshError, MeshOptions, MeshProxy, TurnInfo
 from .models import (
     ActiveFakts,
     Alias,
@@ -78,6 +78,7 @@ __all__ = [
     "Manifest",
     "MeshError",
     "MeshOptions",
+    "MeshProxy",
     "NeedsReauthenticationError",
     "NoCache",
     "NotEnteredError",
