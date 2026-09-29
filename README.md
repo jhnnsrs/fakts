@@ -8,9 +8,9 @@
 [![PyPI status](https://img.shields.io/pypi/status/fakts.svg)](https://pypi.python.org/pypi/fakts/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-> **Renamed.** This client was published as `fakts-next` up to 4.x. From 2.0.0 it is
-> published as `fakts` again, and the import root is `fakts` (`fakts_next` is gone).
-> Install `fakts>=2` and update imports.
+> **Renamed.** This client used to be published as `fakts-next` (imported as
+> `fakts_next`). It is published as `fakts` now, imported as `fakts`; the
+> `fakts_next` name is gone, so update both the dependency and the imports.
 
 Fakts is an **asynchronous app configuration and service-discovery client** for
 dynamic client-server deployments. An app declares *what* it needs (a
@@ -33,8 +33,9 @@ pip install fakts
 Optional extras:
 
 ```bash
-pip install fakts[rath]    # GraphQL transport links for rath
-pip install fakts[crypto]  # signed alias challenges (Ed25519 verification)
+pip install "fakts[rath]"    # FaktsAuthLink: rath GraphQL requests carry fakts tokens
+pip install "fakts[crypto]"  # signed alias challenges (Ed25519 verification)
+pip install "fakts[mesh]"    # reach services that are only on the deployment's mesh
 ```
 
 ## Quickstart
@@ -93,7 +94,7 @@ A `RemoteGrant` is composed of two pluggable parts:
 
 | Role | Question it answers | Implementations |
 |---|---|---|
-| **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `FirstAdvertisedDiscovery` (UDP beacons), `StaticDiscovery` |
+| **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `StaticDiscovery` |
 | **Authorizer** | *How do we get a session?* | `DeviceCodeAuthorizer` (browser approval), `RedeemAuthorizer` (pre-issued provisioning token, headless), `StaticAuthorizer` (a credential from an earlier session) |
 
 Protocol v1 had a third role: a *claimer* that traded an approval artifact
@@ -467,7 +468,7 @@ container, or hardcoded in a test) the static path is still there: see
 
 **`RemoteGrant` is two pluggable parts, not one.** The remote flow could be a
 single object, but its two questions vary independently: *where is the server*
-(well-known URL, UDP beacon, static) and *how do we get a session*
+(well-known URL, static) and *how do we get a session*
 (device-code browser flow, pre-issued redeem token, an existing credential).
 Splitting Discovery / Authorizer into runtime-checkable protocols lets you
 compose new combinations — and implement a part in your own code — without
@@ -550,25 +551,86 @@ from fakts import Fakts, EnvGrant
 fakts = Fakts(grant=EnvGrant(), manifest=manifest)
 ```
 
-### Testing: hardcoded fakts
+### Testing: no server at all
+
+`build_testing_fakts` maps each key to a URL (or a full `Alias`). Every key
+becomes a requirement *and* a granted instance, aliases resolve without being
+challenged, and tokens come from a list:
 
 ```python
-from fakts import Fakts
-from fakts.grants.hard import HardFaktsGrant
+from fakts import build_testing_fakts
 
-fakts = Fakts(grant=HardFaktsGrant(fakts=my_active_fakts), manifest=manifest)
+fakts = build_testing_fakts(
+    {"rekuest": "http://localhost:8090"},
+    tokens=["first", "second"],   # handed out in order; the last one repeats
+    token_lifetime=0,             # 0: every aget_token() renews; None: never expires
+)
+
+async with fakts:
+    alias = await fakts.aget_alias("rekuest")
+    assert await fakts.aget_token() == "first"
+    assert fakts.token_fetches == 1
 ```
 
-(`fakts.grants.remote.builders.build_remote_testing` and
-`build_remote_testing_with_token` cover the remote-flavored variants.)
+The embedded auth points at a `.invalid` host, so anything that escapes the
+testing seams and tries a real refresh fails loudly instead of reaching a
+server. For a configuration you already have as an `ActiveFakts`, use
+`Fakts(grant=HardFaktsGrant(fakts=...), manifest=...)` from
+`fakts.grants.hard`.
 
 ### GraphQL via rath
 
-With the `[rath]` extra, `fakts.contrib.rath` provides drop-in rath
-links that configure themselves from a fakts context: `FaktsAIOHttpLink`,
-`FaktsHttpXLink`, `FaktsGraphQLWSLink`, `FaktsWebsocketLink` (all resolving
-their endpoint through `aget_alias`) and `FaktsAuthLink` (token loading and
-refresh).
+With the `[rath]` extra, `fakts.contrib.rath.auth.FaktsAuthLink` puts the
+access token on every request and renews it once when a request is rejected.
+It takes a `TokenLoader` — anything with `aget_token()` and
+`arefresh_token(stale_token)`, which a `Fakts` is:
+
+```python
+from fakts.contrib.rath.auth import FaktsAuthLink
+
+auth = FaktsAuthLink(token_loader=fakts)
+```
+
+The renewal never prompts: a rejected request raises
+`NeedsReauthenticationError` rather than opening a browser mid-request.
+
+### Mesh-only services
+
+Some deployments put services on a private mesh (a tailnet) instead of a
+public address. The server marks those aliases `kind: "mesh"`, and fakts skips
+them unless it is told how to reach the mesh:
+
+```python
+from fakts import MeshOptions, MeshProxy, build_device_code_fakts
+
+# Run a mesh node in this process (pip install "fakts[mesh]"). The first
+# login asks the server for a key to join with; later runs reuse the node's
+# state (under ~/.local/state/arkitekt/mesh on Linux).
+fakts = build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())
+
+# Or go through a proxy that is already running (e.g. `arkitekt mesh proxy`).
+fakts = build_device_code_fakts(url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055"))
+```
+
+A mesh alias comes back with `proxy` set, so an HTTP client that honours it
+reaches the service over the mesh. For traffic that cannot go through an HTTP
+proxy, an alias resolved through a node this process runs also offers:
+
+```python
+local = await alias.aforward()      # "127.0.0.1:P", forwarding TCP to the alias
+ice = await alias.aturn()           # TurnInfo: the node's TURN relay, as an ICE server
+```
+
+Both raise `arkitekt_spec`'s `MeshError` for an alias reached through a
+`MeshProxy` (there is no node to forward through) or one that is not on the
+mesh; `fakts.MeshError` is a subclass of it, so catching that one catches both.
+If the node cannot start or join, only mesh aliases are affected: their
+resolution error names the node's failure, every non-mesh alias keeps
+resolving, and fakts does not retry the join on every call.
+
+`build_redeem_fakts` takes `mesh` too, but the redeem grant cannot ask for a
+join key: use it with a `MeshProxy`, or with `MeshOptions()` for a node that
+already joined on this machine.
 
 ## Error handling
 
@@ -578,27 +640,40 @@ code and (truncated) response body where applicable:
 | Error | Raised when |
 |---|---|
 | `NotEnteredError` | A method needing the context was called outside `with`/`async with` |
-| `GrantError` / `RemoteGrantError` | The grant could not load the configuration (`DiscoveryError`, `DemandError`, `ClaimError` for the three remote stages) |
+| `GrantError` / `RemoteGrantError` | The grant could not load the configuration: `DiscoveryError` (finding the server), `DemandError` and its subclasses `UserDeniedError`, `DeviceCodeExpiredError`, `DeviceCodeTimeoutError`, `RetrieveError` (getting a session) |
 | `CompositionError` | One or more *required* services could not be resolved to a working alias |
 | `AliasNotFoundError` | `aget_alias(key)` for a key that is not resolvable (not in the manifest, or its challenges failed) |
 | `ServiceNotGrantedError` | Subclass of `AliasNotFoundError`: the key *is* declared, but the server granted no instance (user declined, or service unavailable) — catch it (or use `aget_alias_or_none`) to degrade gracefully |
 | `NeedsReauthenticationError` | The session can only be recovered by a human — call `alogin()` where prompting is appropriate |
-| `NoFaktsFound` | `get_current_fakts()` outside any fakts context |
+| `MeshError` | The mesh node could not start or join (its `code` is the node's own: `needs_login`, `locked`, `timeout`, ...; `None` when fakts refused, e.g. the `[mesh]` extra is missing). A subclass of `arkitekt_spec`'s `MeshError`, which `aforward()`/`aturn()` raise for an alias with no node of this process behind it |
 
 ## Fakts options
 
 | Option | Default | Effect |
 |---|---|---|
-| `delete_on_exit` | `False` | Reset the cache and loaded state on exit |
+| `manifest` | required | What the app is and which services it requires |
+| `grant` | required | Where the configuration comes from (`RemoteGrant`, `EnvGrant`, `HardFaktsGrant`, ...) |
+| `cache` | `NoCache()` | Where the session is kept across runs; the builders pass a `FileCache` |
+| `ssl_context` | certifi's CAs | TLS verification for every request fakts makes |
+| `allow_insecure_transport` | `False` | Permit sending credentials over plain http to a non-loopback host (loopback never needs it) |
+| `reauth_policy` | `ReauthPolicy.ON_LOGIN` | When token renewal may run an interactive grant: `NEVER`, `ON_LOGIN` (only `alogin()`/`aload()`/`arefresh()` may prompt), or `ALWAYS` |
+| `mesh` | `None` | `MeshOptions()` or `MeshProxy(url=...)` to reach mesh-only aliases (see [mesh-only services](#mesh-only-services)) |
 | `allow_auto_load` | `True` | If `False`, `aget_*` raises instead of loading implicitly — call `aload()` yourself |
-| `refetch_on_alias_failure` | `True` | Reload from the grant once when aliases from a *cached* config fail their challenges |
+| `refetch_on_alias_failure` | `True` | Reload from the grant once when aliases from a *cached* config fail their challenges — only when that needs no human; otherwise it raises and asks you to `alogin()` |
 | `alias_challenge_timeout` | `3` | Seconds per alias challenge probe |
+| `delete_on_exit` | `False` | Reset the cache and loaded state on exit |
+
+`build_device_code_fakts` and `build_redeem_fakts` set most of these for you.
+Beyond `url` and `manifest` they take `cache_file`, `no_cache`, `ssl_context`,
+`allow_insecure_transport` and `mesh`; the device-code builder also takes
+`headless`, `timeout`, `requested_client_kind` and `requested_client_role`.
 
 ## Development
 
 ```bash
-uv sync                                            # install (Python >= 3.11)
-uv run pytest -m "not integration"                 # unit tests
-uv run pytest -m integration                       # needs docker (spins up a Fakts server)
-uv run ruff check fakts/
+uv sync --all-extras --dev                         # install (Python >= 3.11)
+uv run pytest -m "not integration"                 # unit tests, no docker
+uv run pytest                                      # everything; needs docker (Fakts server, mesh lab)
+uv run ruff check && uv run ruff format --check    # lint (blocking in CI)
+uv run basedpyright                                # types (blocking in CI)
 ```
