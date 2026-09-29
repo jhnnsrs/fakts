@@ -41,6 +41,9 @@ class WellKnownDiscovery(SSLContextModel):
         description="The timeout for the connection",
     )
     """A timeout for the connection to the well-known endpoint. Applies to each protocol"""
+    allow_cross_origin_endpoints: bool = False
+    """Accept token/device endpoints on another origin than the well-known
+    document. Only for deployments that really split their hosts."""
 
     async def adiscover(self) -> FaktsEndpoint:
         """Discover the endpoint
@@ -67,4 +70,5 @@ class WellKnownDiscovery(SSLContextModel):
             auto_protocols=self.auto_protocols,
             allow_appending_slash=self.allow_appending_slash,
             timeout=self.timeout,
+            allow_cross_origin_endpoints=self.allow_cross_origin_endpoints,
         )

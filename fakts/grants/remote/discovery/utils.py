@@ -1,5 +1,6 @@
 import logging
 import ssl
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -9,8 +10,42 @@ from fakts.utils import truncate
 
 logger = logging.getLogger(__name__)
 
+#: The endpoints credentials are sent to. They must share the well-known
+#: document's origin unless that is explicitly opted out of.
+CREDENTIAL_ENDPOINTS = ("token_endpoint", "device_authorization_endpoint")
 
-async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout: int = 4) -> FaktsEndpoint:
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urlparse(url)
+    default = {"http": 80, "https": 443}.get(parsed.scheme)
+    return parsed.scheme, (parsed.hostname or "").lower(), parsed.port or default
+
+
+def _is_tls_failure(error: BaseException) -> bool:
+    """Whether the server's certificate failed verification.
+
+    That is an answer -- something is serving TLS there and it is not who it
+    claims to be -- so it must not fall back to plain http. A protocol mismatch
+    (https against a plain-http dev server, "wrong version number") may: the
+    endpoints it yields are http, and credentials only go there when plain
+    http was explicitly allowed (fakts.oauth2.check_transport).
+    """
+    return isinstance(
+        error,
+        (
+            ssl.SSLCertVerificationError,
+            aiohttp.ClientConnectorCertificateError,
+            aiohttp.ServerFingerprintMismatch,
+        ),
+    )
+
+
+async def check_wellknown(
+    url: str,
+    ssl_context: ssl.SSLContext,
+    timeout: int = 4,
+    allow_cross_origin_endpoints: bool = False,
+) -> FaktsEndpoint:
     """Check the well-known endpoint
 
     This function will check the well-known endpoint and return the endpoint
@@ -24,6 +59,10 @@ async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout: int = 
         The ssl context to use for the connection
     timeout : int, optional
         The timeout for the connection , by default 4
+    allow_cross_origin_endpoints : bool, optional
+        Accept a token or device authorization endpoint on another origin than
+        the well-known document. Off by default: a tampered document could
+        otherwise send the credential flow anywhere.
 
     Returns
     -------
@@ -79,11 +118,22 @@ async def check_wellknown(url: str, ssl_context: ssl.SSLContext, timeout: int = 
                     f"fakts < 5 to keep talking to this one."
                 )
 
-            if "token_endpoint" not in data:
+            if not data.get("token_endpoint"):
                 raise DiscoveryError(
                     f"{url} claims fakts protocol version 2 but advertises no "
                     f"'token_endpoint'. Received: {truncate(str(data))}"
                 )
+
+            if not allow_cross_origin_endpoints:
+                for field in CREDENTIAL_ENDPOINTS:
+                    endpoint_url = data.get(field)
+                    if endpoint_url and _origin(endpoint_url) != _origin(url):
+                        raise DiscoveryError(
+                            f"{url} names its {field} on another origin: "
+                            f"{endpoint_url}. Credentials are only sent to the origin "
+                            f"that was discovered; if this deployment really splits "
+                            f"its hosts, pass allow_cross_origin_endpoints=True."
+                        )
 
             return FaktsEndpoint(**data)
 
@@ -103,6 +153,7 @@ async def discover_url(
     auto_protocols: list[str] | None = None,
     allow_appending_slash: bool = False,
     timeout: int = 4,
+    allow_cross_origin_endpoints: bool = False,
 ) -> FaktsEndpoint:
     """Discover the endpoint from the url
 
@@ -149,8 +200,21 @@ async def discover_url(
                 if allow_appending_slash and not url.endswith("/"):
                     url = f"{url}/"
 
-                return await check_wellknown(f"{protocol}://{url}", ssl_context, timeout=timeout)
+                return await check_wellknown(
+                    f"{protocol}://{url}",
+                    ssl_context,
+                    timeout=timeout,
+                    allow_cross_origin_endpoints=allow_cross_origin_endpoints,
+                )
             except Exception as e:
+                if _is_tls_failure(e):
+                    # A failed certificate check is an answer, not an absence: falling
+                    # back to plain http here is exactly what an attacker wants.
+                    raise DiscoveryError(
+                        f"TLS verification failed for {protocol}://{url}: {e}. Not "
+                        f"falling back to another protocol. Fix the certificate (or "
+                        f"the trusted CAs), or pass an explicit http:// URL."
+                    ) from e
                 logger.info(f"Could not connect to {protocol}://{url}")
                 errors.append((protocol, e))
                 continue
@@ -162,4 +226,9 @@ async def discover_url(
     if allow_appending_slash and not url.endswith("/"):
         url = f"{url}/"
 
-    return await check_wellknown(url, ssl_context, timeout=timeout)
+    return await check_wellknown(
+        url,
+        ssl_context,
+        timeout=timeout,
+        allow_cross_origin_endpoints=allow_cross_origin_endpoints,
+    )

@@ -507,26 +507,31 @@ async def test_insecure_transport_env_var_opts_in(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def v2_document(base_url: str = "http://x/f/") -> dict:
+def v2_document(origin: str = "http://x") -> dict:
+    """A v2 well-known document whose endpoints live on ``origin``."""
     return {
         "name": "MyServer",
-        "base_url": base_url,
+        "base_url": f"{origin}/f/",
         "protocol_version": "2",
-        "issuer": "http://x",
-        "token_endpoint": "http://x/o/token/",
-        "device_authorization_endpoint": "http://x/o/app-authorization/",
+        "issuer": origin,
+        "token_endpoint": f"{origin}/o/token/",
+        "device_authorization_endpoint": f"{origin}/o/app-authorization/",
     }
+
+
+def origin_of(request: web.Request) -> str:
+    return f"{request.scheme}://{request.host}"
 
 
 async def test_check_wellknown_valid(local_server) -> None:
     async def handler(request: web.Request) -> web.Response:
-        return web.json_response(v2_document())
+        return web.json_response(v2_document(origin_of(request)))
 
     base_url = await local_server({"/.well-known/fakts": handler}, method="GET")
 
     endpoint = await check_wellknown(base_url, ssl.create_default_context())
     assert endpoint.name == "MyServer"
-    assert endpoint.token_endpoint == "http://x/o/token/"
+    assert endpoint.token_endpoint == f"{base_url}o/token/"
 
 
 async def test_check_wellknown_preserves_unmodelled_members(local_server) -> None:
@@ -534,7 +539,7 @@ async def test_check_wellknown_preserves_unmodelled_members(local_server) -> Non
     the same fetch, so they must survive validation."""
 
     async def handler(request: web.Request) -> web.Response:
-        doc = v2_document()
+        doc = v2_document(origin_of(request))
         doc["mesh_coord_url"] = "http://x/mesh"
         return web.json_response(doc)
 
@@ -606,7 +611,7 @@ async def test_discover_url_with_protocol_and_slash_append(local_server) -> None
     normalises a missing trailing slash before hitting .well-known/fakts."""
 
     async def handler(request: web.Request) -> web.Response:
-        return web.json_response(v2_document())
+        return web.json_response(v2_document(origin_of(request)))
 
     base_url = await local_server({"/.well-known/fakts": handler}, method="GET")
     no_slash = base_url.rstrip("/")
