@@ -8,6 +8,7 @@ caller sends once the lock is released.
 
 import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
@@ -26,6 +27,14 @@ logger = logging.getLogger(__name__)
 Challenger = Callable[..., Awaitable[bool]]
 """``challenge(alias, challenge_key=..., proxy=...)``: True if the alias
 answered as the service, raising otherwise."""
+
+_CONTAINER_MARKERS = ("/.dockerenv", "/run/.containerenv")
+
+
+def in_container() -> bool:
+    """Whether this process runs in a container (docker or podman). Only then
+    can a ``docker`` alias be the best one, so only then is it tried first."""
+    return any(os.path.exists(marker) for marker in _CONTAINER_MARKERS)
 
 
 class AliasResolver:
@@ -390,6 +399,13 @@ class AliasResolver:
         or a node another service already started, costs nothing, so then the
         order is kept as it is.
 
+        Docker aliases (only reachable from inside the deployment's own docker
+        environment) are an ordering matter too, the challenge still decides:
+        in a container they are tried first, anywhere else only once the
+        others failed (but before a node is started). Unchallenged, they are
+        never picked over another alias: nothing would tell that this
+        container is not in that deployment.
+
         Returns (selected alias or None, report, composition error or None);
         the composition error is only set for required services.
         """
@@ -419,7 +435,12 @@ class AliasResolver:
 
         errors_in_alias: list[str] = []
         waiting_for_mesh: list[Alias] = []
-        for alias in instance.aliases:
+        # By `kind`, not `Alias.is_docker()`: that needs a newer arkitekt-spec.
+        docker = [alias for alias in instance.aliases if alias.kind == "docker"]
+        aliases = [alias for alias in instance.aliases if alias.kind != "docker"]
+        if docker and in_container() and not omit_challenge:
+            aliases, docker = docker + aliases, []
+        for alias in aliases:
             selected = alias
             if alias.is_mesh():
                 route = self._route.ready()
@@ -430,6 +451,12 @@ class AliasResolver:
                 selected = alias.through_mesh(*route)
             if await self._atry(req, instance, alias, selected, omit_challenge, errors_in_alias):
                 return (selected, AliasReport(alias_id=alias.id, reason=None, valid=True), None)
+
+        if not omit_challenge:
+            for alias in docker:
+                if await self._atry(req, instance, alias, alias, omit_challenge, errors_in_alias):
+                    return (alias, AliasReport(alias_id=alias.id, reason=None, valid=True), None)
+            docker = []
 
         if waiting_for_mesh:
             proxy, node, mesh_error = await self._route.aroute(fakts)
@@ -453,6 +480,10 @@ class AliasResolver:
                         AliasReport(alias_id=alias.id, reason=None, valid=True),
                         None,
                     )
+
+        if docker:
+            # Unchallenged, and nothing else is listed (or reachable).
+            return (docker[0], AliasReport(alias_id=docker[0].id, reason=None, valid=True), None)
 
         error_message = (
             f"All {len(instance.aliases)} alias(es) of service {req.key} "
