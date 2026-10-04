@@ -35,90 +35,56 @@ def could_copy_to_clipboard(text: str) -> bool:
         return False
 
 
-try:
-    # Optional: a nicer prompt when rich is installed.
-    from rich import print as rprint  # pyright: ignore[reportMissingImports]
-    from rich.panel import Panel  # pyright: ignore[reportMissingImports]
+def _panel(text: str) -> bool:
+    """Print ``text`` in a rich panel; ``False`` when rich is not installed.
 
-    def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
-        """Prints the device code prompt
+    rich is imported here, when something is actually printed: a program that
+    shows the login in its own interface never loads it.
+    """
+    try:
+        from rich import print as rprint  # pyright: ignore[reportMissingImports]
+        from rich.panel import Panel  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        return False
+    rprint(Panel.fit(text, title="Device Code Grant", title_align="center"))
+    return True
 
-        This function prints the device code prompt using rich.
-        It also copies the code to the clipboard if possible.
 
-        Parameters
-        ----------
-        querystring : str
-            The querystring to visit
-        url : str
-            The url to visit (without querystring)
-        code : str
-            The code to enter on the website
-        scopes : List[str]
-            The scopes to grant
-        """
+def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
+    """Print the device code prompt, and copy the code to the clipboard if possible.
 
-        could_copy_to_clipboard(code)
-        rprint(
-            Panel.fit(
-                f"""
+    Parameters
+    ----------
+    querystring : str
+        The querystring to visit
+    url : str
+        The url to visit (without querystring)
+    code : str
+        The code to enter on the website
+    """
+    could_copy = could_copy_to_clipboard(code)
+    if _panel(
+        f"""
     Please visit the following URL:
     [bold green][link={querystring}]{querystring}[/link][/bold green]
     or go to this URL:
     [bold green][link={url}]{url}[/link][/bold green]
     and enter the code:
     [bold blue]{code}[/bold blue]
-        """,
-                title="Device Code Grant",
-                title_align="center",
-            )
-        )
-
-    def print_succesfull_login() -> None:
-        """Prints the successful login message
-
-        This function prints the successful login message using rich.
         """
-        rprint(
-            Panel.fit(
-                "You have successfully logged in!",
-                title="Device Code Grant",
-                title_align="center",
-            )
-        )
+    ):
+        return
+    print("Please visit the following URL:")
+    print("\t" + querystring)
+    print("Or go to this URL:")
+    print("\t" + url)
+    print("And enter the following code:")
+    print("\t" + code)
+    if could_copy:
+        print("Code has been copied to clipboard")
 
-except ImportError:
 
-    def print_device_code_prompt(querystring: str, url: str, code: str) -> None:
-        """Prints the device code prompt
-
-        This function prints the device code prompt using rich.
-        It also copies the code to the clipboard if possible.
-
-        Parameters
-        ----------
-        querystring : str
-            The querystring to visit
-        url : str
-            The url to visit (without querystring)
-        code : str
-            The code to enter on the website
-        scopes : List[str]
-            The scopes to grant
-        """
-        could_copy = could_copy_to_clipboard(code)
-        print("Please visit the following URL:")
-        print("\t" + querystring)
-        print("Or go to this URL:")
-        print("\t" + url)
-        print("And enter the following code:")
-        print("\t" + code)
-        if could_copy:
-            print("Code has been copied to clipboard")
-
-    def print_succesfull_login() -> None:
-        """Prints the successful login message
-
-        This function prints the successful login message using rich.
-        """
+def print_succesfull_login() -> None:
+    """Print that the login went through."""
+    if not _panel("You have successfully logged in!"):
         print("You have successfully logged in!")
