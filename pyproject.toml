@@ -9,11 +9,11 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "pydantic>=2.11",
-    "koil>=3.3.2",
+    "koil>=3.3.6",
     "certifi>=2025.4.26",
     "aiohttp>=3.11.18",
     # The app identity the login manifest is built on.
-    "arkitekt-spec>=1.4",
+    "arkitekt-spec>=3.4",
 ]
 
 [project.optional-dependencies]
