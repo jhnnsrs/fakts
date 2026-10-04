@@ -8,10 +8,10 @@ from fakts.cache.nocache import NoCache
 from fakts.grants.remote.authorizers.device_code import (
     ClientKind,
     DeviceCodeAuthorizer,
+    DeviceCodeChallenge,
 )
 from fakts.grants.remote.base import RemoteGrant
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
-from fakts.grants.remote.models import FaktsEndpoint
 from fakts.models import Manifest, Requirement
 
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
@@ -29,7 +29,7 @@ def test_device_code_grant_device_id(deployed_infra: Deployment):
         device_id="test_node",
     )
 
-    async def authorize_through_cmd(endpoint: FaktsEndpoint, device_code: str) -> None:
+    async def authorize_through_cmd(challenge: DeviceCodeChallenge) -> None:
         """Approve the staged device code out of band, standing in for a user.
 
         The hook receives the *user* code — the short one a person would type
@@ -39,7 +39,7 @@ def test_device_code_grant_device_id(deployed_infra: Deployment):
 
         await deployed_infra.arun(
             "lok",
-            f"uv run python manage.py validatecode --code {device_code} --user demo --org demo --hub localhost",
+            f"uv run python manage.py validatecode --code {challenge.user_code} --user demo --org demo --hub localhost",
         )
 
     fakts = Fakts(

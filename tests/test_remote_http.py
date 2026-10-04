@@ -15,6 +15,7 @@ from aiohttp import web
 
 from fakts.grants.remote.authorizers.device_code import (
     DeviceCodeAuthorizer,
+    DeviceCodeChallenge,
 )
 from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
 from fakts.grants.remote.authorizers.static import StaticAuthorizer
@@ -142,9 +143,11 @@ async def test_device_code_happy_path(local_server, monkeypatch) -> None:
     base_url = await local_server({"/o/app-authorization/": authorize, "/o/token/": token})
 
     seen_codes: list[str] = []
+    seen_links: list[str] = []
 
-    async def hook(endpoint: FaktsEndpoint, code: str) -> None:
-        seen_codes.append(code)
+    async def hook(challenge: DeviceCodeChallenge) -> None:
+        seen_codes.append(challenge.user_code)
+        seen_links.append(challenge.verification_uri_complete)
 
     authorizer = DeviceCodeAuthorizer(
         manifest=make_manifest(),
@@ -160,6 +163,9 @@ async def test_device_code_happy_path(local_server, monkeypatch) -> None:
     assert response.client_id == "minted_client_id"
     assert response.statuses["test"].value == "granted"
     assert seen_codes == ["USERCODE"]
+    assert seen_links == ["http://example.com/configure/USERCODE"], (
+        "The hook is handed the link to approve at; a host shows it instead of a browser"
+    )
     assert opened == ["http://example.com/configure/USERCODE"], (
         "The browser must open the server-supplied complete URL, not a derived one"
     )
@@ -683,9 +689,14 @@ async def test_device_code_polling_survives_a_transient_server_error(local_serve
 async def test_the_terminal_prompt_fills_in_the_approval_url(capsys) -> None:
     from fakts.grants.remote.authorizers.device_code import display_in_terminal
 
-    endpoint = endpoint_for("http://lok.example/")
-    endpoint.configure = "http://lok.example/f/configure/{code}"
-    await display_in_terminal(endpoint, "ABCD")
+    await display_in_terminal(
+        DeviceCodeChallenge(
+            endpoint=endpoint_for("http://lok.example/"),
+            user_code="ABCD",
+            verification_uri_complete="http://lok.example/f/configure/ABCD",
+            expires_in=300,
+        )
+    )
 
     printed = capsys.readouterr().out
     assert "http://lok.example/f/configure/ABCD" in printed

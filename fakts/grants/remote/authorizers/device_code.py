@@ -14,6 +14,7 @@ the user which parts to grant".
 """
 
 import asyncio
+import dataclasses
 import logging
 import time
 import webbrowser
@@ -56,21 +57,31 @@ def _as_seconds(raw: object, default: int, field: str) -> int:
         ) from e
 
 
-DeviceCodeHook = Callable[["FaktsEndpoint", str], Awaitable[None]]
+@dataclasses.dataclass(frozen=True)
+class DeviceCodeChallenge:
+    """What a person needs to approve a login: handed to the device-code hook."""
+
+    endpoint: FaktsEndpoint
+    """The server being logged in to."""
+    user_code: str
+    """The code to enter on the approval page."""
+    verification_uri_complete: str
+    """The approval page with the code already entered: the link to show or open."""
+    expires_in: int
+    """Seconds until the code stops being accepted."""
+
+
+DeviceCodeHook = Callable[[DeviceCodeChallenge], Awaitable[None]]
 GrantedHook = Callable[["FaktsEndpoint", str], Awaitable[None]]
 
 
-async def display_in_terminal(endpoint: "FaktsEndpoint", code: str) -> None:
-    """The default device code hook: open the approval page and print it.
-
-    Superseded in practice by ``verification_uri_complete`` from the device
-    authorization response, which the authorizer opens directly. This hook
-    remains the extension point for headless and test harnesses.
-    """
-    # `configure` is a template with a literal {code}; fill it in, so the
-    # printed link lands on the pre-filled approval page.
-    approve = endpoint.configure.replace("{code}", code) if endpoint.configure else None
-    print_device_code_prompt(approve or endpoint.base_url, endpoint.base_url, code)
+async def display_in_terminal(challenge: DeviceCodeChallenge) -> None:
+    """The default device code hook: print the approval page and the code."""
+    print_device_code_prompt(
+        challenge.verification_uri_complete,
+        challenge.endpoint.base_url,
+        challenge.user_code,
+    )
 
 
 async def granted_in_terminal(endpoint: "FaktsEndpoint", token: str) -> None:
@@ -105,8 +116,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
     requirements."""
 
     device_code_hook: DeviceCodeHook = Field(default=display_in_terminal, exclude=True)
-    """Called with the user code once the server has staged it. Tests and
-    headless harnesses replace this to approve out of band."""
+    """Called with the challenge once the server has staged it: the code and
+    the link a person approves it at. A host shows them in its own interface;
+    tests and headless harnesses approve out of band."""
     granted_hook: GrantedHook = Field(default=granted_in_terminal, exclude=True)
 
     expiration_time_seconds: int = 300
@@ -191,8 +203,22 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     verification_uri,
                 )
 
+        expires_in = _as_seconds(
+            started.get("expires_in"), self.expiration_time_seconds, "expires_in"
+        )
         if user_code:
-            await self.device_code_hook(endpoint, user_code)
+            await self.device_code_hook(
+                DeviceCodeChallenge(
+                    endpoint=endpoint,
+                    user_code=user_code,
+                    # `configure` is a template with a literal {code}: the fallback
+                    # for a server that sent no complete link of its own.
+                    verification_uri_complete=verification_uri
+                    or (endpoint.configure or "").replace("{code}", user_code)
+                    or endpoint.base_url,
+                    expires_in=expires_in,
+                )
+            )
 
         # Poll the endpoint the session will be renewed against, not one the
         # device response names: the two must never diverge.
@@ -205,11 +231,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
             device_code=device_code,
             client_id=client_id,
             interval=_as_seconds(started.get("interval"), 5, "interval"),
-            expires_in=_as_seconds(
-                started.get("expires_in"),
-                self.expiration_time_seconds,
-                "expires_in",
-            ),
+            expires_in=expires_in,
         )
 
         await self.granted_hook(endpoint, response.access_token)
