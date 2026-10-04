@@ -60,6 +60,9 @@ class FaktsEndpoint(BaseModel):
     """Absolute URL of the device authorization endpoint. Non-standard in
     one respect: it takes a JSON body carrying the fakts manifest, and it
     also performs the client registration."""
+    revocation_endpoint: str | None = None
+    """Absolute URL of the RFC 7009 revocation endpoint. A logout revokes the
+    session's refresh token there; a server that publishes none is only forgotten."""
     jwks_uri: str | None = None
     """Where the server publishes the keys its access tokens are signed with."""
     grant_types_supported: list[str] = Field(default_factory=list)

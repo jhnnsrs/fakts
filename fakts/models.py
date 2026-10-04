@@ -86,6 +86,9 @@ class AuthFakt(BaseModel):
     """Where to report the alias resolution outcome. Derived from the
     endpoint's ``base_url`` (the server does not publish it). Endpoints that
     do not support reporting simply omit it, and the client skips the report."""
+    revocation_endpoint: str | None = None
+    """Where a logout revokes the session (RFC 7009), when the server
+    advertises one. Without it a logout only forgets the session here."""
     scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
     """The *granted* scopes, as returned by the token endpoint. Under
     per-requirement consent this legitimately differs from what was asked

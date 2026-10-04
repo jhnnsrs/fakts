@@ -183,9 +183,11 @@ except NeedsReauthenticationError:
 prompt. `arefresh()` is the blunter tool: it *always* re-runs the grant, which
 replaces the app's client registration and disconnects sibling processes.
 
-To end a session, `alogout()` forgets it locally. It does **not** revoke
-anything: the protocol has no revocation endpoint, so the refresh token stays
-valid server-side until it expires, and a sibling process still holding it will
+To end a session, `alogout()` revokes it and forgets it locally. A server that
+advertises a `revocation_endpoint` in its well-known document (RFC 7009) is told
+first, so the refresh token stops renewing for every holder of a copy; the access
+token already issued ages out by itself. Against a server that advertises none,
+the session is only forgotten here, and a sibling process still holding it will
 re-persist it on its next rotation.
 
 ## The Fakts protocol

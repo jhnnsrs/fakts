@@ -64,6 +64,7 @@ class RemoteGrant(BaseModel):
             response,
             token_endpoint=endpoint.token_endpoint,
             report_endpoint=endpoint.report_endpoint,
+            revocation_endpoint=endpoint.revocation_endpoint,
             skew=TOKEN_EXPIRY_SKEW,
         )
         # A mesh key is only useful with its coordination server; servers

@@ -251,18 +251,19 @@ class Fakts(KoiledModel):
         return self.loaded_fakts or fakts
 
     async def alogout(self) -> None:
-        """Forget this app's session on this machine.
+        """Revoke this app's session and forget it on this machine.
 
-        **This does not revoke anything.** The fakts protocol defines no
-        revocation endpoint, so the refresh token stays valid server-side
-        until it expires on its own. Anyone holding a copy can still use it.
+        A server that advertises a ``revocation_endpoint`` is told first: the
+        refresh token stops renewing at once, for every holder of a copy. The
+        access token already issued is a signed JWT and stays valid until it
+        expires. Revoking is best effort -- an unreachable server, or one
+        that advertises no endpoint, still leaves the session forgotten here.
 
-        It is also not, by itself, a logout for the *machine*. Sibling
-        processes keep the credential they already hold in memory, and the
-        first one to rotate writes a fresh, still-valid credential straight
-        back into the cache — the persist path has no notion of "this was
-        deliberately cleared". Treat this as "forget here and now": correct
-        for a single-process app, and for scripts prefer ``delete_on_exit``.
+        It is not, by itself, a logout for the *machine* against a server that
+        cannot revoke. Sibling processes keep the credential they already hold
+        in memory, and the first one to rotate writes a fresh, still-valid
+        credential straight back into the cache. For scripts prefer
+        ``delete_on_exit``.
 
         A subsequent call that needs configuration re-runs the grant, which
         for an interactive grant means prompting again.
@@ -275,7 +276,29 @@ class Fakts(KoiledModel):
         # Logout is the one operation that legitimately touches all three
         # state domains, so it takes all three locks -- in L1 order.
         async with state.alias_lock, state.token_lock, state.load_lock:
+            if state.loaded_fakts is not None:
+                await self._arevoke(state.loaded_fakts)
             await self._alogout_locked()
+
+    async def _arevoke(self, fakts: ActiveFakts) -> None:
+        """Tell the server the session is over, where it can be told. Never raises."""
+        auth = fakts.auth
+        if not auth.revocation_endpoint or not auth.refresh_token:
+            return
+        try:
+            await oauth2.arevoke(
+                auth.revocation_endpoint,
+                client_id=auth.client_id,
+                refresh_token=auth.refresh_token,
+                ssl_context=self.ssl_context,
+                allow_insecure_transport=self.allow_insecure_transport,
+            )
+        except Exception as e:  # noqa: BLE001 -- a logout must still forget the session
+            logger.warning(
+                "Could not revoke the session at %s (%s); it is forgotten here only.",
+                auth.revocation_endpoint,
+                e,
+            )
 
     async def _alogout_locked(self) -> None:
         """Drop every trace of the session. Callers hold the relevant locks.

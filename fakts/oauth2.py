@@ -369,6 +369,26 @@ async def arefresh(
     )
 
 
+async def arevoke(
+    revocation_endpoint: str,
+    *,
+    client_id: str,
+    refresh_token: str,
+    ssl_context: ssl.SSLContext,
+    allow_insecure_transport: bool = False,
+) -> None:
+    """Revoke a session (RFC 7009): its refresh token stops renewing at once.
+
+    The access token already issued is a signed JWT and ages out by itself.
+    """
+    await apost_form(
+        revocation_endpoint,
+        {"token": refresh_token, "token_type_hint": "refresh_token", "client_id": client_id},
+        ssl_context=ssl_context,
+        allow_insecure_transport=allow_insecure_transport,
+    )
+
+
 def resolve_expiry(expires_in: int | None, skew: int, now: float | None = None) -> float | None:
     """Turn ``expires_in`` into an absolute timestamp.
 
@@ -407,6 +427,7 @@ def merge_token_response(
     report_endpoint: str | None,
     skew: int,
     fallback_client_id: str | None = None,
+    revocation_endpoint: str | None = None,
 ) -> ActiveFakts:
     """Build a *new* :class:`ActiveFakts` from a token response.
 
@@ -444,6 +465,7 @@ def merge_token_response(
         client_id=client_id,
         token_endpoint=token_endpoint,
         report_endpoint=report_endpoint,
+        revocation_endpoint=revocation_endpoint,
         scopes=response.scopes or (previous.auth.scopes if previous else []),
         refresh_token=refresh_token,
         access_token=response.access_token,

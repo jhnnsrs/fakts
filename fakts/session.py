@@ -315,6 +315,7 @@ class TokenSession:
             response,
             token_endpoint=previous.auth.token_endpoint,
             report_endpoint=previous.auth.report_endpoint,
+            revocation_endpoint=previous.auth.revocation_endpoint,
             skew=oauth2.TOKEN_EXPIRY_SKEW,
             fallback_client_id=previous.auth.client_id,
         )

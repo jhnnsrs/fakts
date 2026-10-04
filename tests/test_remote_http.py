@@ -724,3 +724,70 @@ async def test_a_grant_without_a_token_endpoint_fails_before_authorizing() -> No
     with pytest.raises(RemoteGrantError, match="no token_endpoint"):
         await grant.aload()
     assert not MustNotRun.called
+
+
+# --------------------------------------------------------------------------- #
+# Logout revokes
+# --------------------------------------------------------------------------- #
+
+
+async def test_logout_revokes_the_session_where_the_server_can(local_server, tmp_path) -> None:
+    """A logout that only forgot the session would leave its refresh token usable."""
+    from fakts import Fakts
+    from fakts.cache.file import FileCache
+
+    from .helpers import make_fakts_value
+    from .test_concurrency import SlowGrant
+
+    revoked: list[dict[str, str]] = []
+
+    async def revoke(request: web.Request) -> web.Response:
+        revoked.append(dict(await request.post()))
+        return web.json_response({})
+
+    base_url = await local_server({"/o/revoke/": revoke})
+    session = make_fakts_value()
+    session.auth.revocation_endpoint = f"{base_url}o/revoke/"
+    cache_file = tmp_path / "cache.json"
+    fakts = Fakts(
+        grant=SlowGrant(fakts=session, delay=0),
+        cache=FileCache(cache_file=str(cache_file), hash="static"),
+        manifest=make_manifest(),
+    )
+
+    async with fakts:
+        await fakts.aload()
+        await fakts.alogout()
+
+    assert revoked == [
+        {
+            "token": "test_refresh_token",
+            "token_type_hint": "refresh_token",
+            "client_id": "test_client_id",
+        }
+    ]
+    assert not cache_file.exists()
+
+
+async def test_logout_still_forgets_when_the_server_cannot_be_reached(tmp_path) -> None:
+    from fakts import Fakts
+    from fakts.cache.file import FileCache
+
+    from .helpers import make_fakts_value
+    from .test_concurrency import SlowGrant
+
+    session = make_fakts_value()
+    session.auth.revocation_endpoint = "http://127.0.0.1:1/o/revoke/"
+    cache_file = tmp_path / "cache.json"
+    fakts = Fakts(
+        grant=SlowGrant(fakts=session, delay=0),
+        cache=FileCache(cache_file=str(cache_file), hash="static"),
+        manifest=make_manifest(),
+    )
+
+    async with fakts:
+        await fakts.aload()
+        await fakts.alogout()
+
+    assert not cache_file.exists()
+    assert fakts.loaded_fakts is None
