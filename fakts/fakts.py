@@ -293,7 +293,7 @@ class Fakts(KoiledModel):
                 ssl_context=self.ssl_context,
                 allow_insecure_transport=self.allow_insecure_transport,
             )
-        except Exception as e:  # noqa: BLE001 -- a logout must still forget the session
+        except Exception as e:  # a logout must still forget the session
             logger.warning(
                 "Could not revoke the session at %s (%s); it is forgotten here only.",
                 auth.revocation_endpoint,
