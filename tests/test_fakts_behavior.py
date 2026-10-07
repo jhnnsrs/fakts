@@ -546,7 +546,11 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
         return True
 
     monkeypatch.setattr(FaktsClass, "_achallenge_alias", challenge)
-    fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
+    fakts = Fakts(
+        grant=CountingGrant(fakts=make_fakts_value()),
+        manifest=make_manifest(),
+        alias_retry_after=0,
+    )
 
     async with fakts:
         with pytest.raises(CompositionError):

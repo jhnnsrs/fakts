@@ -22,7 +22,15 @@ from pydantic import Field, PrivateAttr
 from fakts import oauth2
 from fakts.aliases import AliasResolver
 from fakts.cache.nocache import NoCache
-from fakts.errors import AliasNotFoundError, CompositionError, FaktsError, NotEnteredError
+from fakts.errors import (
+    AliasNotFoundError,
+    ChallengeSignatureError,
+    ChallengeStatusError,
+    ChallengeUnsignedError,
+    CompositionError,
+    NotEnteredError,
+    UnsupportedChallengeKeyError,
+)
 from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
@@ -113,6 +121,18 @@ class Fakts(KoiledModel):
     alias_challenge_timeout: float = 3
     """Timeout (in seconds) for a single alias challenge request"""
 
+    alias_head_start: float = 0.3
+    """How long (in seconds) a service's first alias -- the one that worked last
+    time -- is challenged alone, before the others are challenged alongside it.
+    If it answers within that, nothing else is asked. It is also how long a
+    directly reachable alias has before the mesh node is started for a service
+    last reached over the mesh."""
+
+    alias_retry_after: float = 5
+    """How long (in seconds) a service that could not be reached is taken to be
+    down: lookups within it fail at once with the same error instead of each
+    challenging its aliases again. ``force_refresh`` asks anyway."""
+
     reauth_policy: ReauthPolicy = ReauthPolicy.ON_LOGIN
     """When automatic token renewal is allowed to fall back to running the
     grant interactively. The default keeps browsers out of the token path;
@@ -132,7 +152,8 @@ class Fakts(KoiledModel):
     node can join. ``MeshOptions(auto=True)`` (the builders' default) does the
     same but stays quiet when the bindings or a key are missing.
     ``MeshProxy(url=...)`` goes through a proxy that is already running.
-    Without any, mesh aliases are skipped."""
+    Without any, mesh aliases are skipped. With ``force=True`` on either, the
+    mesh is the only way taken: aliases that are not on it are not tried."""
 
     _state: SessionState | None = PrivateAttr(default=None)
     _session: TokenSession | None = PrivateAttr(default=None)
@@ -372,12 +393,14 @@ class Fakts(KoiledModel):
         ``proxy`` is the HTTP proxy to challenge through (the mesh proxy,
         for mesh aliases); by default the alias is challenged directly.
 
-        Returns True if the challenge passed, raises otherwise.
+        Returns True if the challenge passed, raises otherwise: a
+        :class:`~fakts.errors.ChallengeError` if the host answered but not
+        as the service, whatever the connection raised if it did not answer.
         """
         if challenge_key is not None and challenge_key.kind != "ed25519":
             # Fail closed: the instance pins an identity key precisely so that a
             # plain 200 is not enough. Downgrading to it would accept anyone.
-            raise FaktsError(
+            raise UnsupportedChallengeKeyError(
                 f"The instance behind alias '{alias.id}' pins a challenge key of kind "
                 f"'{challenge_key.kind}', which this fakts cannot verify. Upgrade fakts."
             )
@@ -404,10 +427,12 @@ class Fakts(KoiledModel):
         ):
             if resp.status != 200:
                 body = await resp.text()
-                raise FaktsError(
+                raise ChallengeStatusError(
                     f"Challenge of alias '{alias.id}' at {alias.challenge_path} "
                     f"answered with status code {resp.status} (expected 200). "
-                    f"Response body: {truncate(body) or '<empty>'}"
+                    f"Response body: {truncate(body) or '<empty>'}",
+                    status=resp.status,
+                    body=truncate(body),
                 )
 
             if challenge_key is not None and nonce is not None:
@@ -416,7 +441,7 @@ class Fakts(KoiledModel):
                     signature = data["signature"]
                 except Exception as err:
                     body = await resp.text()
-                    raise FaktsError(
+                    raise ChallengeUnsignedError(
                         f"The instance pins a challenge key, but the challenge of "
                         f"alias '{alias.id}' at {alias.challenge_path} did not "
                         f"answer with a signature. "
@@ -424,7 +449,7 @@ class Fakts(KoiledModel):
                     ) from err
 
                 if not verify_challenge_signature(challenge_key, nonce, signature):
-                    raise FaktsError(
+                    raise ChallengeSignatureError(
                         f"The challenge of alias '{alias.id}' at "
                         f"{alias.challenge_path} answered with an invalid "
                         f"signature: the host does not hold the service's "
@@ -442,10 +467,13 @@ class Fakts(KoiledModel):
         """Refresh all aliases (async)
 
         Resolves every requirement of the manifest to a working alias by
-        challenging the instances' aliases (concurrently across
-        requirements). The selected alias of each service is moved to the
-        front of the instance's alias list and persisted in the cache, so
-        the next session challenges the last known good alias first.
+        challenging the instances' aliases, concurrently across requirements.
+        Within one, the first alias is challenged alone for
+        ``alias_head_start``; if it has not answered by then the others are
+        challenged alongside it, and the first to pass is used. The selected
+        alias of each service is moved to the front of the instance's alias
+        list and persisted in the cache, so the next session challenges the
+        last known good alias first.
 
         Reporting is best effort: it is skipped when the endpoint does not
         advertise a report url, and errors during the report are caught
@@ -457,6 +485,8 @@ class Fakts(KoiledModel):
 
         Raises:
             CompositionError: If a required service could not be resolved.
+                Its ``failures`` say which aliases were tried and how each
+                challenge ended.
         """
         await self._state_resolver().arefresh_aliases(
             omit_challenge=omit_challenge, omit_report=omit_report
@@ -486,8 +516,16 @@ class Fakts(KoiledModel):
         Returns:
             Alias: The active alias for the given key.
 
+        A service that could not be reached is not asked again for
+        ``alias_retry_after`` seconds: lookups within it raise the same error
+        at once. After it, only that service is challenged again.
+
         Raises:
-            AliasNotFoundError: If no alias could be resolved for the key.
+            AliasNotFoundError: If no alias could be resolved for the key
+                (a :class:`~fakts.errors.ServiceUnreachableError` if an
+                instance was granted but none of its aliases answered).
+            CompositionError: If the key is a required service that could
+                not be reached.
         """
         return await self._state_resolver().aget_alias(
             fakts_key,

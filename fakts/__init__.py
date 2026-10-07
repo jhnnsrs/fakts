@@ -38,12 +38,21 @@ from arkitekt_spec.declare.wiring import Own, Require
 from .cache.file import FileCache, ensure_private_dir
 from .cache.nocache import NoCache
 from .errors import (
+    AliasAttempt,
     AliasNotFoundError,
+    AttemptOutcome,
+    ChallengeError,
+    ChallengeSignatureError,
+    ChallengeStatusError,
+    ChallengeUnsignedError,
     CompositionError,
     FaktsError,
     NeedsReauthenticationError,
     NotEnteredError,
+    ServiceFailure,
     ServiceNotGrantedError,
+    ServiceUnreachableError,
+    UnsupportedChallengeKeyError,
 )
 from .fakts import Fakts, FaktsGrant, ReauthPolicy
 from .grants import EnvGrant, GrantError, RemoteGrant
@@ -64,8 +73,14 @@ from .testing import TestingFakts, build_testing_fakts
 __all__ = [
     "ActiveFakts",
     "Alias",
+    "AliasAttempt",
     "AliasNotFoundError",
+    "AttemptOutcome",
+    "ChallengeError",
     "ChallengeKey",
+    "ChallengeSignatureError",
+    "ChallengeStatusError",
+    "ChallengeUnsignedError",
     "CompositionError",
     "EnvGrant",
     "Fakts",
@@ -87,10 +102,13 @@ __all__ = [
     "RemoteGrant",
     "Require",
     "Requirement",
+    "ServiceFailure",
     "ServiceNotGrantedError",
+    "ServiceUnreachableError",
     "TestingFakts",
     "TokenLoader",
     "TurnInfo",
+    "UnsupportedChallengeKeyError",
     "build_device_code_fakts",
     "build_redeem_fakts",
     "build_testing_fakts",

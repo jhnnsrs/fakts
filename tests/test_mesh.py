@@ -6,6 +6,7 @@ tailnet in arkirust's ``crates/mesh-py``, and by ``test_a_real_node`` below
 when a lab mesh is configured.
 """
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Any, ClassVar
@@ -16,7 +17,7 @@ from aiohttp import web
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 
 from fakts import Fakts
-from fakts.errors import CompositionError
+from fakts.errors import AttemptOutcome, CompositionError
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.models import FaktsEndpoint
 from fakts.mesh import MeshError, MeshOptions, MeshProxy, NativeNode, hostname_label
@@ -176,6 +177,42 @@ async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: Any) ->
 
 
 @pytest.mark.asyncio
+async def test_a_proxy_that_cannot_reach_the_service_is_not_the_service_answering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mesh proxy answers a peer it cannot reach with a 502 and the reason.
+    That is no answer of the service's, and the reason is what helps."""
+
+    async def handle(request: web.Request) -> web.Response:
+        return web.Response(status=502, text="100.64.0.9:8080: no peer has this address")
+
+    app = web.Application()
+    app.router.add_route("*", "/{tail:.*}", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
+
+    value = mesh_fakts()
+    value.instances["test"].aliases.pop()
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value),
+        manifest=make_manifest(),
+        mesh=MeshProxy(url=f"http://127.0.0.1:{port}"),
+    )
+    try:
+        async with fakts:
+            with pytest.raises(CompositionError) as raised:
+                await fakts.aget_alias("test", omit_report=True)
+    finally:
+        await runner.cleanup()
+    (attempt,) = raised.value.failures[0].attempts
+    assert attempt.outcome is AttemptOutcome.UNREACHABLE
+    assert "no peer has this address" in str(raised.value)
+
+
+@pytest.mark.asyncio
 async def test_mesh_aliases_are_skipped_without_the_mesh(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -208,13 +245,14 @@ class FakeNode:
         self.forwards: list[tuple] = []
 
     @staticmethod
-    async def start(statedir, hostname, control_url=None, auth_key=None, timeout=90):
+    async def start(statedir, hostname, control_url=None, auth_key=None, timeout=90, **tuning):
         FakeNode.started.append(
             {
                 "statedir": statedir,
                 "hostname": hostname,
                 "control_url": control_url,
                 "auth_key": auth_key,
+                "tuning": tuning,
             }
         )
         if auth_key is None:
@@ -304,6 +342,8 @@ async def test_fakts_runs_the_native_node(
         assert start["auth_key"] == "tskey-secret"
         assert start["control_url"] == "https://mesh.example"
         assert start["statedir"].endswith("-native")
+        # Nothing an older arkitekt-mesh would not take.
+        assert start["tuning"] == {}
 
         # The alias carries the node it is reached through.
         turn = await alias.aturn()
@@ -321,6 +361,13 @@ async def test_fakts_runs_the_native_node(
             ("100.64.0.9", 7880),
         ]
     assert node._node.closed
+
+
+@pytest.mark.asyncio
+async def test_the_tcp_buffer_reaches_the_node(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
+    options = MeshOptions(tcp_buffer=4 << 20)
+    await NativeNode.start(options, tmp_path / "n", "app", "https://mesh.example", "tskey")
+    assert FakeNode.started[0]["tuning"] == {"tcp_buffer": 4 << 20}
 
 
 @pytest.mark.asyncio
@@ -432,6 +479,216 @@ async def test_no_node_is_started_for_what_is_reachable_without_it(
 
 
 @pytest.mark.asyncio
+async def test_a_service_last_reached_over_the_mesh_does_not_wait_for_the_others(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mesh alias is first because it won last time, and the direct one
+    does not answer: the node starts after the head start, not after the
+    direct alias has timed out."""
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        if alias.id == "direct":
+            await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
+    FakeNode.proxy = "http://127.0.0.1:1"  # type: ignore[attr-defined]
+    fakts = Fakts(
+        grant=CountingGrant(fakts=keyed(mesh_fakts())),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path),
+        alias_head_start=0.01,
+        alias_challenge_timeout=30,
+    )
+    async with fakts:
+        alias = await asyncio.wait_for(fakts.aget_alias("test", omit_report=True), 5)
+    assert alias.id == "mesh" and alias.proxy == FakeNode.proxy  # type: ignore[attr-defined]
+    assert len(FakeNode.started) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_forced_mesh_is_the_only_way_taken(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direct alias answers, and would win: forced, it is not even asked,
+    and the node starts without waiting for it."""
+    asked: list[str] = []
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        asked.append(alias.id)
+        return True
+
+    value = keyed(mesh_fakts())
+    value.instances["test"].aliases.reverse()  # the direct one first
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
+    FakeNode.proxy = "http://127.0.0.1:1"  # type: ignore[attr-defined]
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path, force=True),
+        alias_head_start=30,
+    )
+    async with fakts:
+        alias = await asyncio.wait_for(fakts.aget_alias("test", omit_report=True), 5)
+        unchallenged = await fakts.aget_alias("test", omit_challenge=True, force_refresh=True)
+    assert alias.id == unchallenged.id == "mesh" and alias.proxy
+    assert asked == ["mesh"]
+    assert len(FakeNode.started) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_forced_mesh_does_not_fall_back(mesh_proxy: Any) -> None:
+    """Forced means forced: a mesh alias that does not answer is a failure,
+    whatever else would, and so is a service that lists none."""
+    proxy, _ = mesh_proxy
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        return alias.id == "direct"
+
+    value = mesh_fakts()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Fakts, "_achallenge_alias", challenge)
+        fakts = Fakts(
+            grant=CountingGrant(fakts=value),
+            manifest=make_manifest(),
+            mesh=MeshProxy(url=proxy, force=True),
+        )
+        async with fakts:
+            with pytest.raises(CompositionError) as raised:
+                await fakts.aget_alias("test", omit_report=True)
+        (failure,) = raised.value.failures
+        assert [(a.alias_id, a.outcome) for a in failure.attempts] == [
+            ("mesh", AttemptOutcome.REFUSED),
+            ("direct", AttemptOutcome.SKIPPED),
+        ]
+        assert "the mesh is forced" in str(raised.value)
+
+        value.instances["test"].aliases.pop(0)  # no mesh alias left
+        fakts = Fakts(
+            grant=CountingGrant(fakts=value),
+            manifest=make_manifest(),
+            mesh=MeshProxy(url=proxy, force=True),
+        )
+        async with fakts:
+            with pytest.raises(CompositionError, match="lists no alias on the mesh"):
+                await fakts.aget_alias("test", omit_report=True)
+
+
+@pytest.mark.asyncio
+async def test_a_node_that_just_joined_is_asked_again(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first connection through a new node waits for the peer to hear of
+    it, which can outlast one challenge: silence is not yet a no."""
+    asked = 0
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        nonlocal asked
+        asked += 1
+        if asked == 1:
+            await asyncio.Event().wait()
+        return True
+
+    value = keyed(mesh_fakts())
+    value.instances["test"].aliases.pop()
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
+    FakeNode.proxy = "http://127.0.0.1:1"  # type: ignore[attr-defined]
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path),
+        alias_challenge_timeout=0.05,
+    )
+    async with fakts:
+        assert (await fakts.aget_alias("test", omit_report=True)).id == "mesh"
+    assert asked == 2
+
+
+@pytest.mark.asyncio
+async def test_a_node_start_is_not_abandoned_when_a_direct_alias_wins(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direct alias answers while the node is still joining. Cancelling
+    the join would leave a node nobody holds, with its state directory
+    locked: it is let finish, kept, and closed with the block."""
+    asked = asyncio.Event()
+    answer = asyncio.Event()
+    joined = asyncio.Event()
+    nodes: list[FakeNode] = []
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        asked.set()
+        await answer.wait()
+        return True
+
+    async def slow_start(statedir: str, hostname: str, **kw: Any) -> FakeNode:
+        FakeNode.started.append({"statedir": statedir})
+        await joined.wait()
+        nodes.append(FakeNode(statedir, "http://127.0.0.1:1"))
+        return nodes[0]
+
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
+    monkeypatch.setattr(FakeNode, "start", staticmethod(slow_start))
+    fakts = Fakts(
+        grant=CountingGrant(fakts=keyed(mesh_fakts())),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path),
+        alias_head_start=0.01,
+        alias_challenge_timeout=30,
+    )
+    async with fakts:
+        lookup = asyncio.ensure_future(fakts.aget_alias("test", omit_report=True))
+        await asked.wait()
+        while not FakeNode.started:
+            await asyncio.sleep(0.005)
+        answer.set()
+        assert (await asyncio.wait_for(lookup, 5)).id == "direct"
+
+        route = fakts._mesh_route
+        assert route is not None and route.node is None, "the join is still under way"
+        joined.set()
+        while route.node is None:
+            await asyncio.sleep(0)
+        assert route.node._node is nodes[0]
+    assert nodes[0].closed
+    assert len(FakeNode.started) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_node_that_comes_up_after_the_block_is_closed(
+    fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    joined = asyncio.Event()
+    nodes: list[FakeNode] = []
+
+    async def slow_start(statedir: str, hostname: str, **kw: Any) -> FakeNode:
+        await joined.wait()
+        nodes.append(FakeNode(statedir, "http://127.0.0.1:1"))
+        return nodes[0]
+
+    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+        if alias.id == "direct":
+            await asyncio.sleep(0.05)
+        return True
+
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge)
+    monkeypatch.setattr(FakeNode, "start", staticmethod(slow_start))
+    fakts = Fakts(
+        grant=CountingGrant(fakts=keyed(mesh_fakts())),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path),
+        alias_head_start=0.01,
+    )
+    async with fakts:
+        assert (await fakts.aget_alias("test", omit_report=True)).id == "direct"
+        route = fakts._mesh_route
+    joined.set()
+    assert route is not None and route._start is not None
+    await route._start
+    assert nodes[0].closed and route.node is None
+
+
+@pytest.mark.asyncio
 async def test_a_running_node_keeps_the_alias_order(
     fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -449,10 +706,11 @@ async def test_a_running_node_keeps_the_alias_order(
         scopes=["openid"],
         requirements=[
             Requirement(key="only_mesh", service="mesh_service"),
-            Requirement(key="test", service="test_service"),
+            Requirement(key="test", service="test_service", optional=True),
         ],
     )
-    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge_only("only", "mesh", "direct"))
+    # Down at first, so that no alias of it is remembered as the one to ask first.
+    monkeypatch.setattr(Fakts, "_achallenge_alias", challenge_only("only"))
     fakts = Fakts(
         grant=CountingGrant(fakts=value),
         manifest=manifest,
@@ -461,6 +719,7 @@ async def test_a_running_node_keeps_the_alias_order(
     async with fakts:
         await fakts.aget_alias("only_mesh", omit_report=True)
         assert len(FakeNode.started) == 1
+        monkeypatch.setattr(Fakts, "_achallenge_alias", challenge_only("only", "mesh", "direct"))
         alias = await fakts.aget_alias("test", omit_report=True, force_refresh=True)
     assert alias.id == "mesh"
     assert len(FakeNode.started) == 1

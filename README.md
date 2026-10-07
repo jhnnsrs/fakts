@@ -146,6 +146,40 @@ persisted as the preferred one, so the next process start challenges the
 last-known-good address first. Pass `force_refresh=True` to re-resolve, or
 `omit_challenge=True` to skip probing entirely.
 
+Within one service, that last-known-good alias is asked first and alone. If
+it answers within `alias_head_start` (0.3 s) nothing else is asked; if not,
+the other aliases are challenged alongside it and the first to pass is used,
+so aliases that do not answer cost one `alias_challenge_timeout` between
+them, not one each. A mesh node is only started once the direct aliases have
+failed — or, for a service last reached over the mesh, once the head start
+has passed without one of them answering.
+
+`mesh=MeshOptions(force=True)` (or `MeshProxy(url=..., force=True)`) turns
+that around: only mesh aliases are used, the node starts at once, and a
+service without a working mesh alias is unreachable — for proving that a
+deployment works over its mesh, or where the direct addresses must not be
+used.
+
+When no alias of a service passes, the error says what was tried:
+
+```python
+try:
+    alias = await fakts.aget_alias("mikro")
+except CompositionError as e:           # a required service
+    for failure in e.failures:
+        for attempt in failure.attempts:
+            print(attempt.alias_id, attempt.url, attempt.outcome, attempt.describe())
+except ServiceUnreachableError as e:    # an optional one; e.failure
+    ...
+```
+
+Each attempt has an `AttemptOutcome` (`TIMEOUT`, `UNREACHABLE`, `TLS`,
+`BAD_STATUS`, `UNSIGNED`, `BAD_SIGNATURE`, `MESH_UNAVAILABLE`, ...); a
+signature that does not verify is also logged as a warning when another
+alias works. A service found down is not asked again for `alias_retry_after`
+(5 s): lookups within it raise the same error at once, and after it only
+that service is challenged again.
+
 ### Caching & self-healing
 
 The cache (`FileCache` by default in the builders) stores the granted

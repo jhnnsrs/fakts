@@ -20,7 +20,7 @@ dependencies = [
 rath = ["rath>=3.0"]
 crypto = ["cryptography>=42"]
 # The mesh node (arkirust's Rust client, in process) for mesh-only aliases.
-mesh = ["arkitekt-mesh>=0.1"]
+mesh = ["arkitekt-mesh>=0.3"]
 
 [project.urls]
 Homepage = "https://github.com/jhnnsrs/fakts"

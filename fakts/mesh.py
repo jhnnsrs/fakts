@@ -85,12 +85,18 @@ class MeshOptions(BaseModel):
     and when the server grants none (the user opted out, or the organization
     has no mesh) mesh aliases are skipped quietly. Without ``auto``, both of
     those are reported (as warnings, and on the aliases that needed the mesh)."""
+    force: bool = False
+    """Reach every service over the mesh, and over nothing else: aliases that
+    are not on the mesh are not even challenged, and a service that lists no
+    mesh alias (or whose mesh alias does not answer) is unreachable. For
+    proving that a deployment works over its mesh, and for networks where
+    the direct addresses answer but must not be used."""
 
     model_config = ConfigDict(frozen=True)
 
     def requests_key(self) -> bool:
         """Whether a login should ask the server for a key to join with."""
-        return not self.auto or bindings_installed()
+        return self.force or not self.auto or bindings_installed()
 
     state_root: Path | None = None
     """Where node state lives (default: ``<state dir>/arkitekt/mesh``)."""
@@ -98,6 +104,11 @@ class MeshOptions(BaseModel):
     """The node's hostname (default: ``<app identifier>-<device id>``)."""
     timeout: float = 90
     """How long joining and connecting may take, in seconds."""
+    tcp_buffer: int | None = None
+    """Bytes of buffer per connection, each way (default: the node's own,
+    1 MiB). It is the most a connection has in flight, so its throughput is at
+    most this per round trip: raise it for bulk transfers over slow, far
+    links, at that much memory per busy connection."""
 
     def resolved_state_root(self) -> Path:
         return self.state_root or _state_dir() / "arkitekt" / "mesh"
@@ -121,6 +132,12 @@ class MeshProxy(BaseModel):
     kind: Literal["proxy"] = "proxy"
     url: str
     """The proxy, e.g. ``http://localhost:1055``."""
+    force: bool = False
+    """Reach every service over the mesh, and over nothing else: aliases that
+    are not on the mesh are not even challenged, and a service that lists no
+    mesh alias (or whose mesh alias does not answer) is unreachable. For
+    proving that a deployment works over its mesh, and for networks where
+    the direct addresses answer but must not be used."""
 
 
 AUTO_MESH = MeshOptions(auto=True)
@@ -204,6 +221,8 @@ class NativeNode:
         bindings = _bindings()
         if auth_key:
             logger.info("Joining the mesh as %s", hostname)
+        # Only when set: older bindings do not take it.
+        tuning = {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
         try:
             node = await bindings.Node.start(
                 str(statedir),
@@ -211,6 +230,7 @@ class NativeNode:
                 control_url=coord_url,
                 auth_key=auth_key,
                 timeout=options.timeout,
+                **tuning,
             )
         except bindings.MeshError as e:
             raise _translate(e, bindings, statedir) from e
@@ -238,6 +258,13 @@ class NativeNode:
         self._node.close()
 
 
+SETTLE = 10.0
+"""Seconds a node that has just started may need until its peers answer."""
+
+Route = tuple[str | None, "NativeNode | None", "MeshError | None"]
+"""The proxy, the node that runs it, and why there is neither."""
+
+
 class MeshRoute:
     """How this process reaches mesh aliases, for one entered Fakts.
 
@@ -251,14 +278,25 @@ class MeshRoute:
     def __init__(self, mesh: MeshOptions | MeshProxy | None, manifest: Manifest) -> None:
         self.options = mesh if isinstance(mesh, MeshOptions) else None
         self.proxy = mesh.url if isinstance(mesh, MeshProxy) else None
+        self.forced = mesh is not None and mesh.force
+        """Only mesh aliases are used (``force`` on the mesh configuration)."""
         self.manifest = manifest
         self.node: NativeNode | None = None
         self.error: MeshError | None = None
-        self._starting = asyncio.Lock()
+        self.started_at: float | None = None
+        """When the node came up (``loop.time()``): its first connections may
+        still be waiting for the peers to learn of it."""
+        self._start: asyncio.Task[Route] | None = None
+        self._closed = False
 
     @property
     def enabled(self) -> bool:
         return self.proxy is not None or self.options is not None
+
+    def settling(self, now: float) -> bool:
+        """Whether the node came up less than :data:`SETTLE` seconds before
+        ``now`` (``loop.time()``): its peers may not know of it yet."""
+        return self.started_at is not None and now - self.started_at < SETTLE
 
     def ready(self) -> tuple[str, NativeNode | None] | None:
         """The route if it costs nothing to use: a proxy, or a node already up."""
@@ -268,9 +306,7 @@ class MeshRoute:
             return self.node.proxy_url, self.node
         return None
 
-    async def aroute(
-        self, fakts: ActiveFakts
-    ) -> tuple[str | None, NativeNode | None, MeshError | None]:
+    async def aroute(self, fakts: ActiveFakts) -> Route:
         """The HTTP proxy mesh aliases are reached through, the node that runs
         it, and why there is none: all ``None`` if the mesh is off, no node for
         a MeshProxy. Starts the node on the first call; single-flight.
@@ -278,28 +314,47 @@ class MeshRoute:
         A node that cannot start is not fatal: aliases that do not need the
         mesh still resolve, and the failure is remembered (and reported on the
         mesh aliases) instead of being retried on every lookup.
+
+        The start belongs to the route, not to the caller: cancelling this
+        call leaves it running. A node whose start was abandoned half way
+        would keep its state directory locked, and every later start in this
+        process would find it taken.
         """
         if (route := self.ready()) is not None:
             return route[0], route[1], None
         if self.options is None:
             return None, None, None
-        async with self._starting:
-            if self.node is not None:
-                return self.node.proxy_url, self.node, None
-            if self.error is not None:
-                return None, None, self.error
-            try:
-                self.node = await self._anode(fakts)
-            except MeshError as e:
-                quiet = self.options.auto and e.code in (None, "needs_login")
-                logger.log(
-                    logging.DEBUG if quiet else logging.WARNING,
-                    "The mesh node could not start: %s",
-                    e,
-                )
-                self.error = e
-                return None, None, e
-            return self.node.proxy_url, self.node, None
+        if self._start is None:
+            self._start = asyncio.ensure_future(self._astart(fakts))
+        return await asyncio.shield(self._start)
+
+    async def _astart(self, fakts: ActiveFakts) -> Route:
+        assert self.options is not None
+        try:
+            node = await self._anode(fakts)
+        except MeshError as e:
+            quiet = self.options.auto and e.code in (None, "needs_login")
+            logger.log(
+                logging.DEBUG if quiet else logging.WARNING,
+                "The mesh node could not start: %s",
+                e,
+            )
+            self.error = e
+            return None, None, e
+        except Exception as e:
+            # Remembered like any other: this start is the only one there
+            # will be, and every later lookup gets its outcome.
+            logger.warning("The mesh node could not start", exc_info=True)
+            self.error = MeshError(f"The mesh node could not start: {type(e).__name__}: {e}")
+            return None, None, self.error
+        if self._closed:
+            # The block was left while the node was still starting.
+            node.close()
+            self.error = MeshError("The mesh node was closed while it was starting")
+            return None, None, self.error
+        self.node = node
+        self.started_at = asyncio.get_running_loop().time()
+        return node.proxy_url, node, None
 
     async def _anode(self, fakts: ActiveFakts) -> NativeNode:
         """Start the mesh node; it lives until the context exits. Its state
@@ -343,7 +398,8 @@ class MeshRoute:
         )
 
     def close(self) -> None:
-        """Stop the node, if one was started."""
+        """Stop the node, if one was started (or as soon as it has)."""
+        self._closed = True
         if self.node is not None:
             node, self.node = self.node, None
             node.close()

@@ -39,7 +39,7 @@ def test_device_code_grant_device_id(deployed_infra: Deployment):
 
         await deployed_infra.arun(
             "lok",
-            f"uv run python manage.py validatecode --code {challenge.user_code} --user demo --org demo --hub localhost",
+            f"python manage.py validatecode --code {challenge.user_code} --user demo --org demo --hub localhost",
         )
 
     fakts = Fakts(
