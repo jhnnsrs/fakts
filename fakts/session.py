@@ -324,7 +324,9 @@ class TokenSession:
         credential on disk stayed revoked -- a breakage that surfaces at the
         next restart, far from its cause.
         """
-        return await self._acommit_parsed(previous, oauth2.parse_token_response(data, previous.auth.token_endpoint))
+        return await self._acommit_parsed(
+            previous, oauth2.parse_token_response(data, previous.auth.token_endpoint)
+        )
 
     async def _acommit_parsed(self, previous: ActiveFakts, response: oauth2.TokenResponse) -> str:
         state = self._state
@@ -356,7 +358,9 @@ class TokenSession:
             )
         return state.loaded_token
 
-    async def _aawait_untried_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
+    async def _aawait_untried_credentials(
+        self, tried: set[tuple[str, str | None]]
+    ) -> ActiveFakts | None:
         """Wait briefly for a sibling's rotation to land, then adopt it.
 
         Terminates for the right reason: we only ever accept a credential we
@@ -379,7 +383,9 @@ class TokenSession:
             await asyncio.sleep(REFRESH_RETRY_DELAY * (1 + random.random()))
         return None
 
-    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
+    async def _aadopt_cached_credentials(
+        self, tried: set[tuple[str, str | None]]
+    ) -> ActiveFakts | None:
         """Adopt the cached credential if it is one we have not tried.
 
         The key is the whole ``(client_id, refresh_token)`` pair, not the token

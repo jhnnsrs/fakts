@@ -51,17 +51,31 @@ def _body(n: int) -> dict:
         "expires_in": 3600,
         "token_type": "Bearer",
         "client_id": "keyed-client",
-        "self": {"deployment_name": "test", "alias": {"id": "self", "host": "localhost", "port": 8000, "path": "lok"}},
+        "self": {
+            "deployment_name": "test",
+            "alias": {"id": "self", "host": "localhost", "port": 8000, "path": "lok"},
+        },
         "instances": {},
     }
 
 
 def _fakts(base_url: str) -> Fakts:
-    endpoint = FaktsEndpoint(base_url=base_url, name="Test", protocol_version="2", issuer=base_url, token_endpoint=f"{base_url}o/token/")
+    endpoint = FaktsEndpoint(
+        base_url=base_url,
+        name="Test",
+        protocol_version="2",
+        issuer=base_url,
+        token_endpoint=f"{base_url}o/token/",
+    )
     return Fakts(
         grant=RemoteGrant(
             discovery=StaticDiscovery(endpoint=endpoint),
-            authorizer=MandateKeyAuthorizer(manifest=make_manifest(), key=SecretStr("k" * 40), request_auth_key=True, allow_insecure_transport=True),
+            authorizer=MandateKeyAuthorizer(
+                manifest=make_manifest(),
+                key=SecretStr("k" * 40),
+                request_auth_key=True,
+                allow_insecure_transport=True,
+            ),
         ),
         cache=MemoryCache(),
         manifest=make_manifest(),
@@ -99,7 +113,13 @@ async def test_a_revoked_key_needs_a_new_one(token_endpoint) -> None:
         calls["n"] += 1
         if calls["n"] == 1:
             return web.json_response(_body(1))
-        return web.json_response({"error": "invalid_grant", "error_description": "This mandate has been revoked or has expired."}, status=400)
+        return web.json_response(
+            {
+                "error": "invalid_grant",
+                "error_description": "This mandate has been revoked or has expired.",
+            },
+            status=400,
+        )
 
     fakts = _fakts(await token_endpoint(handler))
     async with fakts:

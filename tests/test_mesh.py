@@ -859,9 +859,9 @@ def test_the_builders_use_the_mesh_when_it_is_available(
     assert fakts.mesh == MeshOptions(auto=True)
     assert isinstance(fakts.grant.authorizer, DeviceCodeAuthorizer)  # type: ignore[attr-defined]
     assert fakts.grant.authorizer.request_auth_key  # type: ignore[attr-defined]
-    assert build_mandate_key_fakts("http://localhost:8000", make_manifest(), "t").mesh == MeshOptions(
-        auto=True
-    )
+    assert build_mandate_key_fakts(
+        "http://localhost:8000", make_manifest(), "t"
+    ).mesh == MeshOptions(auto=True)
 
     monkeypatch.setitem(sys.modules, "arkitekt_mesh", None)
     fakts = build_device_code_fakts("http://localhost:8000", make_manifest(), no_cache=True)

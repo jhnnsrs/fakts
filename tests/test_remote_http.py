@@ -422,7 +422,12 @@ async def test_renewing_never_asks_for_a_mesh_key(local_server) -> None:
         return web.json_response(KEY_TOKEN_BODY)
 
     base_url = await local_server({"/o/token/": token})
-    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key=SecretStr("k"), request_auth_key=True, allow_insecure_transport=True)
+    authorizer = MandateKeyAuthorizer(
+        manifest=make_manifest(),
+        key=SecretStr("k"),
+        request_auth_key=True,
+        allow_insecure_transport=True,
+    )
 
     response = await authorizer.arenew(f"{base_url}o/token/")
 
@@ -431,11 +436,19 @@ async def test_renewing_never_asks_for_a_mesh_key(local_server) -> None:
 
 async def test_a_refused_mandate_key_needs_a_new_one(local_server) -> None:
     async def token(request: web.Request) -> web.Response:
-        return web.json_response({"error": "invalid_grant", "error_description": "This mandate has been revoked or has expired."}, status=400)
+        return web.json_response(
+            {
+                "error": "invalid_grant",
+                "error_description": "This mandate has been revoked or has expired.",
+            },
+            status=400,
+        )
 
     base_url = await local_server({"/o/token/": token})
 
-    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key=SecretStr("revoked"), allow_insecure_transport=True)
+    authorizer = MandateKeyAuthorizer(
+        manifest=make_manifest(), key=SecretStr("revoked"), allow_insecure_transport=True
+    )
 
     with pytest.raises(NeedsReauthenticationError, match="revoked"):
         await authorizer.aauthorize(endpoint_for(base_url))

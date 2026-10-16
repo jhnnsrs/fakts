@@ -78,7 +78,9 @@ class MandateKeyAuthorizer(SSLContextModel):
     async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
         if not endpoint.token_endpoint:
             raise RetrieveError(f"{endpoint.name} advertised no token_endpoint to log in at.")
-        return await self._alogin(str(endpoint.token_endpoint), request_auth_key=self.request_auth_key)
+        return await self._alogin(
+            str(endpoint.token_endpoint), request_auth_key=self.request_auth_key
+        )
 
     async def arenew(self, token_endpoint: str) -> TokenResponse:
         """Log in again for a fresh access token (and a freshly rendered envelope)."""
