@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 import pytest
 import pytest_asyncio
 from aiohttp import web
+from pydantic import SecretStr
 
 from fakts import Fakts
 from fakts.errors import NeedsReauthenticationError
@@ -60,7 +61,7 @@ def _fakts(base_url: str) -> Fakts:
     return Fakts(
         grant=RemoteGrant(
             discovery=StaticDiscovery(endpoint=endpoint),
-            authorizer=MandateKeyAuthorizer(manifest=make_manifest(), key="k" * 40, request_auth_key=True, allow_insecure_transport=True),
+            authorizer=MandateKeyAuthorizer(manifest=make_manifest(), key=SecretStr("k" * 40), request_auth_key=True, allow_insecure_transport=True),
         ),
         cache=MemoryCache(),
         manifest=make_manifest(),

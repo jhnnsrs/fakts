@@ -2,6 +2,7 @@ import ssl
 from hashlib import sha256
 
 import certifi
+from pydantic import SecretStr
 
 from fakts.cache.file import FileCache
 from fakts.cache.nocache import NoCache
@@ -230,7 +231,7 @@ def build_mandate_key_fakts(
         manifest,
         MandateKeyAuthorizer(
             manifest=manifest,
-            key=key,
+            key=SecretStr(key),
             requested_client_kind=requested_client_kind,
             requested_client_role=requested_client_role,
             request_auth_key=request_auth_key,
