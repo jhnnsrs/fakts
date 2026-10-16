@@ -95,13 +95,13 @@ A `RemoteGrant` is composed of two pluggable parts:
 | Role | Question it answers | Implementations |
 |---|---|---|
 | **Discovery** | *Where is the coordination server?* | `WellKnownDiscovery` (`/.well-known/fakts`), `StaticDiscovery` |
-| **Authorizer** | *How do we get a session?* | `DeviceCodeAuthorizer` (browser approval), `RedeemAuthorizer` (pre-issued provisioning token, headless), `StaticAuthorizer` (a credential from an earlier session) |
+| **Authorizer** | *How do we get a session?* | `DeviceCodeAuthorizer` (browser approval), `MandateKeyAuthorizer` (a standing mandate key, headless), `StaticAuthorizer` (a credential from an earlier session) |
 
 Protocol v1 had a third role: a *claimer* that traded an approval artifact
 for the configuration. It is gone because the OAuth token endpoint returns
 both at once — there is nothing left to trade.
 
-The builders (`build_device_code_fakts`, `build_redeem_fakts`) wire the
+The builders (`build_device_code_fakts`, `build_mandate_key_fakts`) wire the
 common combinations for you; compose `RemoteGrant` yourself for anything
 exotic. The exact HTTP exchanges are specified in
 [The Fakts protocol](#the-fakts-protocol) below.
@@ -310,7 +310,7 @@ to grant":
 }
 ```
 
-The manifest is a **nested object** here. (The redeem grant in §5 sends the
+The manifest is a **nested object** here. (The mandate-key grant in §5 sends the
 same manifest as a JSON *string* in a form field — the encodings genuinely
 differ, so do not share a code path between them.)
 
@@ -403,18 +403,22 @@ bare refresh token is not a usable credential.
 predecessor immediately. This has consequences that are easy to get wrong,
 so they are stated as obligations below.
 
-### 5. Redeem — the headless grant
+### 5. Mandate key — the headless grant
 
-For CI runners and deployed containers, where no human is available. An
-extension grant at the same token endpoint:
+For CI runners, deployed containers and the apps a hub or a deployer runs,
+where no human is available. A mandate is an authority someone granted in
+advance; whoever holds its key logs the app in as them. An extension grant at
+the same token endpoint:
 
 ```
-grant_type=urn:fakts:grant-type:redeem&redeem_token=...&manifest=<json string>
+grant_type=urn:fakts:grant-type:mandate-key&key=...&manifest=<json string>
+  [&requested_client_kind=development|desktop|mobile][&requested_client_role=interface|agent][&request_auth_key=true]
 ```
 
 Note the URN has no `params:oauth` segment — it is a fakts URN. Returns the
-same combined response as §3, including a refresh token. It never returns a
-client secret; v2 issues none.
+same envelope as §3 but **no refresh token**: the client logs in again with
+the key whenever its access token runs out, and the server checks the mandate
+every time, so a revoked key stops working within one access-token lifetime.
 
 ### 6. Report — `POST {base_url}report/`
 
@@ -472,7 +476,7 @@ a token that is used but not persisted is simply lost.
 **Clients MUST NOT re-run an interactive grant automatically.** Approving an
 app again causes the server to replace its client registration and delete the
 old one — which severs every other process sharing that credential. Automatic
-recovery is only safe for non-interactive grants (redeem).
+recovery is only safe for non-interactive grants (a mandate key).
 
 **Multi-process deployments SHOULD share one cache** and let the loser of a
 rotation race adopt the winner's credential, rather than each re-authorizing.
@@ -505,7 +509,7 @@ container, or hardcoded in a test) the static path is still there: see
 **`RemoteGrant` is two pluggable parts, not one.** The remote flow could be a
 single object, but its two questions vary independently: *where is the server*
 (well-known URL, static) and *how do we get a session*
-(device-code browser flow, pre-issued redeem token, an existing credential).
+(device-code browser flow, a mandate key, an existing credential).
 Splitting Discovery / Authorizer into runtime-checkable protocols lets you
 compose new combinations — and implement a part in your own code — without
 touching the orchestration. See
@@ -561,17 +565,18 @@ so both surfaces share a single implementation and a single event loop.
 
 ## Recipes
 
-### Headless / CI: redeem grant
+### Headless / CI: mandate key
 
-No browser available? Have the server issue a redeem token and use:
+No browser available? Have someone issue a mandate key (kontrol, a hub, a
+deployer, the deployment config) and use:
 
 ```python
-from fakts import build_redeem_fakts
+from fakts import build_mandate_key_fakts
 
-fakts = build_redeem_fakts(
+fakts = build_mandate_key_fakts(
     url="http://localhost:8000",
     manifest=manifest,
-    token="my-redeem-token",
+    key="my-mandate-key",
 )
 ```
 
@@ -673,9 +678,9 @@ If the node cannot start or join, only mesh aliases are affected: their
 resolution error names why, every non-mesh alias keeps resolving, and fakts
 does not retry the join on every call.
 
-`build_redeem_fakts` takes `mesh` too, but the redeem grant cannot ask for a
-join key: a node only comes up if it already joined on this machine, or use a
-`MeshProxy`.
+`build_mandate_key_fakts` takes `mesh` too, and `request_auth_key=True` asks for
+a join key on the first login (the mandate must allow it); otherwise a node only
+comes up if it already joined on this machine, or use a `MeshProxy`.
 
 ## Error handling
 
@@ -708,7 +713,7 @@ code and (truncated) response body where applicable:
 | `alias_challenge_timeout` | `3` | Seconds per alias challenge probe |
 | `delete_on_exit` | `False` | Reset the cache and loaded state on exit |
 
-`build_device_code_fakts` and `build_redeem_fakts` set most of these for you.
+`build_device_code_fakts` and `build_mandate_key_fakts` set most of these for you.
 Beyond `url` and `manifest` they take `cache_file`, `no_cache`, `ssl_context`,
 `allow_insecure_transport` and `mesh`; the device-code builder also takes
 `headless`, `timeout`, `requested_client_kind` and `requested_client_role`.

@@ -124,8 +124,9 @@ memberships:
     # the whole membership.
     roles: ["admin"]
 
-redeem_tokens:
-  - token: Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI
+mandate_keys:
+  - name: integration
+    key: Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI
     user: demo
     organization: demo
     hub: localhost

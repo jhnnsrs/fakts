@@ -30,7 +30,7 @@ class EnvGrant(BaseModel):
 
     Note that refresh tokens rotate: the injected one is spent the first
     time it is used, and the replacement lives only in the cache. Give such
-    a deployment a writable cache path, or provision it with a redeem token
+    a deployment a writable cache path, or give it a mandate key
     instead so it can re-authorize itself unattended.
 
     Example:

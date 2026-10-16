@@ -12,7 +12,7 @@ from fakts.grants.remote.authorizers.device_code import (
     ClientRole,
     DeviceCodeAuthorizer,
 )
-from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.mandate_key import HeadlessClientKind, MandateKeyAuthorizer
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts.mesh import AUTO_MESH, MeshOptions, MeshProxy
 from fakts.models import Manifest
@@ -45,7 +45,7 @@ def _build_cache(url: str, manifest: Manifest, cache_file: str, no_cache: bool) 
 def _build_remote_fakts(
     url: str,
     manifest: Manifest,
-    authorizer: DeviceCodeAuthorizer | RedeemAuthorizer,
+    authorizer: DeviceCodeAuthorizer | MandateKeyAuthorizer,
     *,
     context: ssl.SSLContext,
     cache_file: str,
@@ -176,44 +176,48 @@ def build_device_code_fakts(
     )
 
 
-def build_redeem_fakts(
+def build_mandate_key_fakts(
     url: str,
     manifest: Manifest,
-    token: str,
+    key: str,
     *,
     cache_file: str = ".fakts_cache.json",
     no_cache: bool = False,
     allow_insecure_transport: bool = False,
     ssl_context: ssl.SSLContext | None = None,
+    requested_client_kind: HeadlessClientKind = HeadlessClientKind.DEVELOPMENT,
+    requested_client_role: ClientRole = ClientRole.INTERFACE,
+    request_auth_key: bool = False,
     mesh: MeshOptions | MeshProxy | None = AUTO_MESH,
 ) -> Fakts:
-    """Build a ready-to-use Fakts for the redeem flow (headless/CI).
+    """Build a ready-to-use Fakts that logs in with a mandate key (headless).
 
-    A redeem token is issued by the Fakts server beforehand and lets this
-    app register itself without any user interaction — useful in CI
-    pipelines, scripts and other headless environments.
+    A mandate key is a standing credential someone with the right to grant it
+    handed out in advance (kontrol, a hub, a deployer, the deployment config);
+    it logs this app in as them without any user interaction. There is no
+    refresh token: the client logs in again whenever its access token runs out,
+    so a revoked key stops working within one access-token lifetime.
 
     Parameters
     ----------
     url : str
         The url of the Fakts server.
     manifest : Manifest
-        The manifest of this app.
-    token : str
-        The redeem token issued by the server (single-use).
+        The manifest of this app. It must be covered by the mandate's pin.
+    key : str
+        The mandate key (``FAKTS_MANDATE_KEY``).
     cache_file : str, optional
         Where to cache the granted configuration, by default
-        ".fakts_cache.json". Relative paths are resolved against the
-        current working directory — use an absolute, per-app path if your
-        app is started from varying directories.
+        ".fakts_cache.json".
     no_cache : bool, optional
         Disable caching entirely, by default False.
+    requested_client_kind, requested_client_role : optional
+        What the client is (development, desktop or mobile) and does.
+    request_auth_key : bool, optional
+        Ask for a mesh key on the first login; the mandate must allow it.
     mesh : MeshOptions | MeshProxy | None, optional
         Reach mesh-only aliases (default ``MeshOptions(auto=True)``, see
-        :func:`build_device_code_fakts`). The redeem grant cannot ask for a
-        mesh key (only the device-code flow can), so a node only comes up if
-        it already joined on this machine; ``MeshProxy(url=...)`` goes
-        through a proxy that is running; ``None`` is off.
+        :func:`build_device_code_fakts`).
 
     Returns
     -------
@@ -224,9 +228,12 @@ def build_redeem_fakts(
     return _build_remote_fakts(
         url,
         manifest,
-        RedeemAuthorizer(
+        MandateKeyAuthorizer(
             manifest=manifest,
-            token=token,
+            key=key,
+            requested_client_kind=requested_client_kind,
+            requested_client_role=requested_client_role,
+            request_auth_key=request_auth_key,
             allow_insecure_transport=allow_insecure_transport,
             ssl_context=context,
         ),

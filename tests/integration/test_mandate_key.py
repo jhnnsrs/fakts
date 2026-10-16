@@ -5,7 +5,7 @@ from dokker import Deployment
 
 from fakts import Fakts
 from fakts.cache.nocache import NoCache
-from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.mandate_key import MandateKeyAuthorizer
 from fakts.grants.remote.base import RemoteGrant
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts.models import Manifest, Requirement
@@ -14,7 +14,7 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
 @pytest.mark.integration
-def test_redeem_code_grant(deployed_infra: Deployment):
+def test_mandate_key_grant(deployed_infra: Deployment):
     port_for_lok = deployed_infra.spec.find_service("lok").get_port_for_internal(80).published
 
     manifest = Manifest(
@@ -29,8 +29,8 @@ def test_redeem_code_grant(deployed_infra: Deployment):
             discovery=WellKnownDiscovery(
                 url=f"http://localhost:{port_for_lok}",
             ),
-            authorizer=RedeemAuthorizer(
-                token="Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI",
+            authorizer=MandateKeyAuthorizer(
+                key="Y22joLbkjm4vtXMj_T4FD3U99Mb71pTFnUe-8KToAQI",
                 manifest=manifest,
             ),
         ),
@@ -45,12 +45,18 @@ def test_redeem_code_grant(deployed_infra: Deployment):
         )
         assert alias.challenge_path == f"http://localhost:{port_for_rekuest}/ht"
 
-        # The redeem flow should have claimed a fully-populated config
-        # end to end: a usable auth block and the required instance.
+        # The mandate key logged in end to end: a usable auth block (no refresh
+        # token, the key is the standing credential) and the required instance.
         loaded = fakts.loaded_fakts
         assert loaded is not None
         assert loaded.auth.client_id
         assert loaded.auth.token_endpoint
-        assert loaded.auth.refresh_token
+        assert loaded.auth.refresh_token is None
         assert "rekuest" in loaded.instances
         assert loaded.instances["rekuest"].service == "live.arkitekt.rekuest"
+
+        # Renewing logs in again with the key and is the same client.
+        first_token = fakts.get_token()
+        renewed = fakts.refresh_token(first_token)
+        assert renewed
+        assert fakts.loaded_fakts.auth.client_id == loaded.auth.client_id

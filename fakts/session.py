@@ -19,6 +19,7 @@ from fakts import oauth2
 from fakts.cache.nocache import NoCache
 from fakts.errors import FaktsError, NeedsReauthenticationError
 from fakts.models import ActiveFakts, AuthFakt
+from fakts.protocols import RenewableGrant
 from fakts.state import SessionState
 
 if TYPE_CHECKING:
@@ -201,7 +202,11 @@ class TokenSession:
             if self.token_is_valid() and state.loaded_token:
                 return state.loaded_token
 
-        tried: set[tuple[str, str]] = set()
+        if fakts.auth.refresh_token is None:
+            # A mandate-key session: no chain to rotate, the grant logs in again.
+            return await self._arenew_without_refresh(fakts, interactive)
+
+        tried: set[tuple[str, str | None]] = set()
         # What we came in holding. Every await below can yield to a concurrent
         # aload(reload=True), which replaces loaded_fakts wholesale; comparing
         # against this is how we notice that happened.
@@ -274,6 +279,14 @@ class TokenSession:
 
         return await self.areauthenticate(reason="exhausted", interactive=interactive)
 
+    async def _arenew_without_refresh(self, fakts: ActiveFakts, interactive: bool) -> str:
+        """Renew a session that has no refresh token by asking its grant to log in again."""
+        grant = self._state.grant
+        response = await grant.arenew(fakts) if isinstance(grant, RenewableGrant) else None
+        if response is None:
+            return await self.areauthenticate(reason="rejected", interactive=interactive)
+        return await self._acommit_parsed(fakts, response)
+
     async def _apost_refresh(self, auth: AuthFakt) -> dict[str, Any]:
         """POST the refresh grant, retrying only failures the server never saw.
 
@@ -283,12 +296,15 @@ class TokenSession:
         reauthentication. A connection that never opened, or a 5xx, did not
         rotate anything -- those are retried a couple of times.
         """
+        refresh_token = auth.refresh_token
+        if refresh_token is None:
+            raise FaktsError("This session has no refresh token to renew with.")
         for attempt in range(TOKEN_CONNECT_RETRIES + 1):
             try:
                 return await oauth2.arefresh(
                     auth.token_endpoint,
                     client_id=auth.client_id,
-                    refresh_token=auth.refresh_token,
+                    refresh_token=refresh_token,
                     ssl_context=self._settings.ssl_context,
                     allow_insecure_transport=self._settings.allow_insecure_transport,
                 )
@@ -308,8 +324,10 @@ class TokenSession:
         credential on disk stayed revoked -- a breakage that surfaces at the
         next restart, far from its cause.
         """
+        return await self._acommit_parsed(previous, oauth2.parse_token_response(data, previous.auth.token_endpoint))
+
+    async def _acommit_parsed(self, previous: ActiveFakts, response: oauth2.TokenResponse) -> str:
         state = self._state
-        response = oauth2.parse_token_response(data, previous.auth.token_endpoint)
         candidate = oauth2.merge_token_response(
             previous,
             response,
@@ -338,7 +356,7 @@ class TokenSession:
             )
         return state.loaded_token
 
-    async def _aawait_untried_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
+    async def _aawait_untried_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
         """Wait briefly for a sibling's rotation to land, then adopt it.
 
         Terminates for the right reason: we only ever accept a credential we
@@ -361,7 +379,7 @@ class TokenSession:
             await asyncio.sleep(REFRESH_RETRY_DELAY * (1 + random.random()))
         return None
 
-    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str]]) -> ActiveFakts | None:
+    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
         """Adopt the cached credential if it is one we have not tried.
 
         The key is the whole ``(client_id, refresh_token)`` pair, not the token
@@ -424,7 +442,7 @@ class TokenSession:
         old one -- which severs every sibling process sharing this cache. So it
         happens only when a human actually asked for it.
 
-        Non-interactive grants (redeem, a supplied credential) carry no such
+        Non-interactive grants (a mandate key, a supplied credential) carry no such
         cost, which is what keeps headless deployments recoverable.
         """
         state = self._state

@@ -174,7 +174,7 @@ async def test_invalid_grant_without_alternative_raises_rather_than_prompting(
 
 
 async def test_non_interactive_grant_reauthenticates_unattended(token_server) -> None:
-    """Redeem-style grants carry no human cost, so they may re-run on their
+    """Non-interactive grants carry no human cost, so they may re-run on their
     own. This is what keeps headless deployments alive past the refresh caps."""
     calls = {"n": 0}
 

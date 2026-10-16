@@ -115,7 +115,9 @@ def deployed_infra(integration_ports: dict[str, int]) -> Generator[Deployment, N
     with setup as deployed:
         setup.down()
 
-        setup.pull()
+        # A tag only built locally (LOK_SERVICE_TAG=<local build>, to test against
+        # an unreleased server) has nothing to pull: keep going with the local image.
+        setup.pull(ignore_pull_failures=True)
 
         setup.up()
 

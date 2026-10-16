@@ -57,7 +57,7 @@ from .errors import (
 from .fakts import Fakts, FaktsGrant, ReauthPolicy
 from .grants import EnvGrant, GrantError, RemoteGrant
 from .grants.hard import HardFaktsGrant
-from .grants.remote.builders import build_device_code_fakts, build_redeem_fakts
+from .grants.remote.builders import build_device_code_fakts, build_mandate_key_fakts
 from .handle import TokenLoader
 from .mesh import MeshError, MeshOptions, MeshProxy, TurnInfo
 from .models import (
@@ -110,7 +110,7 @@ __all__ = [
     "TurnInfo",
     "UnsupportedChallengeKeyError",
     "build_device_code_fakts",
-    "build_redeem_fakts",
+    "build_mandate_key_fakts",
     "build_testing_fakts",
     "ensure_private_dir",
 ]

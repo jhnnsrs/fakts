@@ -1,6 +1,7 @@
 from typing import Any, Protocol, runtime_checkable
 
 from fakts.models import ActiveFakts
+from fakts.oauth2 import TokenResponse
 
 NestedFaktValue = str | int | float | bool | None | dict[str, Any] | list[Any]
 
@@ -21,8 +22,8 @@ class FaktsGrant(Protocol):
     re-running it unattended. Re-running an *interactive* grant opens a
     browser and makes the server replace the app's registration — severing
     every sibling process sharing the credential — so that only ever happens
-    when a person asked for it. Grants that read a file or redeem a
-    provisioning token carry no such cost and should set it to ``False``;
+    when a person asked for it. Grants that read a file or log in with a
+    mandate key carry no such cost and should set it to ``False``;
     that is what keeps headless deployments alive past the refresh-token
     lifetime.
 
@@ -50,6 +51,19 @@ class FaktsGrant(Protocol):
         GrantError
             If the grant failed to load the configuration.
         """
+        ...
+
+
+@runtime_checkable
+class RenewableGrant(Protocol):
+    """A grant that renews a session without a refresh token: a mandate-key login.
+
+    The session it produced carries no refresh token, so the token path asks the
+    grant itself for a fresh token response when the access token runs out.
+    """
+
+    async def arenew(self, active: ActiveFakts) -> TokenResponse | None:
+        """A fresh token response for ``active``, or ``None`` if this grant cannot renew it."""
         ...
 
 

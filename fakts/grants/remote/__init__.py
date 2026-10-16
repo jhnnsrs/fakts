@@ -2,7 +2,7 @@
 
 Fakts remote grants retrieve configuration from a remote endpoint by
 negotiating an OAuth 2.0 session with it: discover the server through its
-well-known document, then run a grant (device code, redeem, or a plain
+well-known document, then run a grant (device code, mandate key, or a plain
 refresh) against its token endpoint.
 """
 

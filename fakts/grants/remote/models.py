@@ -55,7 +55,7 @@ class FaktsEndpoint(BaseModel):
     """The OAuth2 issuer identifier."""
     token_endpoint: str | None = None
     """Absolute URL of the OAuth2 token endpoint. Every grant — device code,
-    redeem, refresh — is a POST here."""
+    mandate key, refresh — is a POST here."""
     device_authorization_endpoint: str | None = None
     """Absolute URL of the device authorization endpoint. Non-standard in
     one respect: it takes a JSON body carrying the fakts manifest, and it
@@ -110,7 +110,7 @@ class Authorizer(Protocol):
     *interactive* grant mints a new client and causes the server to delete
     the previous one — which would kill every sibling process sharing the
     cache — so it must never happen behind the user's back. Non-interactive
-    grants (redeem, static) have no such hazard and may re-run freely.
+    grants (mandate key, static) have no such hazard and may re-run freely.
     """
 
     async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:

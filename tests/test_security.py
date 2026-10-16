@@ -1,6 +1,6 @@
 """Where credentials may and may not go.
 
-Each test pins a way a secret (refresh token, redeem token, device code) could
+Each test pins a way a secret (refresh token, mandate key, device code) could
 leak to a host it was not meant for, or reach one over a downgraded transport.
 """
 

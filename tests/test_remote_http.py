@@ -17,7 +17,7 @@ from fakts.grants.remote.authorizers.device_code import (
     DeviceCodeAuthorizer,
     DeviceCodeChallenge,
 )
-from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.mandate_key import MandateKeyAuthorizer
 from fakts.grants.remote.authorizers.static import StaticAuthorizer
 from fakts.grants.remote.discovery.utils import check_wellknown, discover_url
 from fakts.grants.remote.errors import (
@@ -28,6 +28,7 @@ from fakts.grants.remote.errors import (
     UserDeniedError,
 )
 from fakts.grants.remote.models import FaktsEndpoint
+from fakts.errors import NeedsReauthenticationError
 from fakts.oauth2 import InsecureTransportError
 
 from .helpers import make_manifest
@@ -380,56 +381,69 @@ async def test_device_authorization_throttle_is_surfaced(local_server) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Redeem authorizer
+# Mandate-key authorizer
 # --------------------------------------------------------------------------- #
 
+KEY_TOKEN_BODY = {k: v for k, v in TOKEN_BODY.items() if k != "refresh_token"}
 
-async def test_redeem_returns_session(local_server) -> None:
+
+async def test_a_mandate_key_logs_in_without_a_refresh_token(local_server) -> None:
     async def token(request: web.Request) -> web.Response:
         form = await request.post()
-        assert form["grant_type"] == "urn:fakts:grant-type:redeem"
-        assert form["redeem_token"] == "my_redeem_token"
+        assert form["grant_type"] == "urn:fakts:grant-type:mandate-key"
+        assert form["key"] == "my-mandate-key"
+        assert form["request_auth_key"] == "true"
+        assert form["requested_client_kind"] == "development"
         # Here the manifest is a JSON *string*, unlike device authorization.
         import json as _json
 
         assert _json.loads(form["manifest"])["identifier"] == "test_manifest"
-        return web.json_response(TOKEN_BODY)
+        return web.json_response(KEY_TOKEN_BODY)
 
     base_url = await local_server({"/o/token/": token})
 
-    authorizer = RedeemAuthorizer(
+    authorizer = MandateKeyAuthorizer(
         manifest=make_manifest(),
-        token="my_redeem_token",
+        key="my-mandate-key",
+        request_auth_key=True,
         allow_insecure_transport=True,
     )
     response = await authorizer.aauthorize(endpoint_for(base_url))
 
-    assert response.refresh_token == "the_refresh_token"
+    assert response.access_token == "the_access_token"
+    assert response.refresh_token is None
 
 
-async def test_redeem_rejected_raises_retrieve_error(local_server) -> None:
+async def test_renewing_never_asks_for_a_mesh_key(local_server) -> None:
     async def token(request: web.Request) -> web.Response:
-        return web.json_response(
-            {"error": "invalid_grant", "error_description": "allow_reredeem"},
-            status=400,
-        )
+        form = await request.post()
+        assert form["request_auth_key"] == "false"
+        return web.json_response(KEY_TOKEN_BODY)
+
+    base_url = await local_server({"/o/token/": token})
+    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key="k", request_auth_key=True, allow_insecure_transport=True)
+
+    response = await authorizer.arenew(f"{base_url}o/token/")
+
+    assert response.access_token == "the_access_token"
+
+
+async def test_a_refused_mandate_key_needs_a_new_one(local_server) -> None:
+    async def token(request: web.Request) -> web.Response:
+        return web.json_response({"error": "invalid_grant", "error_description": "This mandate has been revoked or has expired."}, status=400)
 
     base_url = await local_server({"/o/token/": token})
 
-    authorizer = RedeemAuthorizer(
-        manifest=make_manifest(),
-        token="spent",
-        allow_insecure_transport=True,
-    )
+    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key="revoked", allow_insecure_transport=True)
 
-    with pytest.raises(RetrieveError, match="invalid_grant"):
+    with pytest.raises(NeedsReauthenticationError, match="revoked"):
         await authorizer.aauthorize(endpoint_for(base_url))
 
 
-async def test_redeem_is_not_interactive() -> None:
+async def test_a_mandate_key_is_not_interactive() -> None:
     """Non-interactive grants may be re-run unattended, which is what keeps
     headless deployments recoverable."""
-    authorizer = RedeemAuthorizer(manifest=make_manifest(), token="t")
+    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key="k")
     assert authorizer.requires_user_interaction is False
 
 

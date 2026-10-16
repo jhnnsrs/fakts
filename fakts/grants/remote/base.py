@@ -3,8 +3,9 @@ import logging
 from pydantic import BaseModel, ConfigDict
 
 from fakts.models import ActiveFakts
-from fakts.oauth2 import TOKEN_EXPIRY_SKEW, merge_token_response
+from fakts.oauth2 import TOKEN_EXPIRY_SKEW, TokenResponse, merge_token_response
 
+from .authorizers.mandate_key import MandateKeyAuthorizer
 from .errors import RemoteGrantError
 from .models import Authorizer, Discovery
 
@@ -72,3 +73,14 @@ class RemoteGrant(BaseModel):
         if active.mesh and not active.mesh.ionscale_coord_url:
             active.mesh.ionscale_coord_url = endpoint.mesh_coord_url
         return active
+
+    async def arenew(self, active: ActiveFakts) -> TokenResponse | None:
+        """Log in again with the mandate key, when that is how this grant logs in.
+
+        A mandate-key session has no refresh token; this is how it gets its next
+        access token (and a freshly rendered envelope). Other authorizers renew
+        through the refresh grant, so they answer ``None``.
+        """
+        if not isinstance(self.authorizer, MandateKeyAuthorizer):
+            return None
+        return await self.authorizer.arenew(active.auth.token_endpoint)

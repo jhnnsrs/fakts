@@ -853,13 +853,13 @@ async def test_auto_without_a_key_is_quiet(
 def test_the_builders_use_the_mesh_when_it_is_available(
     fake_arkitekt_mesh: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fakts import build_device_code_fakts, build_redeem_fakts
+    from fakts import build_device_code_fakts, build_mandate_key_fakts
 
     fakts = build_device_code_fakts("http://localhost:8000", make_manifest(), no_cache=True)
     assert fakts.mesh == MeshOptions(auto=True)
     assert isinstance(fakts.grant.authorizer, DeviceCodeAuthorizer)  # type: ignore[attr-defined]
     assert fakts.grant.authorizer.request_auth_key  # type: ignore[attr-defined]
-    assert build_redeem_fakts("http://localhost:8000", make_manifest(), "t").mesh == MeshOptions(
+    assert build_mandate_key_fakts("http://localhost:8000", make_manifest(), "t").mesh == MeshOptions(
         auto=True
     )
 

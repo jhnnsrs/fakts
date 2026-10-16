@@ -11,10 +11,10 @@ from fakts import (
     GrantError,
     NoCache,
     build_device_code_fakts,
-    build_redeem_fakts,
+    build_mandate_key_fakts,
 )
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
-from fakts.grants.remote.authorizers.redeem import RedeemAuthorizer
+from fakts.grants.remote.authorizers.mandate_key import MandateKeyAuthorizer
 
 from .helpers import make_fakts_value, make_manifest
 
@@ -148,15 +148,17 @@ async def test_builder_cache_hash_binds_url_and_manifest(tmp_path: Path):
     assert base.cache.hash != other_manifest.cache.hash
 
 
-async def test_build_redeem_fakts_wiring():
+async def test_build_mandate_key_fakts_wiring():
     manifest = make_manifest()
-    fakts = build_redeem_fakts(
+    fakts = build_mandate_key_fakts(
         url="http://localhost:8000",
         manifest=manifest,
-        token="redeem-me",
+        key="mandate-me",
+        request_auth_key=True,
         no_cache=True,
     )
 
-    assert isinstance(fakts.grant.authorizer, RedeemAuthorizer)
-    assert fakts.grant.authorizer.token == "redeem-me"
+    assert isinstance(fakts.grant.authorizer, MandateKeyAuthorizer)
+    assert fakts.grant.authorizer.key.get_secret_value() == "mandate-me"
+    assert fakts.grant.authorizer.request_auth_key is True
     assert isinstance(fakts.cache, NoCache)

@@ -63,16 +63,14 @@ class Instance(BaseModel):
 class AuthFakt(BaseModel):
     """The OAuth2 credentials this client holds for a deployment.
 
-    Protocol v2 is refresh-token based: the interactive flows (device code,
-    redeem) end at the token endpoint, which hands back an access token *and*
-    a rotating refresh token. There is no ``client_secret`` — fakts clients
-    are public OAuth2 clients (the server sets
-    ``token_endpoint_auth_method="none"``), so the refresh chain *is* the
-    credential.
+    The device-code flow ends at the token endpoint with an access token *and*
+    a rotating refresh token. There is no ``client_secret`` — fakts clients are
+    public OAuth2 clients (the server sets ``token_endpoint_auth_method="none"``),
+    so the refresh chain *is* the credential, and both ``client_id`` and
+    ``refresh_token`` are required on every renewal.
 
-    Both ``client_id`` and ``refresh_token`` are required on every renewal:
-    the token endpoint authenticates the client before it looks at the
-    refresh token, and then checks the token actually belongs to it.
+    A mandate-key login carries no refresh token (``refresh_token`` is
+    ``None``): the session is renewed by logging in again with the key.
     """
 
     client_id: str
@@ -94,9 +92,10 @@ class AuthFakt(BaseModel):
     per-requirement consent this legitimately differs from what was asked
     for, so it must never be validated against the request."""
 
-    refresh_token: str
+    refresh_token: str | None = None
     """The live rotating secret. Every use invalidates the previous value, so
-    a rotated token must be persisted before the new access token is used."""
+    a rotated token must be persisted before the new access token is used.
+    ``None`` for a mandate-key login, which renews by logging in again."""
     access_token: str | None = None
     """The current access token. Persisted so that sibling processes sharing
     a cache can reuse it instead of each racing to refresh; may be stale on

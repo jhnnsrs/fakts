@@ -60,10 +60,10 @@ It used to be declared independently in both ``fakts.py`` and
 DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 """RFC 8628 device authorization grant."""
 
-REDEEM_GRANT = "urn:fakts:grant-type:redeem"
-"""The fakts extension grant that trades a provisioning token for a session.
-Note the URN has no ``params:oauth`` segment — it is a fakts URN, not an
-IETF one."""
+MANDATE_KEY_GRANT = "urn:fakts:grant-type:mandate-key"
+"""The fakts extension grant that logs in with a standing mandate key. It
+answers with an access token only, never a refresh token. Note the URN has no
+``params:oauth`` segment — it is a fakts URN, not an IETF one."""
 
 REFRESH_GRANT = "refresh_token"
 
@@ -224,7 +224,7 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     """
     if 300 <= response.status < 400:
         # Never followed (allow_redirects=False): on 307/308 aiohttp would resend
-        # the form body -- the refresh token, redeem token or device code -- to
+        # the form body -- the refresh token, mandate key or device code -- to
         # wherever Location points, plain http included.
         raise FaktsError(
             f"{url} answered with a redirect ({response.status}) to "
@@ -338,7 +338,7 @@ async def apost_json(
     """POST a JSON body.
 
     The device authorization endpoint takes JSON with a *nested* manifest
-    object, while the redeem grant takes form data with the manifest as a
+    object, while the mandate-key grant takes form data with the manifest as a
     JSON *string*. They are genuinely different encodings.
     """
     return await _apost(
@@ -449,17 +449,15 @@ def merge_token_response(
             "the authorization step. The client cannot refresh without one."
         )
 
+    # A mandate-key login carries no refresh token: the session is renewed by
+    # logging in again, so there is no chain to track.
     refresh_token = response.refresh_token or (previous.auth.refresh_token if previous else None)
-    if not refresh_token:
-        raise FaktsError(
-            "The token response carried no refresh_token. fakts protocol v2 is "
-            "refresh-token based and cannot maintain a session without one."
-        )
-
     rotated = previous is None or previous.auth.refresh_token != refresh_token
     chain_started_at = (
         previous.auth.chain_started_at if previous and previous.auth.chain_started_at else now
     )
+    if refresh_token is None:
+        chain_started_at = None
 
     auth = AuthFakt(
         client_id=client_id,
@@ -470,9 +468,9 @@ def merge_token_response(
         refresh_token=refresh_token,
         access_token=response.access_token,
         expires_at=resolve_expiry(response.expires_in, skew, now),
-        refresh_issued_at=now
-        if rotated
-        else (previous.auth.refresh_issued_at if previous else now),
+        refresh_issued_at=None
+        if refresh_token is None
+        else (now if rotated else (previous.auth.refresh_issued_at if previous else now)),
         chain_started_at=chain_started_at,
         token_type=response.token_type or "Bearer",
     )
