@@ -13,6 +13,7 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 
+from fakts.errors import NeedsReauthenticationError
 from fakts.grants.remote.authorizers.device_code import (
     DeviceCodeAuthorizer,
     DeviceCodeChallenge,
@@ -28,7 +29,6 @@ from fakts.grants.remote.errors import (
     UserDeniedError,
 )
 from fakts.grants.remote.models import FaktsEndpoint
-from fakts.errors import NeedsReauthenticationError
 from fakts.oauth2 import InsecureTransportError
 
 from .helpers import make_manifest
