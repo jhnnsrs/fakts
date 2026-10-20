@@ -401,7 +401,7 @@ class AliasResolver:
         state = self._state
         try:
             await self._arefresh_locked(omit_challenge=omit_challenge, omit_report=omit_report)
-        except CompositionError:
+        except CompositionError as failed:
             if not (
                 self._settings.refetch_on_alias_failure
                 and state.loaded_from_cache
@@ -414,7 +414,14 @@ class AliasResolver:
                 "grant and retrying."
             )
             previous = state.loaded_fakts
-            await state.aload(reload=True)
+            try:
+                await state.aload(reload=True)
+            except Exception as reload_failed:
+                # The grant may be unable to run again at all: a handed-in credential
+                # is single-use once it rotated. What the person can act on is why the
+                # services failed, not why the retry did.
+                logger.warning("Reloading fakts from the grant failed too: %s", reload_failed)
+                raise failed from reload_failed
             await self._arefresh_locked(
                 omit_challenge=omit_challenge, omit_report=omit_report, previous=previous
             )

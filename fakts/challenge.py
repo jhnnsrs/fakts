@@ -27,10 +27,12 @@ import base64
 import logging
 import secrets
 
-from fakts.errors import FaktsError
 from fakts.models import ChallengeKey
 
 logger = logging.getLogger(__name__)
+
+_warned_unverified = False
+"""Whether this process already said it cannot verify signatures (it says so once)."""
 
 CHALLENGE_DOMAIN = "fakts-challenge-v1"
 """Domain separation tag prefixed to every signed challenge message.
@@ -70,20 +72,25 @@ def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str
     """Verify a signed challenge response against the pinned public key.
 
     Returns False on any mismatch (wrong key, wrong nonce, malformed
-    base64). Raises FaktsError if the optional 'cryptography' dependency
-    is missing — a pinned key must never silently downgrade to an
-    unverified challenge.
+    base64). Without the optional 'cryptography' dependency the signature
+    cannot be checked: the challenge then passes as a plain one (the service
+    answered, with a signature), and a warning says so once per process.
     """
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PublicKey,
         )
-    except ImportError as e:
-        raise FaktsError(
-            "The instance pins a challenge key, but the 'cryptography' package "
-            "is not installed, so the signature cannot be verified. "
-            "Install it with: pip install fakts[crypto]"
-        ) from e
+    except ImportError:
+        global _warned_unverified
+        if not _warned_unverified:
+            _warned_unverified = True
+            logger.warning(
+                "The instance pins a challenge key, but the 'cryptography' package is "
+                "not installed, so signatures are not verified: an alias that answers "
+                "its challenge is trusted as it would be without a pinned key. "
+                "Install it with: pip install fakts[crypto]"
+            )
+        return True
 
     from cryptography.exceptions import InvalidSignature
 

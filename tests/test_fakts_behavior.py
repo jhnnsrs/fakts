@@ -131,6 +131,35 @@ async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
     assert grant.load_count == 1, "The stale cache should have been reloaded once"
 
 
+async def test_a_self_heal_whose_grant_fails_reports_why_the_services_failed(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A handed-in credential is single-use once it rotated: re-running that grant ends
+    in invalid_grant. That failure must not replace the one the person can act on."""
+    from fakts.grants.remote.errors import RetrieveError
+
+    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+        raise Exception("unreachable")
+
+    monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
+
+    class SpentGrant(CountingGrant):
+        async def aload(self) -> ActiveFakts:
+            self.load_count += 1
+            raise RetrieveError("test refused the supplied credential: invalid_grant")
+
+    grant = SpentGrant(fakts=make_fakts_value(), requires_user_interaction=False)
+    cache = MemoryCache(value=make_fakts_value(host="stale-host"), hash="static")
+    fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
+
+    async with fakts:
+        with pytest.raises(CompositionError, match="unreachable") as failed:
+            await fakts.aget_alias("test", omit_report=True)
+
+    assert grant.load_count == 1, "the self-heal was tried"
+    assert isinstance(failed.value.__cause__, RetrieveError), "and why it failed is kept"
+
+
 async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: pytest.MonkeyPatch):
     """Self-heal re-ran whatever grant there was: for a device-code app, one
     unreachable service opened a browser and replaced the client, cutting

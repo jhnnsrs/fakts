@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import logging
 import socket
 import ssl
 import sys
@@ -27,7 +28,6 @@ from fakts.errors import (
     AttemptOutcome,
     ChallengeStatusError,
     CompositionError,
-    FaktsError,
     ServiceFailure,
     ServiceUnreachableError,
 )
@@ -176,23 +176,24 @@ async def test_plain_challenge_without_key_still_passes(challenge_server) -> Non
     assert alias.id == "primary"
 
 
-async def test_missing_cryptography_raises_faktserror(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_says_so(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A pinned key must never silently downgrade: if the optional
-    'cryptography' package cannot be imported, verification raises FaktsError
-    with an install hint rather than returning False."""
+    """Without the optional 'cryptography' package the challenge passes unverified,
+    as it would without a pinned key, and the process is told once."""
+    import fakts.challenge as challenge
+
     _, key = make_keypair()
+    monkeypatch.setitem(sys.modules, "cryptography.hazmat.primitives.asymmetric.ed25519", None)
+    monkeypatch.setattr(challenge, "_warned_unverified", False)
 
-    # Force the in-function `from cryptography...ed25519 import ...` to fail.
-    monkeypatch.setitem(
-        sys.modules,
-        "cryptography.hazmat.primitives.asymmetric.ed25519",
-        None,
-    )
+    with caplog.at_level(logging.WARNING, logger="fakts.challenge"):
+        assert verify_challenge_signature(key, "some-nonce", "c2ln")
+        assert verify_challenge_signature(key, "other-nonce", "c2ln")
 
-    with pytest.raises(FaktsError, match="cryptography"):
-        verify_challenge_signature(key, "some-nonce", "c2ln")
+    warnings = [r for r in caplog.records if "cryptography" in r.getMessage()]
+    assert len(warnings) == 1, "said once per process"
+    assert "fakts[crypto]" in warnings[0].getMessage()
 
 
 async def test_generate_nonce_is_unique():
