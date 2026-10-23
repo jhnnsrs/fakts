@@ -409,7 +409,9 @@ class Fakts(KoiledModel):
 
         async with (
             oauth2.client_session(
-                self.ssl_context,
+                # A pinned alias is verified by its hub's certificate alone; any other with
+                # the context this client was given.
+                alias.ssl_context() if alias.is_pinned() else self.ssl_context,
                 timeout=self.alias_challenge_timeout,
                 headers={"Accept": "application/json"},
             ) as session,

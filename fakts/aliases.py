@@ -13,6 +13,7 @@ on its own rather than with every other service.
 """
 
 import asyncio
+import ipaddress
 import logging
 import os
 import ssl
@@ -44,6 +45,79 @@ if TYPE_CHECKING:
     from fakts.fakts import Fakts
 
 logger = logging.getLogger(__name__)
+
+
+def _reach(alias: Alias) -> str | None:
+    """The alias's reach, where the installed arkitekt-spec reads it (3.5+); else ``None``."""
+    return getattr(alias, "reach", None)
+
+
+def _is_internal(alias: Alias) -> bool:
+    """Only reachable inside the deployment's own network: ``reach``, or the older ``kind``."""
+    return _reach(alias) == "internal" or alias.kind == "docker"
+
+
+def _is_loopback(alias: Alias) -> bool:
+    """Never leaves this machine: ``reach`` says so, or the host is loopback."""
+    if _reach(alias) == "loopback":
+        return True
+    host = alias.host.strip().strip("[]").rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def is_insecure_transport(alias: Alias) -> bool:
+    """Whether ``alias`` is plain HTTP over the local network or the internet.
+
+    Such a connection is readable and changeable by anyone on the network in
+    between, tokens included. A challenge key does not change that: its signed
+    nonce proves the service answered the probe, not who answers what follows.
+    Loopback never leaves the machine, the mesh is encrypted itself, and an
+    internal alias stays on the deployment's own network.
+    """
+    if alias.ssl or alias.is_mesh() or _reach(alias) == "mesh":
+        return False
+    return not (_is_internal(alias) or _is_loopback(alias))
+
+
+def strict_view(instance: Instance) -> Instance:
+    """``instance`` as a strict one is used: its TLS aliases carrying the hub's certificates
+    (so they are verified by those alone), its plain ones only where they go through the mesh.
+    Any other instance as it is."""
+    if not instance.is_strict():
+        return instance
+    assert instance.tls is not None
+    certificates = list(instance.tls.certificates)
+    usable = [
+        alias.model_copy(update={"certificates": certificates}) if alias.ssl else alias
+        for alias in instance.aliases
+        if alias.ssl or alias.is_mesh() or _reach(alias) == "mesh"
+    ]
+    return instance.model_copy(update={"aliases": usable})
+
+
+_noted_insecure: set[tuple[str, str]] = set()
+"""(service, alias) pairs already reported this process: once each, not per refresh."""
+
+
+def _note_transport(service: str, alias: Alias) -> None:
+    """Say so (once per alias) when ``service`` is about to be used over an insecure transport."""
+    if not is_insecure_transport(alias) or (service, alias.id) in _noted_insecure:
+        return
+    _noted_insecure.add((service, alias.id))
+    logger.info(
+        "Service %s is reached over plain HTTP at %s: the connection is not encrypted, so "
+        "anyone on the network in between can read and change it, tokens included. Its "
+        "challenge signature only proves the service answered the probe, not what follows. "
+        "Prefer an HTTPS alias or the mesh.",
+        service,
+        alias.to_http_path(),
+    )
+
 
 Challenger = Callable[..., Awaitable[bool]]
 """``challenge(alias, challenge_key=..., proxy=...)``: True if the alias
@@ -108,12 +182,16 @@ def _brief(error: Exception) -> str:
 
 def _same_instance(left: Instance | None, right: Instance | None) -> bool:
     """Whether resolving ``right`` would ask what resolving ``left`` asked:
-    the same aliases (in any order) against the same identity key."""
+    the same aliases (in any order) against the same identity key and the
+    same hub certificate (a rotated one is asked again)."""
     if left is None or right is None:
         return left is right
-    return left.challenge_key == right.challenge_key and sorted(
-        alias.model_dump_json() for alias in left.aliases
-    ) == sorted(alias.model_dump_json() for alias in right.aliases)
+    return (
+        left.challenge_key == right.challenge_key
+        and left.tls == right.tls
+        and sorted(alias.model_dump_json() for alias in left.aliases)
+        == sorted(alias.model_dump_json() for alias in right.aliases)
+    )
 
 
 def in_container() -> bool:
@@ -640,6 +718,8 @@ class AliasResolver:
             return _Resolved(None, AliasReport(alias_id=None, reason=reason, valid=False), failure)
 
         instance = fakts.instances.get(req.key)
+        if instance is not None:
+            instance = strict_view(instance)
         if not instance or not instance.aliases:
             reason = (
                 f"No aliases listed for {kind} service {req.key}."
@@ -714,6 +794,7 @@ class AliasResolver:
                 selected.id,
                 "; ".join(f"{a.alias_id} {a.describe()}" for a in lost),
             )
+        _note_transport(req.key, selected)
         return _Resolved(selected, AliasReport(alias_id=selected.id, reason=None, valid=True))
 
     async def _aselect_unchallenged(
@@ -727,10 +808,10 @@ class AliasResolver:
         container is not in that deployment.
         """
         forced = self._route.forced
-        docker = [alias for alias in instance.aliases if alias.kind == "docker" and not forced]
+        docker = [alias for alias in instance.aliases if _is_internal(alias) and not forced]
         waiting: list[Alias] = []
         for alias in instance.aliases:
-            if alias.kind == "docker" or (forced and not alias.is_mesh()):
+            if _is_internal(alias) or (forced and not alias.is_mesh()):
                 continue
             if not alias.is_mesh():
                 return alias, []
@@ -779,8 +860,8 @@ class AliasResolver:
         others failed (but before a node is started for those).
         """
         loop = asyncio.get_running_loop()
-        docker = [alias for alias in instance.aliases if alias.kind == "docker"]
-        ordered = [alias for alias in instance.aliases if alias.kind != "docker"]
+        docker = [alias for alias in instance.aliases if _is_internal(alias)]
+        ordered = [alias for alias in instance.aliases if not _is_internal(alias)]
         left_out: list[Alias] = []
         if self._route.forced:
             # Only what is on the mesh (there is one: the caller saw to it).

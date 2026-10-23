@@ -1,0 +1,3 @@
+hub.crt / hub.key: a test-only self-signed certificate for localhost/127.0.0.1 (valid 20
+years), playing a hub's registered certificate. The key is not secret. Same as
+arkitekt-spec's tests/fixtures/tls/hub.*.

@@ -48,6 +48,14 @@ class ChallengeKey(BaseModel):
     """The base64-encoded raw public key (32 bytes for ed25519)."""
 
 
+class TlsClaim(BaseModel):
+    """The certificate(s) an instance's TLS aliases present, when its hub
+    registered one with the coordination server: each trusted as itself, and
+    nothing else is (see ``arkitekt_spec.declare.tls``)."""
+
+    certificates: list[str] = []
+
+
 class Instance(BaseModel):
     """Configuration for a service in Fakts."""
 
@@ -58,6 +66,15 @@ class Instance(BaseModel):
     """Optional public key of the service. If set, alias challenges must
     answer with a valid signature (see ChallengeKey); the same key is used
     for all aliases of the instance (one service identity, many routes)."""
+    tls: TlsClaim | None = None
+    """Set when the instance's hub registered its certificate: the instance is
+    then strict — its TLS aliases are verified by that certificate alone, and
+    its plain-HTTP aliases are not used unless they go through the mesh (they
+    are there for clients that predate the certificate)."""
+
+    def is_strict(self) -> bool:
+        """Whether the instance's hub registered the certificate its TLS aliases present."""
+        return bool(self.tls and self.tls.certificates)
 
 
 class AuthFakt(BaseModel):
