@@ -20,7 +20,7 @@ from fakts import Fakts
 from fakts.errors import AttemptOutcome, CompositionError
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.models import FaktsEndpoint
-from fakts.mesh import MeshError, MeshOptions, MeshProxy, NativeNode, hostname_label
+from fakts.mesh import MeshError, MeshOptions, MeshPath, MeshProxy, NativeNode, hostname_label
 from fakts.models import ActiveFakts, Alias, Instance, Manifest, MeshClaim, Requirement, SelfFakt
 from fakts.oauth2 import TokenResponse, merge_token_response
 
@@ -274,6 +274,11 @@ class FakeNode:
         self.forwards.append((host, port))
         return "127.0.0.1:5555"
 
+    def path(self, host):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(kind="relay", via=f"waw:{host}")
+
     def close(self):
         self.closed = True
 
@@ -283,6 +288,10 @@ class FakeMeshError(Exception):
 
 
 class FakeNeedsLogin(FakeMeshError):
+    pass
+
+
+class FakeKeyExpired(FakeNeedsLogin):
     pass
 
 
@@ -310,6 +319,7 @@ def fake_arkitekt_mesh(monkeypatch: pytest.MonkeyPatch):
     module.Node = FakeNode  # type: ignore[attr-defined]
     module.MeshError = FakeMeshError  # type: ignore[attr-defined]
     module.NeedsLogin = FakeNeedsLogin  # type: ignore[attr-defined]
+    module.KeyExpired = FakeKeyExpired  # type: ignore[attr-defined]
     module.Locked = FakeLocked  # type: ignore[attr-defined]
     module.Refused = FakeRefused  # type: ignore[attr-defined]
     module.Timeout = FakeTimeout  # type: ignore[attr-defined]
@@ -355,6 +365,8 @@ async def test_fakts_runs_the_native_node(
         again = await fakts.aget_alias("test")
         assert fakts._mesh_route is not None
         assert again._mesh is fakts._mesh_route.node
+        # The path is the one to the alias's own host.
+        assert fakts.mesh_path("test") == MeshPath(kind="relay", via="waw:100.64.0.9")
         node = fakts._mesh_route.node
         assert node is not None and node._node.forwards == [
             ("100.64.0.9", 8080),
@@ -381,8 +393,21 @@ async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: Any, tmp_p
     ("error", "code", "message"),
     [
         (FakeLocked("busy"), "locked", "already running in"),
-        (FakeRefused("bad key"), "login", "refused this node: bad key"),
-        (FakeTimeout("90s"), "timeout", "did not connect in time"),
+        # The bindings' own wording, kept once (not "refused…: the mesh refused…").
+        (
+            FakeRefused("the mesh refused this node: bad key"),
+            "login",
+            "^The mesh refused this node: bad key$",
+        ),
+        (
+            FakeTimeout(
+                "the mesh did not connect in time: control at https://mesh.example "
+                "did not answer the registration within 60 s"
+            ),
+            "timeout",
+            "^The mesh did not connect in time: control at https://mesh.example did not",
+        ),
+        (FakeKeyExpired("this node's key expired"), "needs_login", "mesh key expired"),
         (FakeLockedOut("sign nodekey:abc"), "locked_out", "nodekey:abc"),
         (FakeMeshError("boom"), "start", "boom"),
     ],
@@ -765,7 +790,9 @@ async def test_a_node_that_cannot_start_does_not_block_plain_aliases(
 
     async def cannot_start(statedir, hostname, control_url=None, auth_key=None, timeout=90):
         FakeNode.started.append({"statedir": statedir})
-        raise FakeTimeout("the coordination server did not answer")
+        raise FakeTimeout(
+            "the mesh did not connect in time: control at https://mesh.example did not answer"
+        )
 
     value = keyed(mesh_fakts())
     value.instances["plain"] = Instance(

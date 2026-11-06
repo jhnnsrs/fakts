@@ -34,7 +34,7 @@ from fakts.errors import (
 from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshConfig, MeshRoute
+from .mesh import MeshConfig, MeshPath, MeshRoute
 from .models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Manifest
 from .protocols import FaktsCache, FaktsGrant
 from .report import AliasReport
@@ -199,6 +199,21 @@ class Fakts(KoiledModel):
     def alias_map(self) -> dict[str, Alias]:
         """The resolved aliases, by requirement key."""
         return self._resolver.alias_map if self._resolver else {}
+
+    def mesh_path(self, fakts_key: str) -> MeshPath | None:
+        """How packets to the resolved alias of ``fakts_key`` travel right now.
+
+        ``None`` unless the alias is reached through the mesh node this
+        process runs: it is not resolved, not on the mesh, reached through an
+        external proxy (which keeps its paths to itself), or the bindings are
+        too old to tell. Raises :class:`~fakts.mesh.MeshError` when the node
+        does not know the alias's host.
+        """
+        alias = self.alias_map.get(fakts_key)
+        node = self._mesh_route.node if self._mesh_route is not None else None
+        if alias is None or node is None or alias.proxy != node.proxy_url:
+            return None
+        return node.path(alias.host)
 
     @property
     def report_map(self) -> dict[str, AliasReport]:

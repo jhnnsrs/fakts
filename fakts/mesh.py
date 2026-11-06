@@ -16,6 +16,7 @@ import asyncio
 import importlib.util
 import logging
 import os
+import platform
 import re
 import sys
 from hashlib import sha256
@@ -50,8 +51,17 @@ NEEDS_LOGIN = (
     "the app again (without the cache) and allow mesh access"
 )
 
+KEY_EXPIRED = (
+    "This node's mesh key expired; authorize the app again (without the cache) "
+    "and allow mesh access to join with a new one"
+)
+
 NOT_INSTALLED = (
-    'The mesh needs the arkitekt-mesh bindings; install them with `pip install "fakts[mesh]"`'
+    f"The mesh needs the arkitekt-mesh bindings, which are not installed here "
+    f"({platform.python_implementation()} on {sys.platform} {platform.machine()}). "
+    'Install them with `pip install "fakts[mesh]"`: prebuilt for CPython on Linux '
+    "(x86_64, aarch64), macOS and Windows (x64, ARM64); anywhere else pip builds "
+    "them from source, which needs a Rust toolchain"
 )
 
 NO_KEY = (
@@ -147,6 +157,23 @@ MeshConfig = Annotated[MeshOptions | MeshProxy, Field(discriminator="kind")]
 """How a Fakts reaches mesh aliases: its own node, or a running proxy."""
 
 
+class MeshPath(BaseModel):
+    """How packets to a mesh peer travel right now (see :meth:`Fakts.mesh_path`).
+
+    A path starts out relayed and turns direct once the node finds one, usually
+    seconds after the first packet, so it is a snapshot: ask again to follow it.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["direct", "relay", "idle"]
+    """``direct`` over UDP, through a DERP ``relay``, or ``idle``: nothing was
+    sent to the peer lately, so the next packet probes again."""
+    via: str | None = None
+    """The peer's UDP address when direct, the DERP region (its code, e.g.
+    ``waw``) when relayed."""
+
+
 def _state_dir() -> Path:
     """The per-user state directory (as the Rust client's ``dirs`` crate
     picks it, so both keep their nodes side by side)."""
@@ -172,21 +199,34 @@ def _bindings() -> Any:
     return arkitekt_mesh
 
 
+def _sentence(error: Exception) -> str:
+    """The bindings' message, which says what failed and where, as a sentence."""
+    text = str(error)
+    return text[:1].upper() + text[1:]
+
+
 def _translate(error: Exception, bindings: Any, statedir: Path) -> MeshError:
-    """The bindings' exception as a :class:`MeshError` with the node's code."""
+    """The bindings' exception as a :class:`MeshError` with the node's code.
+
+    The bindings' messages already name the cause and the control server;
+    they are kept, not wrapped in a second copy of what they say.
+    """
+    key_expired = getattr(bindings, "KeyExpired", None)  # arkitekt-mesh > 0.11
+    if key_expired is not None and isinstance(error, key_expired):
+        return MeshError(KEY_EXPIRED, "needs_login")
     if isinstance(error, bindings.NeedsLogin):
         return MeshError(NEEDS_LOGIN, "needs_login")
     if isinstance(error, bindings.Locked):
         return MeshError(f"Another mesh node is already running in {statedir}", "locked")
     if isinstance(error, bindings.Refused):
-        return MeshError(f"The mesh refused this node: {error}", "login")
+        return MeshError(_sentence(error), "login")
     if isinstance(error, bindings.Timeout):
-        return MeshError(f"The mesh did not connect in time: {error}", "timeout")
+        return MeshError(_sentence(error), "timeout")
     if isinstance(error, bindings.LockedOut):
         # The message names the `nodekey:` an admin has to sign; the node stays
         # up and is let in once it is signed (tailnet lock, RFC-5).
-        return MeshError(str(error), "locked_out")
-    return MeshError(str(error), "start")
+        return MeshError(_sentence(error), "locked_out")
+    return MeshError(_sentence(error), "start")
 
 
 class NativeNode:
@@ -253,6 +293,18 @@ class NativeNode:
             return await self._node.forward(host, port)
         except bindings.MeshError as e:
             raise MeshError(str(e)) from e
+
+    def path(self, host: str) -> MeshPath | None:
+        """How packets to the peer ``host`` travel right now; ``None`` from
+        bindings too old to tell."""
+        if not hasattr(self._node, "path"):
+            return None
+        bindings = _bindings()
+        try:
+            found = self._node.path(host)
+        except bindings.MeshError as e:
+            raise MeshError(str(e)) from e
+        return MeshPath(kind=found.kind, via=found.via)
 
     def close(self) -> None:
         self._node.close()
