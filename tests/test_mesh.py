@@ -409,7 +409,7 @@ async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: Any, tmp_p
         ),
         (FakeKeyExpired("this node's key expired"), "needs_login", "mesh key expired"),
         (FakeLockedOut("sign nodekey:abc"), "locked_out", "nodekey:abc"),
-        (FakeMeshError("boom"), "start", "boom"),
+        (FakeMeshError("boom"), "start", "^Boom$"),
     ],
 )
 @pytest.mark.asyncio
