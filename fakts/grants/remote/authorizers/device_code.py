@@ -35,7 +35,7 @@ from fakts.grants.remote.errors import (
 from fakts.grants.remote.models import FaktsEndpoint, SSLContextModel
 from fakts.oauth2 import TokenResponse
 
-from .utils import print_device_code_prompt, print_succesfull_login
+from .utils import print_device_code_prompt, print_qr_code, print_succesfull_login, wants_qr
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,9 @@ class DeviceCodeChallenge:
     """The approval page with the code already entered: the link to show or open."""
     expires_in: int
     """Seconds until the code stops being accepted."""
+    browser_opened: bool = False
+    """Whether the approval page was opened in a browser here. When it was not,
+    a person approves from somewhere else: the link has to be shown."""
 
 
 DeviceCodeHook = Callable[[DeviceCodeChallenge], Awaitable[None]]
@@ -76,12 +79,15 @@ GrantedHook = Callable[["FaktsEndpoint", str], Awaitable[None]]
 
 
 async def display_in_terminal(challenge: DeviceCodeChallenge) -> None:
-    """The default device code hook: print the approval page and the code."""
+    """The default device code hook: print the approval page and the code, and
+    the page as a QR code when it is to be approved on another device."""
     print_device_code_prompt(
         challenge.verification_uri_complete,
         challenge.endpoint.base_url,
         challenge.user_code,
     )
+    if wants_qr(challenge.verification_uri_complete, challenge.browser_opened):
+        print_qr_code(challenge.verification_uri_complete)
 
 
 async def granted_in_terminal(endpoint: "FaktsEndpoint", token: str) -> None:
@@ -190,13 +196,15 @@ class DeviceCodeAuthorizer(SSLContextModel):
         verification_uri = started.get("verification_uri_complete") or started.get(
             "verification_uri"
         )
+        browser_opened = False
         if self.open_browser and verification_uri:
             # The URL comes from the server, and webbrowser hands unknown
             # schemes to the desktop's handler — so a hostile endpoint could
             # otherwise get `file://` or a registered custom scheme invoked.
             scheme = urlparse(verification_uri).scheme.lower()
             if scheme in ("http", "https"):
-                webbrowser.open_new(verification_uri)
+                # False when no browser could be launched (an SSH session).
+                browser_opened = bool(webbrowser.open_new(verification_uri))
             else:
                 logger.warning(
                     "Refusing to open %r: the approval URL must be http or https.",
@@ -217,6 +225,7 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     or (endpoint.configure or "").replace("{code}", user_code)
                     or endpoint.base_url,
                     expires_in=expires_in,
+                    browser_opened=browser_opened,
                 )
             )
 

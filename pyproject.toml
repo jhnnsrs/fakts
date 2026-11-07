@@ -21,6 +21,9 @@ rath = ["rath>=3.0"]
 crypto = ["cryptography>=42"]
 # The mesh node (arkirust's Rust client, in process) for mesh-only aliases.
 mesh = ["arkitekt-mesh>=0.12.2"]
+# The approval link as a QR code in the default device-code prompt, for
+# approving on a phone when no browser opened here.
+qr = ["segno>=1.6"]
 
 [project.urls]
 Homepage = "https://github.com/jhnnsrs/fakts"
@@ -36,6 +39,7 @@ dev = [
     "pytest>=8.3.5",
     "basedpyright>=1.21",
     "ruff>=0.15",
+    "segno>=1.6",
 ]
 
 [tool.basedpyright]

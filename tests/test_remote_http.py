@@ -714,8 +714,11 @@ async def test_device_code_polling_survives_a_transient_server_error(local_serve
     assert response.access_token == TOKEN_BODY["access_token"]
 
 
-async def test_the_terminal_prompt_fills_in_the_approval_url(capsys) -> None:
+async def test_the_terminal_prompt_fills_in_the_approval_url(capsys, monkeypatch) -> None:
     from fakts.grants.remote.authorizers.device_code import display_in_terminal
+    from fakts.grants.remote.authorizers.utils import QR_ENV
+
+    monkeypatch.delenv(QR_ENV, raising=False)
 
     await display_in_terminal(
         DeviceCodeChallenge(
@@ -729,6 +732,8 @@ async def test_the_terminal_prompt_fills_in_the_approval_url(capsys) -> None:
     printed = capsys.readouterr().out
     assert "http://lok.example/f/configure/ABCD" in printed
     assert "{code}" not in printed and "device" not in printed.split("ABCD")[-1]
+    # No browser opened here: the page is to be approved on a phone.
+    assert "█" in printed, "the approval link is shown as a QR code too"
 
 
 async def test_a_grant_without_a_token_endpoint_fails_before_authorizing() -> None:

@@ -36,6 +36,7 @@ Optional extras:
 pip install "fakts[rath]"    # FaktsAuthLink: rath GraphQL requests carry fakts tokens
 pip install "fakts[crypto]"  # signed alias challenges (Ed25519 verification)
 pip install "fakts[mesh]"    # reach services that are only on the deployment's mesh
+pip install "fakts[qr]"      # the login prompt shows the approval link as a QR code, for a phone
 ```
 
 ## Quickstart
