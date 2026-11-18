@@ -34,6 +34,14 @@ def test_hostnames_are_dns_labels() -> None:
     assert len(hostname_label("a" * 80)) == 63
 
 
+def test_a_peer_relay_is_a_relay_told_apart_by_its_via() -> None:
+    # arkitekt-mesh 0.14 reports a peer relay as kind "relay", for callers
+    # that know three kinds.
+    assert MeshPath(kind="relay", via="peer relay 198.51.100.1:40000").peer_relay
+    assert not MeshPath(kind="relay", via="waw").peer_relay
+    assert not MeshPath(kind="direct", via="198.51.100.1:40000").peer_relay
+
+
 def test_nodes_live_in_the_native_directory(tmp_path: Path) -> None:
     # The Rust client's native backend names its node directories the same way.
     assert MeshOptions(state_root=tmp_path).node_dir("app-x") == tmp_path / "app-x-native"

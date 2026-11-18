@@ -173,11 +173,19 @@ class MeshPath(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["direct", "relay", "idle"]
-    """``direct`` over UDP, through a DERP ``relay``, or ``idle``: nothing was
-    sent to the peer lately, so the next packet probes again."""
+    """``direct`` over UDP, through a ``relay``, or ``idle``: nothing was sent
+    to the peer lately, so the next packet probes again. A relay is a DERP
+    region or, where the mesh has one, a peer relay: a node of the mesh that
+    forwards UDP for the two, which is the faster of the two kinds."""
     via: str | None = None
-    """The peer's UDP address when direct, the DERP region (its code, e.g.
-    ``waw``) when relayed."""
+    """The peer's UDP address when direct; when relayed the DERP region (its
+    code, e.g. ``waw``), or ``peer relay <address>``."""
+
+    @property
+    def peer_relay(self) -> bool:
+        """Whether the relay is a peer relay (UDP through a node of the mesh),
+        not a DERP region."""
+        return self.kind == "relay" and (self.via or "").startswith("peer relay ")
 
 
 class MeshControl(BaseModel):
