@@ -56,6 +56,12 @@ KEY_EXPIRED = (
     "and allow mesh access to join with a new one"
 )
 
+REMOVED = (
+    "The mesh no longer takes this node (it was removed, or its key was "
+    "revoked); authorize the app again (without the cache) and allow mesh "
+    "access to join anew"
+)
+
 NOT_INSTALLED = (
     f"The mesh needs the arkitekt-mesh bindings, which are not installed here "
     f"({platform.python_implementation()} on {sys.platform} {platform.machine()}). "
@@ -174,6 +180,44 @@ class MeshPath(BaseModel):
     ``waw``) when relayed."""
 
 
+class MeshControl(BaseModel):
+    """How the mesh node stands with its coordination server right now (see
+    :meth:`Fakts.mesh_control`).
+
+    A node that lost the server keeps the peers it knows and tries again by
+    itself. One the server no longer takes (``usable`` is false) stays up
+    too, but its view of the mesh goes stale and its peers stop answering:
+    that takes a new login.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    state: Literal["connected", "reconnecting", "key_expired", "needs_login", "refused"]
+    reason: str | None = None
+    """Why, unless connected."""
+
+    @property
+    def usable(self) -> bool:
+        """Whether the node is, or will by itself be, part of the mesh."""
+        return self.state in ("connected", "reconnecting")
+
+    def error(self) -> MeshError | None:
+        """Why mesh aliases cannot be reached through this node, if they cannot."""
+        if self.usable:
+            return None
+        if self.state == "key_expired":
+            return MeshError(KEY_EXPIRED, "needs_login")
+        if self.state == "needs_login":
+            return MeshError(NEEDS_LOGIN, "needs_login")
+        return MeshError(f"{REMOVED} ({self.reason})" if self.reason else REMOVED, "login")
+
+
+def _without_credentials(url: str) -> str:
+    """A proxy url as logs may show it: without the credentials it carries."""
+    scheme, sep, rest = url.partition("://")
+    return f"{scheme}{sep}{rest.rpartition('@')[2]}"
+
+
 def _state_dir() -> Path:
     """The per-user state directory (as the Rust client's ``dirs`` crate
     picks it, so both keep their nodes side by side)."""
@@ -235,7 +279,9 @@ class NativeNode:
     def __init__(self, node: Any, statedir: Path) -> None:
         self._node = node
         self.proxy_url: str = node.proxy_url
-        """The local HTTP proxy into the mesh, e.g. ``http://127.0.0.1:41234``."""
+        """The local HTTP proxy into the mesh, ``http://mesh:<token>@127.0.0.1:41234``.
+        The token is what keeps other users of this machine out of the mesh:
+        the url is not for logs."""
         self.statedir = statedir
 
     def __deepcopy__(self, memo: dict) -> Self:
@@ -262,7 +308,13 @@ class NativeNode:
         if auth_key:
             logger.info("Joining the mesh as %s", hostname)
         # Only when set: older bindings do not take it.
-        tuning = {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
+        tuning: dict[str, Any] = (
+            {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
+        )
+        if hasattr(bindings, "ControlStatus"):  # arkitekt-mesh >= 0.13
+            # The proxy asks for credentials (they come back in its url):
+            # without them any user of this machine is this node to the mesh.
+            tuning["proxy_auth"] = True
         try:
             node = await bindings.Node.start(
                 str(statedir),
@@ -274,7 +326,11 @@ class NativeNode:
             )
         except bindings.MeshError as e:
             raise _translate(e, bindings, statedir) from e
-        logger.info("Connected to the mesh as %s; proxy at %s", hostname, node.proxy_url)
+        logger.info(
+            "Connected to the mesh as %s; proxy at %s",
+            hostname,
+            _without_credentials(node.proxy_url),
+        )
         return cls(node, statedir)
 
     async def turn(self) -> TurnInfo:
@@ -305,6 +361,31 @@ class NativeNode:
         except bindings.MeshError as e:
             raise MeshError(str(e)) from e
         return MeshPath(kind=found.kind, via=found.via)
+
+    def control(self) -> MeshControl | None:
+        """How the node stands with its coordination server right now;
+        ``None`` from bindings too old to tell."""
+        if not hasattr(self._node, "control"):
+            return None
+        bindings = _bindings()
+        try:
+            found = self._node.control()
+        except bindings.MeshError as e:
+            raise MeshError(str(e)) from e
+        return MeshControl(state=found.state, reason=found.reason)
+
+    async def control_changed(self) -> MeshControl | None:
+        """Wait for the next change of :meth:`control`. ``None`` when there
+        will be none to wait for: the node closed, or the bindings are too
+        old to tell."""
+        if not hasattr(self._node, "control_changed"):
+            return None
+        bindings = _bindings()
+        try:
+            found = await self._node.control_changed()
+        except bindings.MeshError:
+            return None
+        return MeshControl(state=found.state, reason=found.reason)
 
     def close(self) -> None:
         self._node.close()
@@ -338,7 +419,12 @@ class MeshRoute:
         self.started_at: float | None = None
         """When the node came up (``loop.time()``): its first connections may
         still be waiting for the peers to learn of it."""
+        self.refused: MeshError | None = None
+        """Why the running node is no way into the mesh any more: its
+        coordination server stopped taking it (its key expired, it was
+        removed). Mesh aliases then say so instead of timing out one by one."""
         self._start: asyncio.Task[Route] | None = None
+        self._watch: asyncio.Task[None] | None = None
         self._closed = False
 
     @property
@@ -354,7 +440,7 @@ class MeshRoute:
         """The route if it costs nothing to use: a proxy, or a node already up."""
         if self.proxy:
             return self.proxy, None
-        if self.node is not None:
+        if self.node is not None and self.refused is None:
             return self.node.proxy_url, self.node
         return None
 
@@ -374,6 +460,8 @@ class MeshRoute:
         """
         if (route := self.ready()) is not None:
             return route[0], route[1], None
+        if self.refused is not None:
+            return None, None, self.refused
         if self.options is None:
             return None, None, None
         if self._start is None:
@@ -406,7 +494,23 @@ class MeshRoute:
             return None, None, self.error
         self.node = node
         self.started_at = asyncio.get_running_loop().time()
+        self._watch = asyncio.ensure_future(self._awatch(node))
         return node.proxy_url, node, None
+
+    async def _awatch(self, node: NativeNode) -> None:
+        """Follow the node's standing with its coordination server for as
+        long as it runs. It reconnects by itself; what it cannot mend (an
+        expired key, a removed node) is said once, where the user sees it,
+        and from then on by every mesh alias asked for."""
+        while (control := await node.control_changed()) is not None:
+            error = control.error()
+            if error is not None and self.refused is None:
+                logger.warning("The mesh node is off the mesh: %s", error)
+            elif error is None and self.refused is not None:
+                logger.info("The mesh node is back on the mesh")
+            elif control.state == "reconnecting":
+                logger.debug("The mesh node lost its coordination server: %s", control.reason)
+            self.refused = error
 
     async def _anode(self, fakts: ActiveFakts) -> NativeNode:
         """Start the mesh node; it lives until the context exits. Its state
@@ -452,6 +556,8 @@ class MeshRoute:
     def close(self) -> None:
         """Stop the node, if one was started (or as soon as it has)."""
         self._closed = True
+        if self._watch is not None:
+            self._watch.cancel()
         if self.node is not None:
             node, self.node = self.node, None
             node.close()

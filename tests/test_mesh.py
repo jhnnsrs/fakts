@@ -376,6 +376,62 @@ async def test_fakts_runs_the_native_node(
 
 
 @pytest.mark.asyncio
+async def test_a_node_the_mesh_no_longer_takes_says_so(
+    fake_arkitekt_mesh: Any,
+    tmp_path: Path,
+    mesh_proxy: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    proxy, _ = mesh_proxy
+    FakeNode.proxy = proxy  # type: ignore[attr-defined]
+    # Bindings that tell how the node stands with control (arkitekt-mesh >= 0.13).
+    changes: asyncio.Queue = asyncio.Queue()
+
+    async def control_changed(self: FakeNode) -> Any:
+        return await changes.get()
+
+    fake_arkitekt_mesh.ControlStatus = SimpleNamespace
+    monkeypatch.setattr(FakeNode, "control_changed", control_changed, raising=False)
+
+    async def settled() -> None:
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+    value = mesh_fakts()
+    value.mesh = MeshClaim(ionscale_auth_key="tskey-secret", ionscale_coord_url="https://mesh.test")
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value),
+        manifest=make_manifest(),
+        mesh=MeshOptions(state_root=tmp_path, timeout=10),
+    )
+    async with fakts:
+        await fakts.aget_alias("test")
+        # Such bindings are asked for a proxy that takes credentials.
+        assert FakeNode.started[0]["tuning"] == {"proxy_auth": True}
+        route = fakts._mesh_route
+        assert route is not None and route.ready() is not None
+
+        # Losing control is the node's to mend: the route stays.
+        await changes.put(SimpleNamespace(state="reconnecting", reason="the stream ended"))
+        await settled()
+        assert route.ready() is not None
+
+        # A key control no longer takes is not: mesh aliases say so.
+        await changes.put(SimpleNamespace(state="key_expired", reason="the node key expired"))
+        await settled()
+        assert route.ready() is None
+        _, _, error = await route.aroute(value)
+        assert error is not None and error.code == "needs_login"
+        assert "authorize the app again" in str(error)
+
+        await changes.put(SimpleNamespace(state="connected", reason=None))
+        await settled()
+        assert route.ready() is not None
+
+
+@pytest.mark.asyncio
 async def test_the_tcp_buffer_reaches_the_node(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
     options = MeshOptions(tcp_buffer=4 << 20)
     await NativeNode.start(options, tmp_path / "n", "app", "https://mesh.example", "tskey")

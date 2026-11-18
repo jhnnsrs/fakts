@@ -20,7 +20,7 @@ dependencies = [
 rath = ["rath>=3.0"]
 crypto = ["cryptography>=42"]
 # The mesh node (arkirust's Rust client, in process) for mesh-only aliases.
-mesh = ["arkitekt-mesh>=0.12.2"]
+mesh = ["arkitekt-mesh>=0.13.0"]
 # The approval link as a QR code in the default device-code prompt, for
 # approving on a phone when no browser opened here.
 qr = ["segno>=1.6"]

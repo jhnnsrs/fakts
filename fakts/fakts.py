@@ -34,7 +34,7 @@ from fakts.errors import (
 from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
-from .mesh import MeshConfig, MeshPath, MeshRoute
+from .mesh import MeshConfig, MeshControl, MeshPath, MeshRoute
 from .models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Manifest
 from .protocols import FaktsCache, FaktsGrant
 from .report import AliasReport
@@ -214,6 +214,18 @@ class Fakts(KoiledModel):
         if alias is None or node is None or alias.proxy != node.proxy_url:
             return None
         return node.path(alias.host)
+
+    def mesh_control(self) -> MeshControl | None:
+        """How the mesh node this process runs stands with its coordination
+        server right now.
+
+        ``None`` when there is none to ask: no node was started (nothing
+        needed the mesh yet, or an external proxy is used), or the bindings
+        are too old to tell. A node that is not ``usable`` needs a new
+        login: its mesh aliases stop resolving and say why.
+        """
+        node = self._mesh_route.node if self._mesh_route is not None else None
+        return node.control() if node is not None else None
 
     @property
     def report_map(self) -> dict[str, AliasReport]:
