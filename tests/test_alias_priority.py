@@ -13,7 +13,9 @@ HUB = (Path(__file__).parent / "fixtures" / "hub.crt").read_text()
 
 
 def alias(id: str, *, reach: str, ssl: bool = True, priority: int | None = None) -> Alias:
-    return Alias(id=id, host=f"{id}.example", ssl=ssl, challenge="ht", reach=reach, priority=priority)
+    return Alias(
+        id=id, host=f"{id}.example", ssl=ssl, challenge="ht", reach=reach, priority=priority
+    )
 
 
 def instance(*listed: Alias, preferred: str | None = None) -> Instance:
@@ -34,9 +36,15 @@ def test_the_server_ranks_and_the_last_working_alias_only_breaks_ties() -> None:
     # The preferred alias does not jump the server's ranking...
     assert order(aliases.ranked_view(ranked)) == ["lan", "lan-2", "public"]
     # ...it goes first among those ranked alike.
-    assert order(aliases.ranked_view(ranked.model_copy(update={"preferred_alias": "lan-2"}))) == ["lan-2", "lan", "public"]
+    assert order(aliases.ranked_view(ranked.model_copy(update={"preferred_alias": "lan-2"}))) == [
+        "lan-2",
+        "lan",
+        "public",
+    ]
     # A server that sends no priority: the preferred alias first, then the server's order.
-    unranked = instance(alias("a", reach="lan"), alias("b", reach="lan"), alias("c", reach="lan"), preferred="c")
+    unranked = instance(
+        alias("a", reach="lan"), alias("b", reach="lan"), alias("c", reach="lan"), preferred="c"
+    )
     assert order(aliases.ranked_view(unranked)) == ["c", "a", "b"]
 
 
@@ -54,7 +62,9 @@ def test_the_client_policy_only_narrows_and_reorders(monkeypatch: pytest.MonkeyP
     assert order(aliases.ranked_view(ranked, policy)) == ["public", "lan"]
 
 
-def test_a_strict_instance_keeps_plain_http_only_where_it_never_leaves_the_machine_or_network() -> None:
+def test_a_strict_instance_keeps_plain_http_only_where_it_never_leaves_the_machine_or_network() -> (
+    None
+):
     strict = instance(
         alias("loopback+http", reach="loopback", ssl=False),
         alias("internal+http", reach="internal", ssl=False),

@@ -89,15 +89,20 @@ class AliasPolicy(BaseModel):
     def from_env(cls) -> "AliasPolicy":
         """The policy ``FAKTS_ALIAS_PREFER_REACH``, ``FAKTS_ALIAS_EXCLUDE_REACH`` and
         ``FAKTS_ALIAS_EXCLUDE`` (comma-separated) describe; empty when none is set."""
-        return cls(
-            prefer_reach=_env_list(ALIAS_PREFER_REACH_ENV),
-            exclude_reach=_env_list(ALIAS_EXCLUDE_REACH_ENV),
-            exclude_aliases=_env_list(ALIAS_EXCLUDE_ENV),
+        # Validated: an unknown reach in the environment is refused, not ignored.
+        return cls.model_validate(
+            {
+                "prefer_reach": _env_list(ALIAS_PREFER_REACH_ENV),
+                "exclude_reach": _env_list(ALIAS_EXCLUDE_REACH_ENV),
+                "exclude_aliases": _env_list(ALIAS_EXCLUDE_ENV),
+            }
         )
 
     def excludes(self, alias: Alias) -> bool:
         """Whether this policy never uses ``alias``."""
-        return alias.id in self.exclude_aliases or (alias.reach is not None and alias.reach in self.exclude_reach)
+        return alias.id in self.exclude_aliases or (
+            alias.reach is not None and alias.reach in self.exclude_reach
+        )
 
     def reach_rank(self, alias: Alias) -> int:
         """Where ``alias``'s reach comes in :attr:`prefer_reach`; after all of them if not listed."""
