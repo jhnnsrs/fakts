@@ -13,7 +13,7 @@ dependencies = [
     "certifi>=2025.4.26",
     "aiohttp>=3.11.18",
     # The app identity the login manifest is built on.
-    "arkitekt-spec>=3.19",
+    "arkitekt-spec>=12.6.0",
 ]
 
 [project.optional-dependencies]
