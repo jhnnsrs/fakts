@@ -36,7 +36,15 @@ from fakts.errors import (
     ServiceUnreachableError,
 )
 from fakts.mesh import MeshError, MeshRoute, Route
-from fakts.models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Instance, Requirement
+from fakts.models import (
+    ActiveFakts,
+    Alias,
+    AliasPolicy,
+    ChallengeKey,
+    GrantStatus,
+    Instance,
+    Requirement,
+)
 from fakts.report import AliasReport, PendingReport, areport_aliases
 from fakts.session import TokenSession
 from fakts.state import SessionState
@@ -86,8 +94,9 @@ def is_insecure_transport(alias: Alias) -> bool:
 
 def strict_view(instance: Instance) -> Instance:
     """``instance`` as a strict one is used: its TLS aliases carrying the hub's certificates
-    (so they are verified by those alone), its plain ones only where they go through the mesh.
-    Any other instance as it is."""
+    (so they are verified by those alone), its plain ones only where plain HTTP never leaves
+    this machine, the deployment's own network or the mesh (:func:`is_insecure_transport`) --
+    there a client needs no certificate at all. Any other instance as it is."""
     if not instance.is_strict():
         return instance
     assert instance.tls is not None
@@ -95,9 +104,36 @@ def strict_view(instance: Instance) -> Instance:
     usable = [
         alias.model_copy(update={"certificates": certificates}) if alias.ssl else alias
         for alias in instance.aliases
-        if alias.ssl or alias.is_mesh() or _reach(alias) == "mesh"
+        if not is_insecure_transport(alias)
     ]
     return instance.model_copy(update={"aliases": usable})
+
+
+def ranked_view(instance: Instance, policy: AliasPolicy | None = None) -> Instance:
+    """``instance`` with its aliases in the order this client tries them.
+
+    The server's ranking (``Alias.priority``, lower first) decides, after the client's
+    own :class:`~fakts.models.AliasPolicy`: aliases it excludes are dropped, and reaches it
+    prefers come first. Among aliases ranked alike, the one that worked last time
+    (``Instance.preferred_alias``) goes first, then the server's order. A server that
+    sends no priority leaves the preferred alias first and its own order after it.
+    """
+    aliases = list(instance.aliases)
+    if policy is not None:
+        aliases = [alias for alias in aliases if not policy.excludes(alias)]
+    index = {id(alias): position for position, alias in enumerate(aliases)}
+
+    def key(alias: Alias) -> tuple[int, bool, int, bool, int]:
+        priority = getattr(alias, "priority", None)
+        return (
+            policy.reach_rank(alias) if policy is not None else 0,
+            priority is None,
+            priority or 0,
+            alias.id != instance.preferred_alias,
+            index[id(alias)],
+        )
+
+    return instance.model_copy(update={"aliases": sorted(aliases, key=key)})
 
 
 _noted_insecure: set[tuple[str, str]] = set()
@@ -665,10 +701,10 @@ class AliasResolver:
             raise self._error_for(resolved.failure)
 
     async def _apersist_preferred(self, fakts: ActiveFakts, resolved: dict[str, Alias]) -> None:
-        """Remember each working alias as its instance's first.
+        """Remember each working alias as its instance's ``preferred_alias``.
 
         The next (cached) session then challenges the last known good alias
-        first. It goes through apersist because this writes the *whole*
+        first among those the server ranks alike (:func:`ranked_view`). It goes through apersist because this writes the *whole*
         ActiveFakts -- credentials included -- and this process may be holding
         an older refresh token than the one on disk (L3). A copy, swapped in
         under load_lock: loaded_fakts is only ever replaced there, never sorted
@@ -677,10 +713,8 @@ class AliasResolver:
         reordered: dict[str, Instance] = {}
         for key, alias in resolved.items():
             instance = fakts.instances.get(key)
-            if instance and instance.aliases and instance.aliases[0].id != alias.id:
-                reordered[key] = instance.model_copy(
-                    update={"aliases": sorted(instance.aliases, key=lambda a: a.id != alias.id)}
-                )
+            if instance and instance.preferred_alias != alias.id:
+                reordered[key] = instance.model_copy(update={"preferred_alias": alias.id})
         if not reordered:
             return
         state = self._state
@@ -718,11 +752,17 @@ class AliasResolver:
             return _Resolved(None, AliasReport(alias_id=None, reason=reason, valid=False), failure)
 
         instance = fakts.instances.get(req.key)
+        excluded = False
         if instance is not None:
             instance = strict_view(instance)
+            usable = len(instance.aliases)
+            instance = ranked_view(instance, self._settings.alias_policy)
+            excluded = usable > len(instance.aliases) == 0
         if not instance or not instance.aliases:
             reason = (
-                f"No aliases listed for {kind} service {req.key}."
+                f"Every alias of {kind} service {req.key} is excluded by this client's alias policy."
+                if excluded
+                else f"No aliases listed for {kind} service {req.key}."
                 if instance
                 else f"No instance granted for {kind} service {req.key}: "
                 f"{self._not_granted_why(req.key, req.service)}."

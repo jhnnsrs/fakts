@@ -1,7 +1,8 @@
 import json
+import os
 from enum import Enum
 from hashlib import sha256
-from typing import Any
+from typing import Any, Literal
 
 from arkitekt_spec import AppManifest, Requirement
 from arkitekt_spec.declare.wiring import Alias
@@ -56,6 +57,55 @@ class TlsClaim(BaseModel):
     certificates: list[str] = []
 
 
+Reach = Literal["loopback", "internal", "lan", "mesh", "public"]
+"""Where an alias's address works (``Alias.reach``)."""
+
+ALIAS_PREFER_REACH_ENV = "FAKTS_ALIAS_PREFER_REACH"
+ALIAS_EXCLUDE_REACH_ENV = "FAKTS_ALIAS_EXCLUDE_REACH"
+ALIAS_EXCLUDE_ENV = "FAKTS_ALIAS_EXCLUDE"
+
+
+def _env_list(name: str) -> list[str]:
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+
+
+class AliasPolicy(BaseModel):
+    """This client's own say over which aliases it uses, on top of the server's.
+
+    The server hands every instance's aliases ranked (``Alias.priority``) and the
+    client follows that. A policy can only narrow it: drop aliases by reach or id,
+    and try some reaches before the server's ranking. It never adds an alias, and
+    it never lets a client use plain HTTP where ``is_insecure_transport`` forbids it.
+    """
+
+    prefer_reach: list[Reach] = []
+    """Reaches tried first, in this order; the server's ranking decides within each."""
+    exclude_reach: list[Reach] = []
+    """Reaches never used."""
+    exclude_aliases: list[str] = []
+    """Alias ids never used."""
+
+    @classmethod
+    def from_env(cls) -> "AliasPolicy":
+        """The policy ``FAKTS_ALIAS_PREFER_REACH``, ``FAKTS_ALIAS_EXCLUDE_REACH`` and
+        ``FAKTS_ALIAS_EXCLUDE`` (comma-separated) describe; empty when none is set."""
+        return cls(
+            prefer_reach=_env_list(ALIAS_PREFER_REACH_ENV),
+            exclude_reach=_env_list(ALIAS_EXCLUDE_REACH_ENV),
+            exclude_aliases=_env_list(ALIAS_EXCLUDE_ENV),
+        )
+
+    def excludes(self, alias: Alias) -> bool:
+        """Whether this policy never uses ``alias``."""
+        return alias.id in self.exclude_aliases or (alias.reach is not None and alias.reach in self.exclude_reach)
+
+    def reach_rank(self, alias: Alias) -> int:
+        """Where ``alias``'s reach comes in :attr:`prefer_reach`; after all of them if not listed."""
+        if alias.reach in self.prefer_reach:
+            return self.prefer_reach.index(alias.reach)
+        return len(self.prefer_reach)
+
+
 class Instance(BaseModel):
     """Configuration for a service in Fakts."""
 
@@ -69,8 +119,11 @@ class Instance(BaseModel):
     tls: TlsClaim | None = None
     """Set when the instance's hub registered its certificate: the instance is
     then strict — its TLS aliases are verified by that certificate alone, and
-    its plain-HTTP aliases are not used unless they go through the mesh (they
-    are there for clients that predate the certificate)."""
+    its plain-HTTP aliases are used only where plain HTTP never leaves this
+    machine, the deployment's network or the mesh (``is_insecure_transport``)."""
+    preferred_alias: str | None = None
+    """The alias that worked last time, kept by this client: among aliases the
+    server ranks alike, it is tried first. Never sent by the server."""
 
     def is_strict(self) -> bool:
         """Whether the instance's hub registered the certificate its TLS aliases present."""

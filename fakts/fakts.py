@@ -35,7 +35,7 @@ from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
 from .mesh import MeshConfig, MeshControl, MeshPath, MeshRoute
-from .models import ActiveFakts, Alias, ChallengeKey, GrantStatus, Manifest
+from .models import ActiveFakts, Alias, AliasPolicy, ChallengeKey, GrantStatus, Manifest
 from .protocols import FaktsCache, FaktsGrant
 from .report import AliasReport
 from .state import SessionState
@@ -139,6 +139,11 @@ class Fakts(KoiledModel):
     see :class:`ReauthPolicy`."""
 
     allow_insecure_transport: bool = False
+    alias_policy: AliasPolicy = Field(default_factory=AliasPolicy.from_env)
+    """This client's own say over which aliases it uses, on top of the server's ranking:
+    reaches to prefer or exclude, aliases to exclude (:class:`~fakts.models.AliasPolicy`).
+    Defaults to what ``FAKTS_ALIAS_PREFER_REACH``, ``FAKTS_ALIAS_EXCLUDE_REACH`` and
+    ``FAKTS_ALIAS_EXCLUDE`` say."""
     """Permit sending OAuth2 credentials over plain HTTP to a non-loopback
     host. Fakts supports plain-HTTP deployments on a network, but since v2
     puts a rotating refresh token on the wire it has to be chosen, not

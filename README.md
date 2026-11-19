@@ -142,16 +142,23 @@ path) and keeps the first one that answers. If the instance carries a
 `challenge_key`, the probe is cryptographically verified: the service must
 sign a fresh nonce with its identity key, so an impostor answering 200
 does not pass (see the protocol section). Subsequent calls return the
-selected alias instantly — no further probing. The winning alias is also
-persisted as the preferred one, so the next process start challenges the
-last-known-good address first. Pass `force_refresh=True` to re-resolve, or
-`omit_challenge=True` to skip probing entirely.
+selected alias instantly — no further probing. Pass `force_refresh=True` to
+re-resolve, or `omit_challenge=True` to skip probing entirely.
 
-Within one service, that last-known-good alias is asked first and alone. If
+The aliases are tried in the order the hub's owner ranks them (Lok sends a
+`priority` per alias, by default from where its address works: `internal`,
+`loopback`, `lan`, `mesh`, `public`), narrowed by the client's own
+`alias_policy` (`FAKTS_ALIAS_PREFER_REACH`, `FAKTS_ALIAS_EXCLUDE_REACH`,
+`FAKTS_ALIAS_EXCLUDE`). The alias that worked last time is persisted as the
+instance's `preferred_alias` and goes first among those ranked alike. See
+[Alias selection](docs/alias-selection.md) for the whole story: the default
+ranking, owner rules, client policy, and where plain HTTP is allowed.
+
+Within one service, the first-ranked alias is asked first and alone. If
 it answers within `alias_head_start` (0.3 s) nothing else is asked; if not,
-the other aliases are challenged alongside it and the first to pass is used,
-so aliases that do not answer cost one `alias_challenge_timeout` between
-them, not one each. A mesh node is only started once the direct aliases have
+the other aliases are challenged alongside it and the best-ranked to pass is
+used, so aliases that do not answer cost one `alias_challenge_timeout`
+between them, not one each. A mesh node is only started once the direct aliases have
 failed — or, for a service last reached over the mesh, once the head start
 has passed without one of them answering.
 
@@ -712,6 +719,7 @@ code and (truncated) response body where applicable:
 | `allow_auto_load` | `True` | If `False`, `aget_*` raises instead of loading implicitly — call `aload()` yourself |
 | `refetch_on_alias_failure` | `True` | Reload from the grant once when aliases from a *cached* config fail their challenges — only when that needs no human; otherwise it raises and asks you to `alogin()` |
 | `alias_challenge_timeout` | `3` | Seconds per alias challenge probe |
+| `alias_policy` | from `FAKTS_ALIAS_*` | This client's say over which aliases it uses: `AliasPolicy(prefer_reach=..., exclude_reach=..., exclude_aliases=...)` (see [Alias selection](docs/alias-selection.md)) |
 | `delete_on_exit` | `False` | Reset the cache and loaded state on exit |
 
 `build_device_code_fakts` and `build_mandate_key_fakts` set most of these for you.

@@ -504,27 +504,24 @@ def merge_token_response(
 def _merge_instances(
     previous: Mapping[str, Instance], incoming: Mapping[str, Instance]
 ) -> dict[str, Instance]:
-    """Adopt the server's instances while keeping the learned alias order.
+    """Adopt the server's instances, aliases in the server's order, keeping the
+    alias that worked last time (``preferred_alias``) while the server still lists it.
 
-    The server is authoritative about *which* aliases exist; the client is
-    authoritative about which one worked last time. Preserve the local
-    ordering for aliases that survive, and append genuinely new ones. An empty
-    ``incoming`` withdraws every instance.
+    The server decides which aliases exist and how they rank; the client only
+    remembers which one worked, and tries it first among those ranked alike
+    (``fakts.aliases.ranked_view``). A cache written before ``preferred_alias``
+    kept that alias first in its list. An empty ``incoming`` withdraws every instance.
     """
     merged: dict[str, Instance] = {}
     for key, instance in incoming.items():
         old = previous.get(key)
-        if old is None or not old.aliases:
+        preferred = None
+        if old is not None:
+            preferred = old.preferred_alias or (old.aliases[0].id if old.aliases else None)
+        if preferred is not None and any(alias.id == preferred for alias in instance.aliases):
+            merged[key] = instance.model_copy(update={"preferred_alias": preferred})
+        else:
             merged[key] = instance
-            continue
-
-        preference = {alias.id: index for index, alias in enumerate(old.aliases)}
-        reordered = sorted(
-            instance.aliases,
-            key=lambda alias: preference.get(alias.id, len(preference)),
-        )
-        merged[key] = instance.model_copy(update={"aliases": reordered})
-
     return merged
 
 

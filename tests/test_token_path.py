@@ -625,7 +625,7 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].aliases[0].id == "fallback", (
+    assert cache.value.instances["test"].preferred_alias == "fallback", (
         "The working alias must still be persisted as the preferred one"
     )
 

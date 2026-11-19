@@ -63,6 +63,7 @@ from .mesh import MeshControl, MeshError, MeshOptions, MeshPath, MeshProxy, Turn
 from .models import (
     ActiveFakts,
     Alias,
+    AliasPolicy,
     ChallengeKey,
     GrantStatus,
     Manifest,
@@ -75,6 +76,7 @@ __all__ = [
     "Alias",
     "AliasAttempt",
     "AliasNotFoundError",
+    "AliasPolicy",
     "AttemptOutcome",
     "ChallengeError",
     "ChallengeKey",

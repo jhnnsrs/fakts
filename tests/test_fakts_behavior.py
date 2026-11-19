@@ -84,7 +84,7 @@ async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.Monkey
     )
 
 
-async def test_last_used_alias_is_moved_to_front_and_persisted(
+async def test_last_used_alias_is_persisted_as_preferred(
     monkeypatch: pytest.MonkeyPatch,
 ):
     """If a fallback alias is selected, it becomes the preferred alias in the cache."""
@@ -105,7 +105,7 @@ async def test_last_used_alias_is_moved_to_front_and_persisted(
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].aliases[0].id == "fallback", (
+    assert cache.value.instances["test"].preferred_alias == "fallback", (
         "The selected alias should be persisted as the preferred one"
     )
 
