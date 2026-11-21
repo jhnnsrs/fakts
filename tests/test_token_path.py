@@ -6,6 +6,7 @@ these are about *not* losing or leaking it rather than about happy paths.
 """
 
 import asyncio
+import json
 import os
 import stat
 import time
@@ -73,6 +74,25 @@ async def test_refresh_rotates_and_persists_before_use(token_server) -> None:
     assert cache.value is not None
     assert cache.value.auth.refresh_token == "rotated_token"
     assert cache.value.auth.access_token == "new_access"
+
+
+async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server) -> None:
+    """What the server stored at login goes stale when the app is upgraded: the
+    versions of the services it wants travel with every refresh."""
+    offered: list[dict] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        form = await request.post()
+        offered.append(json.loads(str(form["manifest"])))
+        return web.json_response(token_body("new_access", "rotated_token"))
+
+    endpoint = await token_server(handler)
+    manifest = make_manifest()
+    fakts = Fakts(grant=StaticGrant(fakts=fakts_pointing_at(endpoint)), cache=MemoryCache(), manifest=manifest)
+    async with fakts:
+        await fakts.aget_token()
+
+    assert offered == [manifest.model_dump()]
 
 
 async def test_cached_access_token_is_reused_without_refreshing(token_server) -> None:

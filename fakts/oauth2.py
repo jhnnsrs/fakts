@@ -358,12 +358,21 @@ async def arefresh(
     refresh_token: str,
     ssl_context: ssl.SSLContext,
     allow_insecure_transport: bool = False,
+    manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """POST the refresh grant. Rotates: the old refresh token is dead once the
-    server has processed this."""
+    server has processed this.
+
+    ``manifest`` is what the app is now, offered along: the server adopts it when nobody
+    has to be asked (an upgraded client wanting another version of a service it already
+    has), and goes on as approved otherwise. Never a condition of the refresh.
+    """
+    form = {"grant_type": REFRESH_GRANT, "refresh_token": refresh_token, "client_id": client_id}
+    if manifest is not None:
+        form["manifest"] = json.dumps(manifest)
     return await apost_form(
         token_endpoint,
-        {"grant_type": REFRESH_GRANT, "refresh_token": refresh_token, "client_id": client_id},
+        form,
         ssl_context=ssl_context,
         allow_insecure_transport=allow_insecure_transport,
     )

@@ -307,6 +307,9 @@ class TokenSession:
                     refresh_token=refresh_token,
                     ssl_context=self._settings.ssl_context,
                     allow_insecure_transport=self._settings.allow_insecure_transport,
+                    # What the server stored at login goes stale when the app is upgraded
+                    # (the service versions it wants): each refresh says what it is now.
+                    manifest=self._settings.manifest.model_dump(),
                 )
             except (aiohttp.ClientConnectorError, oauth2.TransientHTTPError) as e:
                 if attempt == TOKEN_CONNECT_RETRIES:
