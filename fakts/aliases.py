@@ -44,6 +44,7 @@ from fakts.models import (
     GrantStatus,
     Instance,
     Requirement,
+    VersionMismatch,
 )
 from fakts.report import AliasReport, PendingReport, areport_aliases
 from fakts.session import TokenSession
@@ -369,37 +370,45 @@ class AliasResolver:
                 )
         finally:
             await self.aflush_report()
-        if (mismatch := self.version_mismatch(fakts_key)) and (
-            self._version_warned.get(fakts_key, "") != self._running_version(fakts_key)
-        ):
-            self._version_warned[fakts_key] = self._running_version(fakts_key)
-            logger.warning(mismatch)
+        for mismatch in self.version_mismatches():
+            if mismatch.key != fakts_key or (
+                self._version_warned.get(fakts_key, "") == mismatch.running
+            ):
+                continue
+            self._version_warned[fakts_key] = mismatch.running
+            logger.warning(
+                "'%s' (%s) runs %s here, and '%s' was written for %s. "
+                "It is used anyway; some calls may fail.",
+                mismatch.key,
+                mismatch.service,
+                mismatch.running or "an unknown version",
+                self._state.manifest.identifier,
+                mismatch.wanted or "another version",
+            )
         return alias
 
-    def _running_version(self, fakts_key: str) -> str | None:
-        loaded = self._state.loaded_fakts
-        instance = loaded.instances.get(fakts_key) if loaded else None
-        return instance.version if instance else None
+    def version_mismatches(self) -> list[VersionMismatch]:
+        """The granted services the server judged outside the versions asked for.
 
-    def version_mismatch(self, fakts_key: str) -> str | None:
-        """What to tell the user when the key's service is outside the versions asked for.
-
-        None when it is within them, or when the server could not tell. Advisory: the
-        service is used either way.
+        Empty when all are within them, or the server could not tell. Advisory: each
+        is used either way.
         """
         loaded = self._state.loaded_fakts
-        instance = loaded.instances.get(fakts_key) if loaded else None
-        if instance is None or instance.satisfies is not False:
-            return None
-        requirements = self._state.manifest.requirements or []
-        wanted = next(
-            (getattr(r, "version", None) for r in requirements if r.key == fakts_key), None
-        )
-        return (
-            f"'{fakts_key}' ({instance.service}) runs {instance.version or 'an unknown version'} "
-            f"here, and '{self._state.manifest.identifier}' was written for "
-            f"{wanted or 'another version'}. It is used anyway; some calls may fail."
-        )
+        if loaded is None:
+            return []
+        wanted = {
+            r.key: getattr(r, "version", None) for r in self._state.manifest.requirements or []
+        }
+        return [
+            VersionMismatch(
+                key=key,
+                service=instance.service,
+                running=instance.version,
+                wanted=wanted.get(key),
+            )
+            for key, instance in loaded.instances.items()
+            if instance.satisfies is False
+        ]
 
     def _resolved(self, fakts_key: str, omit_challenge: bool) -> Alias | None:
         """The key's alias, if it is resolved and may be served as it is.

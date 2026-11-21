@@ -97,4 +97,6 @@ async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog
         with caplog.at_level("WARNING", logger="fakts.aliases"):
             assert (await fakts.aget_alias("mikro")).host == "testserver"
             await fakts.aget_alias("mikro", force_refresh=True)
+        (mismatch,) = fakts.version_mismatches()
+        assert (mismatch.key, mismatch.running, mismatch.wanted) == ("mikro", "11.4.0", None)
     assert len([r for r in caplog.records if "11.4.0" in r.message]) == 1

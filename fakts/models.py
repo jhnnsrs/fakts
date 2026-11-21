@@ -223,6 +223,17 @@ class MeshClaim(BaseModel):
     ionscale_coord_url: str | None = None
 
 
+class VersionMismatch(BaseModel):
+    """A granted service that runs outside the versions the app asked for. Advisory."""
+
+    key: str
+    service: str
+    running: str | None = None
+    """The version the instance runs, as its hub reported it."""
+    wanted: str | None = None
+    """The requirement's version specifier (``>=12.1``)."""
+
+
 class ActiveFakts(BaseModel):
     """The active Fakts are the Fakts that are currently active for this client"""
 

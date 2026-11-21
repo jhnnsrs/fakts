@@ -35,7 +35,15 @@ from fakts.session import ReauthPolicy, TokenSession
 
 from .challenge import generate_nonce, verify_challenge_signature
 from .mesh import MeshConfig, MeshControl, MeshPath, MeshRoute
-from .models import ActiveFakts, Alias, AliasPolicy, ChallengeKey, GrantStatus, Manifest
+from .models import (
+    ActiveFakts,
+    Alias,
+    AliasPolicy,
+    ChallengeKey,
+    GrantStatus,
+    Manifest,
+    VersionMismatch,
+)
 from .protocols import FaktsCache, FaktsGrant
 from .report import AliasReport
 from .state import SessionState
@@ -204,6 +212,14 @@ class Fakts(KoiledModel):
     def alias_map(self) -> dict[str, Alias]:
         """The resolved aliases, by requirement key."""
         return self._resolver.alias_map if self._resolver else {}
+
+    def version_mismatches(self) -> list[VersionMismatch]:
+        """The granted services that run outside the versions the app asked for.
+
+        As the server judged them at the last login or refresh; empty before that,
+        and when it could not tell. Advisory: each service is used either way.
+        """
+        return self._resolver.version_mismatches() if self._resolver else []
 
     def mesh_path(self, fakts_key: str) -> MeshPath | None:
         """How packets to the resolved alias of ``fakts_key`` travel right now.

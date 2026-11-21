@@ -68,6 +68,7 @@ from .models import (
     GrantStatus,
     Manifest,
     Requirement,
+    VersionMismatch,
 )
 from .testing import TestingFakts, build_testing_fakts
 
@@ -113,6 +114,7 @@ __all__ = [
     "TokenLoader",
     "TurnInfo",
     "UnsupportedChallengeKeyError",
+    "VersionMismatch",
     "build_device_code_fakts",
     "build_mandate_key_fakts",
     "build_testing_fakts",
