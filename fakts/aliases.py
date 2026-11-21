@@ -272,6 +272,8 @@ class AliasResolver:
         self._failed_at: dict[str, float] = {}
         """When each of them failed (``loop.time()``): not asked again for
         ``alias_retry_after``."""
+        self._version_warned: dict[str, str | None] = {}
+        """The running version each key was last warned about, so it is said once."""
 
     @property
     def current(self) -> bool:
@@ -362,11 +364,42 @@ class AliasResolver:
         assert state.alias_lock is not None
         try:
             async with state.alias_lock:
-                return await self._aget_alias_locked(
+                alias = await self._aget_alias_locked(
                     fakts_key, omit_challenge, omit_report, force_refresh
                 )
         finally:
             await self.aflush_report()
+        if (mismatch := self.version_mismatch(fakts_key)) and (
+            self._version_warned.get(fakts_key, "") != self._running_version(fakts_key)
+        ):
+            self._version_warned[fakts_key] = self._running_version(fakts_key)
+            logger.warning(mismatch)
+        return alias
+
+    def _running_version(self, fakts_key: str) -> str | None:
+        loaded = self._state.loaded_fakts
+        instance = loaded.instances.get(fakts_key) if loaded else None
+        return instance.version if instance else None
+
+    def version_mismatch(self, fakts_key: str) -> str | None:
+        """What to tell the user when the key's service is outside the versions asked for.
+
+        None when it is within them, or when the server could not tell. Advisory: the
+        service is used either way.
+        """
+        loaded = self._state.loaded_fakts
+        instance = loaded.instances.get(fakts_key) if loaded else None
+        if instance is None or instance.satisfies is not False:
+            return None
+        requirements = self._state.manifest.requirements or []
+        wanted = next(
+            (getattr(r, "version", None) for r in requirements if r.key == fakts_key), None
+        )
+        return (
+            f"'{fakts_key}' ({instance.service}) runs {instance.version or 'an unknown version'} "
+            f"here, and '{self._state.manifest.identifier}' was written for "
+            f"{wanted or 'another version'}. It is used anyway; some calls may fail."
+        )
 
     def _resolved(self, fakts_key: str, omit_challenge: bool) -> Alias | None:
         """The key's alias, if it is resolved and may be served as it is.

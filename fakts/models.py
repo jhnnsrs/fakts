@@ -129,6 +129,11 @@ class Instance(BaseModel):
     preferred_alias: str | None = None
     """The alias that worked last time, kept by this client: among aliases the
     server ranks alike, it is tried first. Never sent by the server."""
+    version: str | None = None
+    """The version the instance runs, as its hub last reported it. None when unknown."""
+    satisfies: bool | None = None
+    """Whether ``version`` is within the requirement's ``version`` specifier, as the
+    server judged it. None when either is unknown. Advisory: never a reason to refuse."""
 
     def is_strict(self) -> bool:
         """Whether the instance's hub registered the certificate its TLS aliases present."""

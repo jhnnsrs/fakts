@@ -86,3 +86,15 @@ def test_a_sync_with_works_for_synchronous_consumers():
 def test_rejects_unparseable_alias_urls():
     with pytest.raises(ValueError, match="scheme and"):
         build_testing_fakts(aliases={"svc": "not-a-url"})
+
+
+@pytest.mark.asyncio
+async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog):
+    testing = build_testing_fakts(aliases={"mikro": "http://testserver"})
+    testing.grant.fakts.instances["mikro"].version = "11.4.0"
+    testing.grant.fakts.instances["mikro"].satisfies = False
+    async with testing as fakts:
+        with caplog.at_level("WARNING", logger="fakts.aliases"):
+            assert (await fakts.aget_alias("mikro")).host == "testserver"
+            await fakts.aget_alias("mikro", force_refresh=True)
+    assert len([r for r in caplog.records if "11.4.0" in r.message]) == 1
