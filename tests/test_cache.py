@@ -208,8 +208,8 @@ async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is not None
 
-    data["created"] = (
-        datetime.datetime.now() - datetime.timedelta(hours=2)
-    ).isoformat()  # noqa: DTZ005 -- naive local time on purpose, as above
+    # Naive local time on purpose, as above.
+    two_hours_ago = datetime.datetime.now() - datetime.timedelta(hours=2)  # noqa: DTZ005
+    data["created"] = two_hours_ago.isoformat()
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is None
