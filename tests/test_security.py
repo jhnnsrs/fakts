@@ -7,7 +7,8 @@ leak to a host it was not meant for, or reach one over a downgraded transport.
 import datetime
 import ipaddress
 import ssl
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from typing import Any, Protocol
 
 import pytest
 import pytest_asyncio
@@ -16,13 +17,32 @@ from aiohttp import web
 from fakts.errors import FaktsError
 from fakts.grants.remote.discovery.utils import check_wellknown, discover_url
 from fakts.grants.remote.errors import DiscoveryError
+from fakts.models import ActiveFakts
 from fakts.oauth2 import apost_form, apost_json
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
+Server = Callable[[dict[str, Handler]], Awaitable[str]]
+"""The ``server`` fixture: serves POST ``routes``, gives the base url."""
+
+Document = Callable[[str], dict[str, str | None]]
+"""A well-known document for the server's own origin."""
+
+
+class WellKnownServer(Protocol):
+    """The ``wellknown`` fixture: serves ``document`` at /.well-known/fakts, gives host:port."""
+
+    def __call__(self, document: Document, ssl_context: ssl.SSLContext | None = None) -> Awaitable[str]: ...
+
+
+class CredentialPost(Protocol):
+    """:func:`~fakts.oauth2.apost_form` or :func:`~fakts.oauth2.apost_json`, as the redirect test calls them."""
+
+    def __call__(self, url: str, body: Mapping[str, str], /, *, ssl_context: ssl.SSLContext) -> Awaitable[dict[str, Any]]: ...
+
 
 @pytest_asyncio.fixture
-async def server() -> AsyncIterator[Callable[[dict[str, Handler]], Awaitable[str]]]:
+async def server() -> AsyncIterator[Server]:
     """Start a local server with POST routes; returns its base url (no slash)."""
     runners = []
 
@@ -46,7 +66,7 @@ async def server() -> AsyncIterator[Callable[[dict[str, Handler]], Awaitable[str
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
 @pytest.mark.parametrize("post", [apost_form, apost_json])
-async def test_a_credential_post_never_follows_a_redirect(server, status, post) -> None:
+async def test_a_credential_post_never_follows_a_redirect(server: Server, status: int, post: CredentialPost) -> None:
     """A redirect would resend the form body (307/308) to wherever it points."""
     stolen: list[dict] = []
 
@@ -87,11 +107,11 @@ def _document(origin: str, token_origin: str | None = None) -> dict:
 
 
 @pytest_asyncio.fixture
-async def wellknown() -> AsyncIterator[Callable[..., Awaitable[str]]]:
+async def wellknown() -> AsyncIterator[WellKnownServer]:
     """Serve a well-known document built from the server's own origin."""
     runners = []
 
-    async def start(document, ssl_context: ssl.SSLContext | None = None) -> str:
+    async def start(document: Document, ssl_context: ssl.SSLContext | None = None) -> str:
         async def handler(request: web.Request) -> web.Response:
             return web.json_response(document(f"{request.scheme}://{request.host}"))
 
@@ -111,7 +131,7 @@ async def wellknown() -> AsyncIterator[Callable[..., Awaitable[str]]]:
 
 
 @pytest.mark.asyncio
-async def test_a_token_endpoint_on_another_origin_is_refused(wellknown) -> None:
+async def test_a_token_endpoint_on_another_origin_is_refused(wellknown: WellKnownServer) -> None:
     host = await wellknown(lambda origin: _document(origin, token_origin="https://evil.example"))
 
     with pytest.raises(DiscoveryError, match="another origin"):
@@ -123,7 +143,7 @@ async def test_a_token_endpoint_on_another_origin_is_refused(wellknown) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_null_token_endpoint_is_refused(wellknown) -> None:
+async def test_a_null_token_endpoint_is_refused(wellknown: WellKnownServer) -> None:
     host = await wellknown(lambda origin: {**_document(origin), "token_endpoint": None})
 
     with pytest.raises(DiscoveryError, match="no 'token_endpoint'"):
@@ -131,7 +151,7 @@ async def test_a_null_token_endpoint_is_refused(wellknown) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_plain_http_server_is_still_found_without_a_scheme(wellknown) -> None:
+async def test_a_plain_http_server_is_still_found_without_a_scheme(wellknown: WellKnownServer) -> None:
     """https against a plain-http dev server is a protocol mismatch: fall back."""
     host = await wellknown(_document)
 
@@ -183,7 +203,7 @@ def _untrusted_tls_context() -> ssl.SSLContext:
 
 
 @pytest.mark.asyncio
-async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown) -> None:
+async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown: WellKnownServer) -> None:
     pytest.importorskip("cryptography")
     host = await wellknown(_document, ssl_context=_untrusted_tls_context())
 
@@ -196,7 +216,7 @@ async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown) 
 # --------------------------------------------------------------------------- #
 
 
-def _refresh(previous, **members) -> "object":
+def _refresh(previous: ActiveFakts, **members: Any) -> ActiveFakts:
     from fakts.oauth2 import TokenResponse, merge_token_response
 
     response = TokenResponse(access_token="a2", refresh_token="r2", client_id="test_client_id", **members)

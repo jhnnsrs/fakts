@@ -4,14 +4,14 @@ on its own rather than with every other one."""
 
 import asyncio
 from collections import defaultdict
-from typing import Any
+from collections.abc import Callable
 
 import pytest
 
 from fakts import Fakts
 from fakts.errors import AttemptOutcome, CompositionError, ServiceUnreachableError
 from fakts.fakts import Fakts as FaktsClass
-from fakts.models import Alias, Instance, Manifest, Requirement
+from fakts.models import ActiveFakts, Alias, ChallengeKey, Instance, Manifest, Requirement
 
 from .helpers import CountingGrant, MemoryCache, make_fakts_value, make_manifest
 
@@ -25,15 +25,22 @@ class Gated:
     an exception is raised). An alias answers at once unless it is ``held``.
     """
 
-    def __init__(self, **answers: Any) -> None:
+    def __init__(self, **answers: bool | Exception) -> None:
         self.answers = answers
         self.calls: list[str] = []
         self.held: set[str] = set()
         self._gates: defaultdict[str, asyncio.Event] = defaultdict(asyncio.Event)
+        self._called = asyncio.Event()
 
     def hold(self, *aliases: str) -> "Gated":
         self.held |= set(aliases)
         return self
+
+    async def until(self, predicate: Callable[[list[str]], bool]) -> None:
+        """Wait until ``predicate(self.calls)`` holds."""
+        while not predicate(self.calls):
+            self._called.clear()
+            await self._called.wait()
 
     def release(self, *aliases: str) -> None:
         self.held -= set(aliases)
@@ -41,8 +48,9 @@ class Gated:
             self._gates[alias].set()
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> "Gated":
-        async def challenge(_fakts: FaktsClass, alias: Alias, challenge_key: object = None, proxy: Any = None) -> bool:
+        async def challenge(_fakts: FaktsClass, alias: Alias, challenge_key: ChallengeKey | None = None, proxy: str | None = None) -> bool:
             self.calls.append(alias.id)
+            self._called.set()
             if alias.id in self.held:
                 await self._gates[alias.id].wait()
             answer = self.answers.get(alias.id, True)
@@ -54,7 +62,7 @@ class Gated:
         return self
 
 
-def two_services() -> tuple[Any, Manifest]:
+def two_services() -> tuple[ActiveFakts, Manifest]:
     """``up`` (one alias) and the optional ``down`` (one alias)."""
     value = make_fakts_value()
     value.auth.report_endpoint = None
@@ -134,8 +142,7 @@ async def test_the_first_alias_wins_while_it_answers_in_time(
     )
     async with fakts:
         lookup = asyncio.ensure_future(fakts.aget_alias("test", omit_report=True))
-        while "primary" not in gated.calls:
-            await asyncio.sleep(0)
+        await gated.until(lambda calls: "primary" in calls)
         gated.release("primary")
         alias = await asyncio.wait_for(lookup, 5)
     assert alias.id == "primary"
@@ -231,8 +238,7 @@ async def test_a_resolved_service_is_served_while_another_is_being_challenged(
         gated.hold("down")
         asked = len(gated.calls)
         waiting = asyncio.ensure_future(fakts.aget_alias_or_none("down", omit_report=True))
-        while len(gated.calls) == asked:
-            await asyncio.sleep(0)
+        await gated.until(lambda calls: len(calls) != asked)
         assert (await asyncio.wait_for(fakts.aget_alias("up", omit_report=True), 1)).id == "up"
         gated.release("down")
         assert await waiting is None

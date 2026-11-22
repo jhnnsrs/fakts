@@ -4,13 +4,15 @@ order depends on whether this process runs in a container, and the challenge
 decides.
 """
 
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from fakts import Fakts, aliases
 from fakts.errors import CompositionError
-from fakts.models import ActiveFakts, Alias, Instance
+from fakts.models import ActiveFakts, Alias, ChallengeKey, Instance
 
 from .helpers import CountingGrant, make_fakts_value, make_manifest
 
@@ -31,8 +33,8 @@ def docker_fakts(*order: str) -> ActiveFakts:
     return value
 
 
-def recording_challenge(probed: list[str], *reachable: str) -> Any:
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+def recording_challenge(probed: list[str], *reachable: str) -> Callable[..., Awaitable[bool]]:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         probed.append(alias.id)
         return alias.id in reachable
 
@@ -144,7 +146,7 @@ async def test_an_unreachable_docker_alias_fails_like_any_other(
     assert probed == ["direct", "docker"]
 
 
-def test_a_container_is_recognised_by_its_marker_file(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_container_is_recognised_by_its_marker_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     marker = tmp_path / ".dockerenv"
     monkeypatch.setattr(aliases, "_CONTAINER_MARKERS", (str(marker),))
 

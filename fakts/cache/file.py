@@ -185,7 +185,7 @@ class FileCache(pydantic.BaseModel):
         another manifest (hash mismatch), or when it expired.
         """
 
-        if not os.path.exists(self.cache_file):
+        if not os.path.exists(self.cache_file):  # noqa: ASYNC240 -- the cache file is read synchronously by design (O_NOFOLLOW open below); a stat of a local file
             return None
 
         self._warn_about_permissions(self.cache_file)
@@ -394,7 +394,7 @@ class FileCache(pydantic.BaseModel):
         # os.open's mode argument is masked by the umask, hence the fchmod.
         # Windows has no POSIX modes (and no fchmod): there the file takes the
         # ACL of the user's profile directory it is created in.
-        directory = os.path.dirname(os.path.abspath(self.cache_file)) or "."
+        directory = os.path.dirname(os.path.abspath(self.cache_file)) or "."  # noqa: ASYNC240 -- string work on the path (abspath reads only the cwd), no disk IO
         tmp_file = f"{self.cache_file}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
 
         try:
@@ -412,9 +412,10 @@ class FileCache(pydantic.BaseModel):
             await self._areplace_with_retry(tmp_file, self.cache_file)
         except Exception:
             # Never leave the secret lying around in a stray temp file.
+            # A temp file that was never created raises FileNotFoundError,
+            # an OSError like any other failure here.
             try:
-                if os.path.exists(tmp_file):
-                    os.remove(tmp_file)
+                os.remove(tmp_file)
             except OSError:
                 pass
             raise
@@ -453,6 +454,6 @@ class FileCache(pydantic.BaseModel):
 
     async def areset(self) -> None:
         """Delete the cached session."""
-        if os.path.exists(self.cache_file):
+        if os.path.exists(self.cache_file):  # noqa: ASYNC240 -- synchronous like the cache's other file IO; a stat of a local file
             os.remove(self.cache_file)
         return None

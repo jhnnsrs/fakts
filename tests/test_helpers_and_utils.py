@@ -8,19 +8,19 @@ from fakts.utils import truncate
 # --------------------------------------------------------------------------- #
 
 
-def test_truncate_under_limit_passthrough():
+def test_truncate_under_limit_passthrough() -> None:
     assert truncate("hello", max_length=300) == "hello"
 
 
-def test_truncate_strips_whitespace():
+def test_truncate_strips_whitespace() -> None:
     assert truncate("   hello   ") == "hello"
 
 
-def test_truncate_empty_string():
+def test_truncate_empty_string() -> None:
     assert truncate("   ") == ""
 
 
-def test_truncate_over_limit_adds_note():
+def test_truncate_over_limit_adds_note() -> None:
     text = "a" * 350
     result = truncate(text, max_length=300)
     assert result.startswith("a" * 300)

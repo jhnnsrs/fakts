@@ -19,9 +19,10 @@ import os
 import platform
 import re
 import sys
+from collections.abc import Awaitable
 from hashlib import sha256
 from pathlib import Path
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Protocol, Self, cast
 
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from arkitekt_spec.declare.wiring import TurnInfo
@@ -229,12 +230,97 @@ def hostname_label(raw: str) -> str:
     return label or "arkitekt-app"
 
 
-def _bindings() -> Any:
+class _MeshTurnInfo(Protocol):
+    """The bindings' ``TurnInfo``: one ICE server entry."""
+
+    @property
+    def urls(self) -> list[str]: ...
+    @property
+    def username(self) -> str: ...
+    @property
+    def credential(self) -> str: ...
+
+
+class _MeshPeerPath(Protocol):
+    """The bindings' ``PeerPath``."""
+
+    @property
+    def kind(self) -> Literal["direct", "relay", "idle"]: ...
+    @property
+    def via(self) -> str | None: ...
+
+
+class _MeshControlStatus(Protocol):
+    """The bindings' ``ControlStatus`` (arkitekt-mesh >= 0.13)."""
+
+    @property
+    def state(self) -> Literal["connected", "reconnecting", "key_expired", "needs_login", "refused"]: ...
+    @property
+    def reason(self) -> str | None: ...
+
+
+class _MeshNode(Protocol):
+    """A running node of the bindings (``arkitekt_mesh.Node``). ``path``,
+    ``control`` and ``control_changed`` are missing from older bindings;
+    :class:`NativeNode` checks for them before use."""
+
+    @property
+    def proxy_url(self) -> str: ...
+    async def turn(self) -> _MeshTurnInfo: ...
+    async def forward(self, host: str, port: int) -> str: ...
+    def path(self, host: str) -> _MeshPeerPath: ...
+    def control(self) -> _MeshControlStatus: ...
+    async def control_changed(self) -> _MeshControlStatus: ...
+    def close(self) -> None: ...
+
+
+class _MeshNodeClass(Protocol):
+    """The bindings' ``Node`` class: its static constructors."""
+
+    def start(
+        self,
+        statedir: str,
+        hostname: str,
+        control_url: str | None = None,
+        auth_key: str | None = None,
+        timeout: float = 90,
+        ephemeral: bool = False,
+        listen: str = "127.0.0.1:0",
+        *,
+        tcp_buffer: int | None = None,
+        proxy_auth: bool = False,
+    ) -> Awaitable[_MeshNode]: ...
+    def has_state(self, statedir: str) -> bool: ...
+
+
+class _MeshBindings(Protocol):
+    """The ``arkitekt_mesh`` module, as far as fakts uses it. ``KeyExpired``
+    (> 0.11) and ``ControlStatus`` (>= 0.13) are looked up only where present."""
+
+    @property
+    def Node(self) -> _MeshNodeClass: ...
+    @property
+    def MeshError(self) -> type[Exception]: ...
+    @property
+    def NeedsLogin(self) -> type[Exception]: ...
+    @property
+    def Locked(self) -> type[Exception]: ...
+    @property
+    def Refused(self) -> type[Exception]: ...
+    @property
+    def Timeout(self) -> type[Exception]: ...
+    @property
+    def LockedOut(self) -> type[Exception]: ...
+
+
+def _bindings() -> _MeshBindings:
     try:
         import arkitekt_mesh  # type: ignore[import-not-found]
     except ImportError:
         raise MeshError(NOT_INSTALLED) from None
-    return arkitekt_mesh
+    # The import resolves only where the mesh extra is installed: the module
+    # is described by the protocol, not checked against it.
+    return cast(_MeshBindings, arkitekt_mesh)
 
 
 def _sentence(error: Exception) -> str:
@@ -243,7 +329,7 @@ def _sentence(error: Exception) -> str:
     return text[:1].upper() + text[1:]
 
 
-def _translate(error: Exception, bindings: Any, statedir: Path) -> MeshError:
+def _translate(error: Exception, bindings: _MeshBindings, statedir: Path) -> MeshError:
     """The bindings' exception as a :class:`MeshError` with the node's code.
 
     The bindings' messages already name the cause and the control server;
@@ -270,7 +356,7 @@ def _translate(error: Exception, bindings: Any, statedir: Path) -> MeshError:
 class NativeNode:
     """The mesh node running in this process; stop it with :meth:`close`."""
 
-    def __init__(self, node: Any, statedir: Path) -> None:
+    def __init__(self, node: _MeshNode, statedir: Path) -> None:
         self._node = node
         self.proxy_url: str = node.proxy_url
         """The local HTTP proxy into the mesh, ``http://mesh:<token>@127.0.0.1:41234``.

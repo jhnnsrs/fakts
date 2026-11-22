@@ -4,6 +4,7 @@ and self-healing of stale caches."""
 import asyncio
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from fakts.models import (
     GrantStatus,
     Requirement,
 )
+from fakts.report import PendingReport
 
 from .helpers import CountingGrant, MemoryCache, make_fakts_value, make_manifest
 
@@ -40,7 +42,7 @@ class FailingSetCache(BaseModel):
         self.value = None
 
 
-async def test_concurrent_first_access_loads_grant_once():
+async def test_concurrent_first_access_loads_grant_once() -> None:
     """Concurrent consumers must not trigger the (interactive) grant twice."""
     grant = CountingGrant(fakts=make_fakts_value(), delay=0.05)
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -57,7 +59,7 @@ async def test_concurrent_first_access_loads_grant_once():
     assert results[2].id == "primary"
 
 
-async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.MonkeyPatch):
+async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """After the first full resolution, getting an alias must not challenge again."""
     challenge_count = 0
 
@@ -84,7 +86,7 @@ async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.Monkey
 
 async def test_last_used_alias_is_persisted_as_preferred(
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     """If a fallback alias is selected, it becomes the preferred alias in the cache."""
 
     async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
@@ -106,7 +108,7 @@ async def test_last_used_alias_is_persisted_as_preferred(
     assert cache.value.instances["test"].preferred_alias == "fallback", "The selected alias should be persisted as the preferred one"
 
 
-async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
+async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch) -> None:
     """If aliases from cached fakts fail, the fakts are reloaded from the grant."""
 
     async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
@@ -129,7 +131,7 @@ async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
 
 async def test_a_self_heal_whose_grant_fails_reports_why_the_services_failed(
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     """A handed-in credential is single-use once it rotated: re-running that grant ends
     in invalid_grant. That failure must not replace the one the person can act on."""
     from fakts.grants.remote.errors import RetrieveError
@@ -156,7 +158,7 @@ async def test_a_self_heal_whose_grant_fails_reports_why_the_services_failed(
     assert isinstance(failed.value.__cause__, RetrieveError), "and why it failed is kept"
 
 
-async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: pytest.MonkeyPatch):
+async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: pytest.MonkeyPatch) -> None:
     """Self-heal re-ran whatever grant there was: for a device-code app, one
     unreachable service opened a browser and replaced the client, cutting
     off every sibling process. Only a non-interactive grant self-heals."""
@@ -179,7 +181,7 @@ async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: py
     assert grant.load_count == 0, "a failed lookup must not re-run the interactive grant"
 
 
-async def test_optional_missing_service_does_not_refresh_every_time():
+async def test_optional_missing_service_does_not_refresh_every_time() -> None:
     """A missing optional service raises, but must not re-resolve on every get."""
     manifest = make_manifest()
     assert manifest.requirements is not None
@@ -199,7 +201,7 @@ async def test_optional_missing_service_does_not_refresh_every_time():
     assert grant.load_count == 1
 
 
-async def test_optional_not_granted_raises_service_not_granted():
+async def test_optional_not_granted_raises_service_not_granted() -> None:
     """A declared optional service without a granted instance must raise
     ServiceNotGrantedError, so callers can degrade gracefully."""
     manifest = make_manifest()
@@ -214,7 +216,7 @@ async def test_optional_not_granted_raises_service_not_granted():
             await fakts.aget_alias("declined", omit_challenge=True, omit_report=True)
 
 
-async def test_undeclared_key_is_not_a_grant_problem():
+async def test_undeclared_key_is_not_a_grant_problem() -> None:
     """An undeclared key is a programming error, not a declined grant."""
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -228,7 +230,7 @@ async def test_undeclared_key_is_not_a_grant_problem():
 
 async def test_unreachable_granted_service_is_not_a_grant_problem(
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     """A granted but unreachable optional service must not look like a
     declined grant."""
 
@@ -251,7 +253,7 @@ async def test_unreachable_granted_service_is_not_a_grant_problem(
     assert not isinstance(excinfo.value, ServiceNotGrantedError)
 
 
-async def test_grant_status_explicit_derived_and_unknown():
+async def test_grant_status_explicit_derived_and_unknown() -> None:
     """Explicit server statuses win; a granted instance derives GRANTED;
     anything else is UNKNOWN."""
     value = make_fakts_value()
@@ -273,7 +275,7 @@ async def test_grant_status_explicit_derived_and_unknown():
         assert await fakts.aget_grant_status("declined") is not GrantStatus.GRANTED
 
 
-async def test_explicit_status_is_reflected_in_error_message():
+async def test_explicit_status_is_reflected_in_error_message() -> None:
     """A reported denial/unavailability must show up in the error instead
     of the hedged 'may have declined' message."""
     value = make_fakts_value()
@@ -297,7 +299,7 @@ async def test_explicit_status_is_reflected_in_error_message():
             await fakts.aget_alias("missing", omit_challenge=True, omit_report=True)
 
 
-async def test_unknown_status_values_are_coerced():
+async def test_unknown_status_values_are_coerced() -> None:
     """A status value from a newer server must not break validation."""
     raw = make_fakts_value().model_dump()
     raw["statuses"] = {"test": "revoked", "other": "denied"}
@@ -308,7 +310,7 @@ async def test_unknown_status_values_are_coerced():
     assert parsed.statuses["other"] == GrantStatus.DENIED
 
 
-async def test_aget_alias_or_none():
+async def test_aget_alias_or_none() -> None:
     """Not-granted and unreachable services yield None; undeclared keys
     still raise (a bug, not a runtime condition)."""
     manifest = make_manifest()
@@ -328,7 +330,7 @@ async def test_aget_alias_or_none():
             await fakts.aget_alias_or_none("undeclared", omit_challenge=True)
 
 
-async def test_report_skipped_when_endpoint_has_no_report_url():
+async def test_report_skipped_when_endpoint_has_no_report_url() -> None:
     """With reporting on (the default), a missing report_url must be skipped silently."""
     value = make_fakts_value()
     value.auth.report_endpoint = None
@@ -342,7 +344,7 @@ async def test_report_skipped_when_endpoint_has_no_report_url():
     assert alias.id == "primary"
 
 
-async def test_report_errors_are_caught():
+async def test_report_errors_are_caught() -> None:
     """A failing report endpoint must log and continue, not break alias resolution."""
     value = make_fakts_value(access_token="cached_access_token")
     value.auth.report_endpoint = "http://localhost:1/report"
@@ -356,7 +358,7 @@ async def test_report_errors_are_caught():
     assert alias.id == "primary"
 
 
-async def test_manifest_hash_invalidates_cache(tmp_path: Path):
+async def test_manifest_hash_invalidates_cache(tmp_path: Path) -> None:
     """Changing the manifest must invalidate the cached fakts."""
     cache_file = str(tmp_path / "cache.json")
 
@@ -381,10 +383,10 @@ async def test_manifest_hash_invalidates_cache(tmp_path: Path):
     assert grant.load_count == 2
 
 
-async def test_corrupt_cache_file_is_ignored(tmp_path: Path):
+async def test_corrupt_cache_file_is_ignored(tmp_path: Path) -> None:
     """A corrupt cache file must not break startup."""
     cache_file = str(tmp_path / "cache.json")
-    with open(cache_file, "w") as f:
+    with open(cache_file, "w") as f:  # noqa: ASYNC230 -- test setup writing its own tmp file; nothing else runs on the loop
         f.write("{not valid json")
 
     grant = CountingGrant(fakts=make_fakts_value())
@@ -396,7 +398,7 @@ async def test_corrupt_cache_file_is_ignored(tmp_path: Path):
     assert grant.load_count == 1
 
 
-async def test_arefresh_reloads_from_grant():
+async def test_arefresh_reloads_from_grant() -> None:
     """arefresh must bypass cache and loaded fakts (used to raise AttributeError)."""
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=make_manifest())
@@ -408,7 +410,7 @@ async def test_arefresh_reloads_from_grant():
     assert grant.load_count == 2
 
 
-async def test_entering_does_not_run_the_grant():
+async def test_entering_does_not_run_the_grant() -> None:
     """Entering the context is pure setup: locks and the cache hash binding.
 
     There used to be a `load_on_enter` flag that ran the grant here. It made
@@ -429,7 +431,7 @@ async def test_entering_does_not_run_the_grant():
         assert fakts.loaded_fakts is not None
 
 
-async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch):
+async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
     """A failing cache write must not break loading or alias resolution."""
 
     async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
@@ -453,7 +455,7 @@ async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch)
     assert grant.load_count == 1
 
 
-async def test_rejected_credential_adopts_fresh_cached_one():
+async def test_rejected_credential_adopts_fresh_cached_one() -> None:
     """If the cache holds a credential we have not tried (e.g. a sibling
     process rotated first), adopt it instead of re-running the grant."""
     fresh = make_fakts_value(refresh_token="rotated_token", client_id="new_client_id")
@@ -472,7 +474,7 @@ async def test_rejected_credential_adopts_fresh_cached_one():
         assert grant.load_count == 0, "The grant must not have been triggered"
 
 
-async def test_already_tried_credential_is_not_adopted_again():
+async def test_already_tried_credential_is_not_adopted_again() -> None:
     """Adoption keys on (client_id, refresh_token). Re-adopting something we
     already tried would spin instead of converging."""
     cached = make_fakts_value(refresh_token="tok_a", client_id="cid_a")
@@ -487,7 +489,7 @@ async def test_already_tried_credential_is_not_adopted_again():
     assert adopted is None
 
 
-async def test_reapproval_rotating_client_id_is_adopted():
+async def test_reapproval_rotating_client_id_is_adopted() -> None:
     """Re-approval rotates the client identity too, so a matching refresh
     token alone must not be treated as 'the same credential'."""
     cached = make_fakts_value(refresh_token="same_token", client_id="rotated_client")
@@ -503,7 +505,7 @@ async def test_reapproval_rotating_client_id_is_adopted():
     assert adopted.auth.client_id == "rotated_client"
 
 
-async def test_delete_on_exit(tmp_path: Path):
+async def test_delete_on_exit(tmp_path: Path) -> None:
     cache_file = str(tmp_path / "cache.json")
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(
@@ -515,13 +517,13 @@ async def test_delete_on_exit(tmp_path: Path):
 
     async with fakts:
         await fakts.aload()
-        assert os.path.exists(cache_file)
+        assert os.path.exists(cache_file)  # noqa: ASYNC240 -- a test inspecting its own tmp dir; nothing else runs on the loop
 
-    assert not os.path.exists(cache_file)
+    assert not os.path.exists(cache_file)  # noqa: ASYNC240 -- a test inspecting its own tmp dir; nothing else runs on the loop
     assert fakts.loaded_fakts is None
 
 
-async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatch):
+async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatch) -> None:
     """Aliases resolved in one `async with` may be bound to that block's mesh
     node, closed on exit: a second block must not serve them."""
     challenged: list[str] = []
@@ -541,7 +543,7 @@ async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatc
     assert challenged == ["primary", "primary"]
 
 
-async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.MonkeyPatch):
+async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:
     """A required service unreachable at the first lookup used to stay failed
     for the life of the process: nothing ever challenged it again."""
     up = False
@@ -567,7 +569,7 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
     assert alias.id == "primary"
 
 
-async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pytest.MonkeyPatch):
+async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pytest.MonkeyPatch) -> None:
     """A slow report endpoint used to stall every alias lookup in the process
     for up to REPORT_TIMEOUT, because the report ran under _alias_lock."""
     import fakts.aliases as aliases_module
@@ -577,7 +579,7 @@ async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pyte
     async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
         return True
 
-    async def report(pending, **kwargs) -> None:
+    async def report(pending: PendingReport, **kwargs: Any) -> None:
         assert fakts._state is not None and fakts._state.alias_lock is not None
         held.append(fakts._state.alias_lock.locked())
 

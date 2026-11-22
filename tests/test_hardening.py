@@ -11,17 +11,19 @@ import stat
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar, Protocol
 
 import pytest
 import pytest_asyncio
 from aiohttp import web
+from aiohttp.client import _RequestContextManager
+from aiohttp.typedefs import StrOrURL
 from pydantic import BaseModel
 
 from fakts import Fakts
 from fakts.cache import file as file_cache
 from fakts.cache.file import FileCache
-from fakts.errors import NeedsReauthenticationError
+from fakts.errors import ChallengeStatusError, NeedsReauthenticationError
 from fakts.grants.env import EnvGrant
 from fakts.grants.hard import HardFaktsGrant
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
@@ -44,8 +46,14 @@ pytestmark = pytest.mark.asyncio
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
 
+class Server(Protocol):
+    """The ``server`` fixture: serves ``routes`` (by ``method``), gives the base url."""
+
+    def __call__(self, routes: dict[str, Handler], method: str = "GET") -> Awaitable[str]: ...
+
+
 @pytest_asyncio.fixture
-async def server() -> AsyncIterator[Callable[..., Awaitable[str]]]:
+async def server() -> AsyncIterator[Server]:
     runners = []
 
     async def start(routes: dict[str, Handler], method: str = "GET") -> str:
@@ -80,7 +88,7 @@ class Grant(BaseModel):
 # --------------------------------------------------------------------------- #
 
 
-async def test_challenge_does_not_follow_redirects(server) -> None:
+async def test_challenge_does_not_follow_redirects(server: Server) -> None:
     """The signed message commits only to the nonce, so a host that bounces
     the probe to the real service would have it sign our nonce and pass.
     Refusing redirects removes the zero-effort version of that."""
@@ -101,20 +109,20 @@ async def test_challenge_does_not_follow_redirects(server) -> None:
     alias = Alias(id="a", host="127.0.0.1", port=port, challenge="challenge")
 
     async with fakts:
-        with pytest.raises(Exception):
+        with pytest.raises(ChallengeStatusError):
             await fakts._achallenge_alias(alias)
 
     assert not signed_by_real_service["hit"], "the probe was relayed to the genuine service — a redirector could satisfy the challenge and still receive all the traffic"
 
 
 async def test_omit_challenge_does_not_disable_later_verification(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One omit_challenge=True call used to poison the alias cache for the
     whole process, skipping the pinned-key check for every later caller."""
     challenged: list[str] = []
 
-    async def fake_challenge(self, alias, challenge_key=None) -> bool:
+    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         challenged.append(alias.id)
         return True
 
@@ -142,7 +150,7 @@ async def test_omit_challenge_does_not_disable_later_verification(
 # --------------------------------------------------------------------------- #
 
 
-async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog) -> None:
+async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """A corrupt cache is logged on every start; the log must not carry the
     credential that made it corrupt."""
     secret = "v1.SUPERSECRET_REFRESH_TOKEN_ABCDEFGHIJKLMNOP"
@@ -160,7 +168,7 @@ async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog) -
 # --------------------------------------------------------------------------- #
 
 
-async def test_insecure_transport_env_var_respects_falsey_values(monkeypatch) -> None:
+async def test_insecure_transport_env_var_respects_falsey_values(monkeypatch: pytest.MonkeyPatch) -> None:
     """FAKTS_ALLOW_INSECURE_TRANSPORT=0 must not *enable* insecure transport."""
     url = "http://some-lan-box:8000/o/token/"
 
@@ -173,7 +181,7 @@ async def test_insecure_transport_env_var_respects_falsey_values(monkeypatch) ->
     check_transport(url, False)  # must not raise
 
 
-async def test_report_is_skipped_over_untrusted_transport(monkeypatch) -> None:
+async def test_report_is_skipped_over_untrusted_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     """The report carries the access token, so it gets the same gate as the
     token endpoint. It used to be the one credential-bearing call without one."""
     import aiohttp
@@ -181,7 +189,7 @@ async def test_report_is_skipped_over_untrusted_transport(monkeypatch) -> None:
     posted: list[str] = []
     real_post = aiohttp.ClientSession.post
 
-    def spy(self, url, *args, **kwargs):
+    def spy(self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any) -> _RequestContextManager:
         posted.append(str(url))
         return real_post(self, url, *args, **kwargs)
 
@@ -202,14 +210,14 @@ async def test_report_is_skipped_over_untrusted_transport(monkeypatch) -> None:
     assert posted == [], f"the access token was sent over plain http: {posted}"
 
 
-async def test_report_over_https_is_sent(monkeypatch) -> None:
+async def test_report_over_https_is_sent(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate must not simply disable reporting everywhere."""
     import aiohttp
 
     posted: list[str] = []
     real_post = aiohttp.ClientSession.post
 
-    def spy(self, url, *args, **kwargs):
+    def spy(self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any) -> _RequestContextManager:
         posted.append(str(url))
         return real_post(self, url, *args, **kwargs)
 
@@ -253,7 +261,7 @@ async def test_report_is_skipped_when_origin_differs() -> None:
         ("customscheme://do-something", False),
     ],
 )
-async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_open) -> None:
+async def test_browser_only_opens_http_urls(server: Server, monkeypatch: pytest.MonkeyPatch, uri: str, should_open: bool) -> None:
     """webbrowser hands unknown schemes to the desktop's handler, so a
     hostile endpoint could otherwise get file:// invoked."""
     opened: list[str] = []
@@ -534,7 +542,7 @@ async def test_hard_grant_does_not_hand_out_its_own_object() -> None:
     assert value.instances["test"].aliases[0].id == "primary"
 
 
-async def test_env_grant_recovers_unattended_when_credential_ages(monkeypatch, tmp_path: Path) -> None:
+async def test_env_grant_recovers_unattended_when_credential_ages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """An aged env credential must reload from the environment rather than
     raise — that is the whole headless story."""
 

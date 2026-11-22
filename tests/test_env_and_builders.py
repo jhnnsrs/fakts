@@ -15,13 +15,14 @@ from fakts import (
 )
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.authorizers.mandate_key import MandateKeyAuthorizer
+from fakts.models import Manifest
 
 from .helpers import make_fakts_value, make_manifest
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_env_grant_inline_json(monkeypatch: pytest.MonkeyPatch):
+async def test_env_grant_inline_json(monkeypatch: pytest.MonkeyPatch) -> None:
     value = make_fakts_value()
     monkeypatch.setenv("FAKTS", value.model_dump_json())
 
@@ -32,7 +33,7 @@ async def test_env_grant_inline_json(monkeypatch: pytest.MonkeyPatch):
     assert loaded == value
 
 
-async def test_env_grant_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_env_grant_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     value = make_fakts_value()
     config_file = tmp_path / "fakts.json"
     config_file.write_text(value.model_dump_json())
@@ -47,7 +48,7 @@ async def test_env_grant_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert loaded == value
 
 
-async def test_env_grant_errors_are_verbose(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_env_grant_errors_are_verbose(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("FAKTS", raising=False)
     monkeypatch.delenv("FAKTS_FILE", raising=False)
 
@@ -66,7 +67,7 @@ async def test_env_grant_errors_are_verbose(monkeypatch: pytest.MonkeyPatch, tmp
         await grant.aload()
 
 
-async def test_env_grant_errors_never_echo_the_credential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_env_grant_errors_never_echo_the_credential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A malformed FAKTS blob must not put the refresh token in the error.
 
     This is the whole failure mode: no attacker is involved, just a typo in a
@@ -100,7 +101,7 @@ async def test_env_grant_errors_never_echo_the_credential(monkeypatch: pytest.Mo
     assert secret not in str(from_file.value)
 
 
-async def test_build_device_code_fakts_wiring(tmp_path: Path):
+async def test_build_device_code_fakts_wiring(tmp_path: Path) -> None:
     manifest = make_manifest()
     fakts = build_device_code_fakts(
         url="http://localhost:8000",
@@ -117,12 +118,12 @@ async def test_build_device_code_fakts_wiring(tmp_path: Path):
     assert fakts.cache.hash, "The builder should bind a hash so manifest/server changes invalidate the cache"
 
 
-async def test_builder_cache_hash_binds_url_and_manifest(tmp_path: Path):
+async def test_builder_cache_hash_binds_url_and_manifest(tmp_path: Path) -> None:
     """The cache must be invalidated when either the manifest or the server
     url changes — otherwise a different server is served the cached fakts
     of the old one."""
 
-    def build(url: str, manifest) -> Fakts:
+    def build(url: str, manifest: Manifest) -> Fakts:
         return build_device_code_fakts(
             url=url,
             manifest=manifest,
@@ -144,7 +145,7 @@ async def test_builder_cache_hash_binds_url_and_manifest(tmp_path: Path):
     assert base.cache.hash != other_manifest.cache.hash
 
 
-async def test_build_mandate_key_fakts_wiring():
+async def test_build_mandate_key_fakts_wiring() -> None:
     manifest = make_manifest()
     fakts = build_mandate_key_fakts(
         url="http://localhost:8000",

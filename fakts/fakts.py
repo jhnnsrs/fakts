@@ -12,7 +12,8 @@ three locks, whose invariants L1-L5 are documented there):
 import logging
 import ssl
 from ssl import SSLContext
-from typing import Any, ClassVar
+from types import TracebackType
+from typing import ClassVar
 
 import certifi
 from koil.bridge import unkoil
@@ -765,7 +766,7 @@ class Fakts(KoiledModel):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Exit the context manager and clean up.
 

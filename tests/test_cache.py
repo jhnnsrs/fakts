@@ -16,7 +16,7 @@ from .helpers import make_fakts_value
 TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
-def test_cache():
+def test_cache() -> None:
     grant = HardFaktsGrant(
         fakts=ActiveFakts(
             self=SelfFakt(
@@ -69,7 +69,7 @@ def test_cache():
 
 
 @pytest.mark.asyncio
-async def test_filecache_roundtrip(tmp_path: Path):
+async def test_filecache_roundtrip(tmp_path: Path) -> None:
     cache_file = str(tmp_path / "cache.json")
     cache = FileCache(cache_file=cache_file)
     value = make_fakts_value()
@@ -82,13 +82,13 @@ async def test_filecache_roundtrip(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_filecache_missing_file_returns_none(tmp_path: Path):
+async def test_filecache_missing_file_returns_none(tmp_path: Path) -> None:
     cache = FileCache(cache_file=str(tmp_path / "does-not-exist.json"))
     assert await cache.aload() is None
 
 
 @pytest.mark.asyncio
-async def test_filecache_hash_mismatch_invalidates(tmp_path: Path):
+async def test_filecache_hash_mismatch_invalidates(tmp_path: Path) -> None:
     cache_file = str(tmp_path / "cache.json")
     await FileCache(cache_file=cache_file, hash="v1").aset(make_fakts_value())
 
@@ -99,22 +99,22 @@ async def test_filecache_hash_mismatch_invalidates(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_filecache_expiry_returns_none(tmp_path: Path):
+async def test_filecache_expiry_returns_none(tmp_path: Path) -> None:
     cache_file = str(tmp_path / "cache.json")
     # Hand-write a cache file created well in the past.
     stale = CacheFile(
         fakts=make_fakts_value(),
-        created=datetime.datetime.now() - datetime.timedelta(seconds=3600),
+        created=datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=3600),
         hash="",
     )
-    Path(cache_file).write_text(stale.model_dump_json())
+    Path(cache_file).write_text(stale.model_dump_json())  # noqa: ASYNC240 -- test setup writing its own tmp file; nothing else runs on the loop
 
     cache = FileCache(cache_file=cache_file, expires_in=60)
     assert await cache.aload() is None
 
 
 @pytest.mark.asyncio
-async def test_filecache_corrupt_file_returns_none(tmp_path: Path):
+async def test_filecache_corrupt_file_returns_none(tmp_path: Path) -> None:
     cache_file = tmp_path / "cache.json"
     cache_file.write_text("{ this is not valid json")
 
@@ -124,7 +124,7 @@ async def test_filecache_corrupt_file_returns_none(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_filecache_invalid_schema_returns_none(tmp_path: Path):
+async def test_filecache_invalid_schema_returns_none(tmp_path: Path) -> None:
     cache_file = tmp_path / "cache.json"
     cache_file.write_text('{"unexpected": "shape"}')
 
@@ -133,7 +133,7 @@ async def test_filecache_invalid_schema_returns_none(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_filecache_areset_removes_file(tmp_path: Path):
+async def test_filecache_areset_removes_file(tmp_path: Path) -> None:
     cache_file = tmp_path / "cache.json"
     cache = FileCache(cache_file=str(cache_file))
     await cache.aset(make_fakts_value())
@@ -146,7 +146,7 @@ async def test_filecache_areset_removes_file(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_filecache_aset_is_atomic_no_tmp_left(tmp_path: Path):
+async def test_filecache_aset_is_atomic_no_tmp_left(tmp_path: Path) -> None:
     cache_file = tmp_path / "cache.json"
     cache = FileCache(cache_file=str(cache_file))
     await cache.aset(make_fakts_value())
@@ -161,7 +161,7 @@ async def test_filecache_aset_is_atomic_no_tmp_left(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_nocache_never_persists():
+async def test_nocache_never_persists() -> None:
     cache = NoCache()
     assert await cache.aload() is None
     # set / reset are no-ops and must not raise
@@ -172,7 +172,7 @@ async def test_nocache_never_persists():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content", ["[]", '"a string"', "42", "null", "{", "\xff\xfe"])
-async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, content: str):
+async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, content: str) -> None:
     """A corrupt cache must never break startup, whatever JSON (or not) it holds."""
     cache_file = tmp_path / "cache.json"
     cache_file.write_text(content, encoding="latin-1")
@@ -182,7 +182,7 @@ async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, c
 
 
 @pytest.mark.asyncio
-async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: Path):
+async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: Path) -> None:
     """Caches written before UTC stamping carry naive local times."""
     import datetime
     import json
@@ -192,10 +192,10 @@ async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: 
     await cache.aset(make_fakts_value())
 
     data = json.loads(cache_file.read_text())
-    data["created"] = datetime.datetime.now().isoformat()  # naive, local
+    data["created"] = datetime.datetime.now().isoformat()  # noqa: DTZ005 -- naive local time on purpose: the format old caches carry
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is not None
 
-    data["created"] = (datetime.datetime.now() - datetime.timedelta(hours=2)).isoformat()
+    data["created"] = (datetime.datetime.now() - datetime.timedelta(hours=2)).isoformat()  # noqa: DTZ005 -- naive local time on purpose, as above
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is None

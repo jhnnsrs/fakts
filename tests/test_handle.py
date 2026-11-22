@@ -13,7 +13,7 @@ from fakts import Own, Require, TokenLoader
 from fakts.testing import build_testing_fakts
 
 
-def test_require_keys_the_requirement_by_the_parameter_name():
+def test_require_keys_the_requirement_by_the_parameter_name() -> None:
     """The parameter name is the key -- that is what stops the two drifting."""
     requirement = Require("live.arkitekt.mikro", "Where the data lives").to_requirement("mikro")
     assert requirement.key == "mikro"
@@ -22,22 +22,22 @@ def test_require_keys_the_requirement_by_the_parameter_name():
     assert requirement.optional is False
 
 
-def test_require_carries_optional():
+def test_require_carries_optional() -> None:
     assert Require("live.arkitekt.s3", optional=True).to_requirement("s3").optional is True
 
 
-def test_own_declares_nothing_to_provision():
+def test_own_declares_nothing_to_provision() -> None:
     """unlok's shape: the app's own server is not a service a deployment composes."""
     assert not hasattr(Own(), "to_requirement")
 
 
-def test_fakts_satisfies_the_token_loader_with_no_adapter():
+def test_fakts_satisfies_the_token_loader_with_no_adapter() -> None:
     fakts = build_testing_fakts(aliases={})
     assert isinstance(fakts, TokenLoader)
 
 
 @pytest.mark.asyncio
-async def test_the_token_loader_gets_and_renews():
+async def test_the_token_loader_gets_and_renews() -> None:
     async with build_testing_fakts(aliases={}, tokens=["a", "b"], token_lifetime=0) as fakts:
         loader: TokenLoader = fakts
         assert await loader.aget_token() == "a"
@@ -59,7 +59,7 @@ class _RecordingLoader:
 
 
 @pytest.mark.asyncio
-async def test_a_401_refreshes_with_the_token_that_failed():
+async def test_a_401_refreshes_with_the_token_that_failed() -> None:
     """The regression this narrowing risks.
 
     rath's own ``ComposedAuthLink`` takes a refresher with no arguments. Losing
@@ -82,7 +82,7 @@ async def test_a_401_refreshes_with_the_token_that_failed():
 
 
 @pytest.mark.asyncio
-async def test_a_bare_authorization_header_refreshes_with_none():
+async def test_a_bare_authorization_header_refreshes_with_none() -> None:
     pytest.importorskip("rath")  # the optional rath extra
     from rath.operation import Operation
 

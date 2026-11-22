@@ -83,7 +83,7 @@ async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(mesh_lab: M
 async def test_a_joined_node_rejoins_without_a_key(mesh_lab: MeshLab, tmp_path: Path) -> None:
     async with lab_fakts(peer_fakts(mesh_lab), tmp_path) as fakts:
         await fakts.aget_alias("test")
-    assert any(NativeNode.has_state(d) for d in tmp_path.iterdir())
+    assert any(NativeNode.has_state(d) for d in tmp_path.iterdir())  # noqa: ASYNC240 -- a test inspecting its own tmp dir; nothing else runs on the loop
 
     # No key this time: the node's saved state is enough.
     async with lab_fakts(peer_fakts(mesh_lab, with_key=False), tmp_path) as fakts:

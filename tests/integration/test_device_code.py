@@ -18,7 +18,7 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 
 @pytest.mark.integration
-def test_device_code_grant(deployed_infra: Deployment):
+def test_device_code_grant(deployed_infra: Deployment) -> None:
     port_for_lok = deployed_infra.spec.find_service("lok").get_port_for_internal(80).published
 
     manifest = Manifest(

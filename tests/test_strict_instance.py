@@ -1,13 +1,14 @@
 """A strict instance — its hub registered its certificate — is used by its TLS aliases, each
 verified by that certificate alone, and by plain ones only over the mesh."""
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from fakts import Fakts, aliases
-from fakts.models import ActiveFakts, Alias, Instance, TlsClaim
+from fakts.models import ActiveFakts, Alias, ChallengeKey, Instance, TlsClaim
 
 from .helpers import CountingGrant, make_fakts_value, make_manifest
 
@@ -37,8 +38,8 @@ def strict_fakts(*, certificates: list[str] | None = None) -> ActiveFakts:
     return value
 
 
-def recording(seen: list[tuple[str, bool]], *answering: str) -> Any:
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+def recording(seen: list[tuple[str, bool]], *answering: str) -> Callable[..., Awaitable[bool]]:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         seen.append((alias.id, alias.is_pinned()))
         return alias.id in answering
 

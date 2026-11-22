@@ -13,7 +13,7 @@ from fakts.testing import build_testing_fakts
 
 
 @pytest.mark.asyncio
-async def test_alias_resolves_without_omit_kwargs():
+async def test_alias_resolves_without_omit_kwargs() -> None:
     """The consumer-shaped call: no ``omit_challenge``/``omit_report`` —
     the overridden challenge always passes."""
     async with build_testing_fakts(aliases={"alpaka": "http://testserver"}) as fakts:
@@ -22,7 +22,7 @@ async def test_alias_resolves_without_omit_kwargs():
 
 
 @pytest.mark.asyncio
-async def test_alias_accepts_url_forms_and_alias_models():
+async def test_alias_accepts_url_forms_and_alias_models() -> None:
     async with build_testing_fakts(
         aliases={
             "secure": "https://api.example.com:8443/alpaka",
@@ -36,7 +36,7 @@ async def test_alias_accepts_url_forms_and_alias_models():
 
 
 @pytest.mark.asyncio
-async def test_static_token_is_fetched_once_and_cached():
+async def test_static_token_is_fetched_once_and_cached() -> None:
     async with build_testing_fakts(aliases={}, token="tok") as fakts:
         assert await fakts.aget_token() == "tok"
         assert await fakts.aget_token() == "tok"
@@ -44,7 +44,7 @@ async def test_static_token_is_fetched_once_and_cached():
 
 
 @pytest.mark.asyncio
-async def test_zero_lifetime_rotates_every_call_and_last_token_repeats():
+async def test_zero_lifetime_rotates_every_call_and_last_token_repeats() -> None:
     async with build_testing_fakts(aliases={}, tokens=["a", "b"], token_lifetime=0) as fakts:
         assert await fakts.aget_token() == "a"
         assert await fakts.aget_token() == "b"
@@ -53,7 +53,7 @@ async def test_zero_lifetime_rotates_every_call_and_last_token_repeats():
 
 
 @pytest.mark.asyncio
-async def test_refresh_token_rotates_with_stale_token_semantics():
+async def test_refresh_token_rotates_with_stale_token_semantics() -> None:
     async with build_testing_fakts(aliases={}, tokens=["a", "b", "c"]) as fakts:
         first = await fakts.aget_token()
         assert first == "a"
@@ -65,7 +65,7 @@ async def test_refresh_token_rotates_with_stale_token_semantics():
 
 
 @pytest.mark.asyncio
-async def test_first_alias_resolution_spends_the_first_fetch():
+async def test_first_alias_resolution_spends_the_first_fetch() -> None:
     """Real behavior worth pinning: alias refresh takes a report token up
     front, so the first ``aget_alias`` performs the first token fetch."""
     async with build_testing_fakts(aliases={"svc": "http://x"}, tokens=["a", "b"]) as fakts:
@@ -75,7 +75,7 @@ async def test_first_alias_resolution_spends_the_first_fetch():
         assert await fakts.aget_token() == "a"
 
 
-def test_a_sync_with_works_for_synchronous_consumers():
+def test_a_sync_with_works_for_synchronous_consumers() -> None:
     """A plain ``with`` enters it for synchronous consumers too."""
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     with fakts:
@@ -83,13 +83,13 @@ def test_a_sync_with_works_for_synchronous_consumers():
         assert fakts.get_token() == "test-token"
 
 
-def test_rejects_unparseable_alias_urls():
+def test_rejects_unparseable_alias_urls() -> None:
     with pytest.raises(ValueError, match="scheme and"):
         build_testing_fakts(aliases={"svc": "not-a-url"})
 
 
 @pytest.mark.asyncio
-async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog):
+async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog: pytest.LogCaptureFixture) -> None:
     testing = build_testing_fakts(aliases={"mikro": "http://testserver"})
     testing.grant.fakts.instances["mikro"].version = "11.4.0"
     testing.grant.fakts.instances["mikro"].satisfies = False

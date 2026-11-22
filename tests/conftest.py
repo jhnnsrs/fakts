@@ -1,13 +1,13 @@
 """Fixtures shared by the unit tests. The docker stacks have their own conftest
 (tests/integration, tests/mesh_lab); nothing here needs docker."""
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
 from aiohttp import web
 
-Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
+from .helpers import Handler, TokenServer
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +17,7 @@ def no_refresh_retry_delay(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest_asyncio.fixture
-async def token_server() -> AsyncIterator[Callable[..., Awaitable[str]]]:
+async def token_server() -> AsyncIterator[TokenServer]:
     """Start token endpoints on 127.0.0.1; each call serves one handler at /token."""
     runners = []
 

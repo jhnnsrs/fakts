@@ -12,6 +12,7 @@ import stat
 import time
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from aiohttp import web
@@ -20,13 +21,14 @@ from pydantic import BaseModel
 from fakts import Fakts, ReauthPolicy, oauth2
 from fakts.cache.file import FileCache, ensure_private_dir
 from fakts.errors import FaktsError, NeedsReauthenticationError
-from fakts.models import ActiveFakts
+from fakts.models import ActiveFakts, Alias, ChallengeKey
 from fakts.oauth2 import resolve_expiry
 from fakts.session import REFRESH_CHAIN_MAX_AGE, REFRESH_TOKEN_MAX_AGE
 
 from .helpers import (
     MemoryCache,
     StaticGrant,
+    TokenServer,
     fakts_pointing_at,
     make_fakts_value,
     make_manifest,
@@ -49,7 +51,7 @@ Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_rotates_and_persists_before_use(token_server) -> None:
+async def test_refresh_rotates_and_persists_before_use(token_server: TokenServer) -> None:
     """A rotated refresh token must reach the cache. The server has already
     revoked the old one by the time it answers, so anything we fail to
     persist is simply lost."""
@@ -76,7 +78,7 @@ async def test_refresh_rotates_and_persists_before_use(token_server) -> None:
     assert cache.value.auth.access_token == "new_access"
 
 
-async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server) -> None:
+async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server: TokenServer) -> None:
     """What the server stored at login goes stale when the app is upgraded: the
     versions of the services it wants travel with every refresh."""
     offered: list[dict] = []
@@ -95,7 +97,7 @@ async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server) -> No
     assert offered == [manifest.model_dump()]
 
 
-async def test_cached_access_token_is_reused_without_refreshing(token_server) -> None:
+async def test_cached_access_token_is_reused_without_refreshing(token_server: TokenServer) -> None:
     """The main defence against a refresh stampede: a still-valid access
     token from the cache is used as-is, so parallel starts do not all rotate."""
     calls = {"n": 0}
@@ -121,7 +123,7 @@ async def test_cached_access_token_is_reused_without_refreshing(token_server) ->
     assert calls["n"] == 0, "A valid cached access token must not trigger a renewal"
 
 
-async def test_expired_access_token_triggers_refresh(token_server) -> None:
+async def test_expired_access_token_triggers_refresh(token_server: TokenServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.json_response(token_body("fresh", "rotated"))
 
@@ -138,7 +140,7 @@ async def test_expired_access_token_triggers_refresh(token_server) -> None:
         assert await fakts.aget_token() == "fresh"
 
 
-async def test_invalid_grant_adopts_sibling_credential(token_server) -> None:
+async def test_invalid_grant_adopts_sibling_credential(token_server: TokenServer) -> None:
     """The rotation race: another process rotated first and wrote the result.
     Adopting it is what keeps a herd converging instead of each member
     re-running the grant and deleting the others' client."""
@@ -171,7 +173,7 @@ async def test_invalid_grant_adopts_sibling_credential(token_server) -> None:
 
 
 async def test_invalid_grant_without_alternative_raises_rather_than_prompting(
-    token_server,
+    token_server: TokenServer,
 ) -> None:
     """With nothing left to try and an interactive grant, the client must
     surface the problem instead of silently opening a browser — which would
@@ -193,7 +195,7 @@ async def test_invalid_grant_without_alternative_raises_rather_than_prompting(
     assert grant.load_count == 1, "Only the initial load; no interactive re-run"
 
 
-async def test_non_interactive_grant_reauthenticates_unattended(token_server) -> None:
+async def test_non_interactive_grant_reauthenticates_unattended(token_server: TokenServer) -> None:
     """Non-interactive grants carry no human cost, so they may re-run on their
     own. This is what keeps headless deployments alive past the refresh caps."""
     calls = {"n": 0}
@@ -227,7 +229,7 @@ async def test_non_interactive_grant_reauthenticates_unattended(token_server) ->
 # --------------------------------------------------------------------------- #
 
 
-async def test_idle_refresh_token_fails_without_a_round_trip(token_server) -> None:
+async def test_idle_refresh_token_fails_without_a_round_trip(token_server: TokenServer) -> None:
     """An obviously-dead credential should not be spent on a doomed request,
     and the error should say what actually happened."""
     calls = {"n": 0}
@@ -249,7 +251,7 @@ async def test_idle_refresh_token_fails_without_a_round_trip(token_server) -> No
     assert calls["n"] == 0
 
 
-async def test_expired_refresh_chain_is_named_as_such(token_server) -> None:
+async def test_expired_refresh_chain_is_named_as_such(token_server: TokenServer) -> None:
     """Rotating does not reset the chain cap, so even a permanently running
     app eventually needs a human — and should be told so plainly."""
 
@@ -272,7 +274,7 @@ async def test_expired_refresh_chain_is_named_as_such(token_server) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_token_never_prompts(token_server) -> None:
+async def test_refresh_token_never_prompts(token_server: TokenServer) -> None:
     """A 401 inside an unrelated request must never open a browser."""
 
     async def handler(request: web.Request) -> web.Response:
@@ -296,7 +298,7 @@ async def test_refresh_token_never_prompts(token_server) -> None:
     assert grant.load_count == 1, "arefresh_token is non-interactive by contract, even under ALWAYS"
 
 
-async def test_stale_token_cas_collapses_repeated_401s(token_server) -> None:
+async def test_stale_token_cas_collapses_repeated_401s(token_server: TokenServer) -> None:
     """Transports retry a rejected operation several times. Each retry that
     reached the token endpoint would rotate again, spending credentials to
     fix something the first renewal already fixed."""
@@ -326,7 +328,7 @@ async def test_stale_token_cas_collapses_repeated_401s(token_server) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, monkeypatch) -> None:
+async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """The sharpest failure mode, and it needs no refresh contention at all:
     a process that never refreshed persists the preferred alias order — and
     with it the whole ActiveFakts, including the stale credential it happens
@@ -337,7 +339,7 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, m
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self, alias, challenge_key=None) -> bool:
+    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -361,7 +363,7 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, m
     assert cache.value.auth.refresh_token == "freshly_rotated", "Persisting the alias order must not roll the credential back"
 
 
-async def test_report_cannot_wipe_resolved_aliases(token_server, monkeypatch) -> None:
+async def test_report_cannot_wipe_resolved_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """Regression: taking the report token used to be able to adopt a cached
     credential mid-resolution, clearing the alias map that had just been
     published and turning a successful resolution into AliasNotFoundError."""
@@ -371,7 +373,7 @@ async def test_report_cannot_wipe_resolved_aliases(token_server, monkeypatch) ->
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self, alias, challenge_key=None) -> bool:
+    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         return True
 
     monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
@@ -509,7 +511,7 @@ async def test_cache_write_leaves_no_temp_file(tmp_path: Path) -> None:
 
     await cache.aset(make_fakts_value())
 
-    leftovers = [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")]
+    leftovers = [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")]  # noqa: ASYNC240 -- a test inspecting its own tmp dir after the fact; nothing else runs on the loop
     assert leftovers == []
 
 
@@ -528,7 +530,7 @@ async def test_v1_cache_file_is_a_miss_not_a_crash(tmp_path: Path) -> None:
     assert await cache.aload() is None
 
 
-async def test_cache_write_failure_is_not_fatal(token_server) -> None:
+async def test_cache_write_failure_is_not_fatal(token_server: TokenServer) -> None:
     """Losing the write is bad, but failing the call would be worse: we hold
     a good access token and retrying only burns another rotation."""
 
@@ -562,7 +564,7 @@ async def test_cache_write_failure_is_not_fatal(token_server) -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_no_expires_in_token_is_opaque_and_reused(token_server) -> None:
+async def test_no_expires_in_token_is_opaque_and_reused(token_server: TokenServer) -> None:
     """Without expires_in the token has no known lifetime, so it is treated
     as opaque: reused rather than renewed on a timer."""
     calls = {"n": 0}
@@ -586,7 +588,7 @@ async def test_no_expires_in_token_is_opaque_and_reused(token_server) -> None:
     assert calls["n"] == 1, "An opaque token must not be renewed speculatively"
 
 
-async def test_opaque_token_can_still_be_renewed_after_rejection(token_server) -> None:
+async def test_opaque_token_can_still_be_renewed_after_rejection(token_server: TokenServer) -> None:
     """Since no timer will ever renew an opaque token, rejection is the only
     recovery — so it must actually get through to a renewal."""
     calls = {"n": 0}
@@ -612,7 +614,7 @@ async def test_opaque_token_can_still_be_renewed_after_rejection(token_server) -
     assert calls["n"] == 2
 
 
-async def test_alias_order_persists_when_credential_is_unchanged(token_server, monkeypatch) -> None:
+async def test_alias_order_persists_when_credential_is_unchanged(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """The lost-update guard must not cost us the alias-preference
     optimization in the ordinary single-process case."""
 
@@ -621,7 +623,7 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self, alias, challenge_key=None) -> bool:
+    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -640,7 +642,7 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
     assert cache.value.instances["test"].preferred_alias == "fallback", "The working alias must still be persisted as the preferred one"
 
 
-async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_server) -> None:
+async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_server: TokenServer) -> None:
     """A 5xx rotated nothing: retry instead of failing the token path."""
     calls = {"n": 0}
 
@@ -659,7 +661,7 @@ async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_ser
     assert calls["n"] == 2
 
 
-async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """The server may have rotated before the connection broke: repeating the
     refresh would present a dead token. It fails instead of retrying."""
     calls = {"n": 0}
@@ -675,7 +677,7 @@ async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server
 
     real_post = oauth2.apost_form
 
-    async def impatient(*args, **kwargs):
+    async def impatient(*args: Any, **kwargs: Any) -> dict[str, Any]:
         kwargs["timeout"] = 0.1
         return await real_post(*args, **kwargs)
 

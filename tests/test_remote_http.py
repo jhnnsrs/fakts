@@ -8,6 +8,8 @@ Everything here runs without a real fakts server.
 
 import ssl
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
+from typing import Never, Protocol
 
 import pytest
 import pytest_asyncio
@@ -40,8 +42,14 @@ pytestmark = pytest.mark.asyncio
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
 
+class LocalServer(Protocol):
+    """The ``local_server`` fixture: serves ``routes`` (by ``method``), gives the base url."""
+
+    def __call__(self, routes: dict[str, Handler], method: str = "POST") -> Awaitable[str]: ...
+
+
 @pytest_asyncio.fixture
-async def local_server() -> AsyncIterator[Callable[..., Awaitable[str]]]:
+async def local_server() -> AsyncIterator[LocalServer]:
     """Starts a local http server and returns a callable that registers
     a handler for a path and yields the server's base_url (with trailing
     slash, as the remote components expect)."""
@@ -111,7 +119,7 @@ def collecting_sleeper(recorded: list) -> Callable[[float], Awaitable[None]]:
 # --------------------------------------------------------------------------- #
 
 
-async def test_device_code_happy_path(local_server, monkeypatch) -> None:
+async def test_device_code_happy_path(local_server: LocalServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """The full flow: register, poll once, return tokens and config."""
     opened: list[str] = []
     monkeypatch.setattr("webbrowser.open_new", lambda url: opened.append(url) or True)
@@ -169,7 +177,7 @@ async def test_device_code_happy_path(local_server, monkeypatch) -> None:
     assert opened == ["http://example.com/configure/USERCODE"], "The browser must open the server-supplied complete URL, not a derived one"
 
 
-async def test_device_code_polls_while_pending(local_server) -> None:
+async def test_device_code_polls_while_pending(local_server: LocalServer) -> None:
     """authorization_pending keeps the loop going without escalating."""
     calls = {"n": 0}
 
@@ -206,7 +214,7 @@ async def test_device_code_polls_while_pending(local_server) -> None:
     assert calls["n"] == 3
 
 
-async def test_device_code_slow_down_backs_off(local_server) -> None:
+async def test_device_code_slow_down_backs_off(local_server: LocalServer) -> None:
     """slow_down must widen the interval, not just retry at the same rate."""
     slept: list[float] = []
     calls = {"n": 0}
@@ -243,7 +251,7 @@ async def test_device_code_slow_down_backs_off(local_server) -> None:
     assert slept == [5, 10], f"expected the interval to grow by 5, got {slept}"
 
 
-async def test_device_code_access_denied_raises_user_denied(local_server) -> None:
+async def test_device_code_access_denied_raises_user_denied(local_server: LocalServer) -> None:
     """A refusal is a legitimate outcome and gets its own catchable error."""
 
     async def authorize(request: web.Request) -> web.Response:
@@ -275,7 +283,7 @@ async def test_device_code_access_denied_raises_user_denied(local_server) -> Non
         await authorizer.aauthorize(endpoint_for(base_url))
 
 
-async def test_device_code_expired_token_raises_expired(local_server) -> None:
+async def test_device_code_expired_token_raises_expired(local_server: LocalServer) -> None:
     async def authorize(request: web.Request) -> web.Response:
         return web.json_response(
             {
@@ -305,7 +313,7 @@ async def test_device_code_expired_token_raises_expired(local_server) -> None:
         await authorizer.aauthorize(endpoint_for(base_url))
 
 
-async def test_device_code_client_deadline_raises_timeout(local_server) -> None:
+async def test_device_code_client_deadline_raises_timeout(local_server: LocalServer) -> None:
     """The client's own deadline is distinct from the server expiring the code."""
 
     async def authorize(request: web.Request) -> web.Response:
@@ -338,7 +346,7 @@ async def test_device_code_client_deadline_raises_timeout(local_server) -> None:
         await authorizer.aauthorize(endpoint_for(base_url))
 
 
-async def test_device_authorization_error_envelope_is_surfaced(local_server) -> None:
+async def test_device_authorization_error_envelope_is_surfaced(local_server: LocalServer) -> None:
     """The device endpoint reports failure inside a 200 body, which must not
     be mistaken for success."""
 
@@ -358,7 +366,7 @@ async def test_device_authorization_error_envelope_is_surfaced(local_server) -> 
         await authorizer.aauthorize(endpoint_for(base_url))
 
 
-async def test_device_authorization_throttle_is_surfaced(local_server) -> None:
+async def test_device_authorization_throttle_is_surfaced(local_server: LocalServer) -> None:
     """Throttling answers 429 with a bare error and no status key."""
 
     async def authorize(request: web.Request) -> web.Response:
@@ -384,7 +392,7 @@ async def test_device_authorization_throttle_is_surfaced(local_server) -> None:
 KEY_TOKEN_BODY = {k: v for k, v in TOKEN_BODY.items() if k != "refresh_token"}
 
 
-async def test_a_mandate_key_logs_in_without_a_refresh_token(local_server) -> None:
+async def test_a_mandate_key_logs_in_without_a_refresh_token(local_server: LocalServer) -> None:
     async def token(request: web.Request) -> web.Response:
         form = await request.post()
         assert form["grant_type"] == "urn:fakts:grant-type:mandate-key"
@@ -411,7 +419,7 @@ async def test_a_mandate_key_logs_in_without_a_refresh_token(local_server) -> No
     assert response.refresh_token is None
 
 
-async def test_renewing_never_asks_for_a_mesh_key(local_server) -> None:
+async def test_renewing_never_asks_for_a_mesh_key(local_server: LocalServer) -> None:
     async def token(request: web.Request) -> web.Response:
         form = await request.post()
         assert form["request_auth_key"] == "false"
@@ -430,7 +438,7 @@ async def test_renewing_never_asks_for_a_mesh_key(local_server) -> None:
     assert response.access_token == "the_access_token"
 
 
-async def test_a_refused_mandate_key_needs_a_new_one(local_server) -> None:
+async def test_a_refused_mandate_key_needs_a_new_one(local_server: LocalServer) -> None:
     async def token(request: web.Request) -> web.Response:
         return web.json_response(
             {
@@ -460,7 +468,7 @@ async def test_a_mandate_key_is_not_interactive() -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_static_authorizer_refreshes_compound_credential(local_server) -> None:
+async def test_static_authorizer_refreshes_compound_credential(local_server: LocalServer) -> None:
     async def token(request: web.Request) -> web.Response:
         form = await request.post()
         assert form["grant_type"] == "refresh_token"
@@ -506,7 +514,7 @@ async def test_plain_http_to_network_host_requires_opt_in() -> None:
         await authorizer.aauthorize(endpoint)
 
 
-async def test_plain_http_to_loopback_needs_no_opt_in(local_server) -> None:
+async def test_plain_http_to_loopback_needs_no_opt_in(local_server: LocalServer) -> None:
     """Loopback is always allowed, matching the server's own rule, so local
     development needs no ceremony."""
 
@@ -521,7 +529,7 @@ async def test_plain_http_to_loopback_needs_no_opt_in(local_server) -> None:
     assert response.access_token == "the_access_token"
 
 
-async def test_insecure_transport_env_var_opts_in(monkeypatch) -> None:
+async def test_insecure_transport_env_var_opts_in(monkeypatch: pytest.MonkeyPatch) -> None:
     """Containers that cannot pass a keyword argument use the env var."""
     from fakts import oauth2
 
@@ -551,7 +559,7 @@ def origin_of(request: web.Request) -> str:
     return f"{request.scheme}://{request.host}"
 
 
-async def test_check_wellknown_valid(local_server) -> None:
+async def test_check_wellknown_valid(local_server: LocalServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.json_response(v2_document(origin_of(request)))
 
@@ -562,7 +570,7 @@ async def test_check_wellknown_valid(local_server) -> None:
     assert endpoint.token_endpoint == f"{base_url}o/token/"
 
 
-async def test_check_wellknown_preserves_unmodelled_members(local_server) -> None:
+async def test_check_wellknown_preserves_unmodelled_members(local_server: LocalServer) -> None:
     """The document also carries mesh_*/hub_* members other tools read off
     the same fetch, so they must survive validation."""
 
@@ -577,7 +585,7 @@ async def test_check_wellknown_preserves_unmodelled_members(local_server) -> Non
     assert endpoint.mesh_coord_url == "http://x/mesh"
 
 
-async def test_check_wellknown_v1_server_names_the_protocol(local_server) -> None:
+async def test_check_wellknown_v1_server_names_the_protocol(local_server: LocalServer) -> None:
     """A v1 server must fail with a version error, not an obscure symptom
     further down the flow."""
 
@@ -590,7 +598,7 @@ async def test_check_wellknown_v1_server_names_the_protocol(local_server) -> Non
         await check_wellknown(base_url, ssl.create_default_context())
 
 
-async def test_check_wellknown_v2_without_token_endpoint_raises(local_server) -> None:
+async def test_check_wellknown_v2_without_token_endpoint_raises(local_server: LocalServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.json_response({"name": "Broken", "base_url": "http://x/f/", "protocol_version": "2"})
 
@@ -600,7 +608,7 @@ async def test_check_wellknown_v2_without_token_endpoint_raises(local_server) ->
         await check_wellknown(base_url, ssl.create_default_context())
 
 
-async def test_check_wellknown_missing_name_raises(local_server) -> None:
+async def test_check_wellknown_missing_name_raises(local_server: LocalServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.json_response({"base_url": "http://x/f/"})
 
@@ -610,7 +618,7 @@ async def test_check_wellknown_missing_name_raises(local_server) -> None:
         await check_wellknown(base_url, ssl.create_default_context())
 
 
-async def test_check_wellknown_non_json_raises(local_server) -> None:
+async def test_check_wellknown_non_json_raises(local_server: LocalServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.Response(text="<html>nope</html>", content_type="text/html")
 
@@ -620,7 +628,7 @@ async def test_check_wellknown_non_json_raises(local_server) -> None:
         await check_wellknown(base_url, ssl.create_default_context())
 
 
-async def test_check_wellknown_non_200_raises(local_server) -> None:
+async def test_check_wellknown_non_200_raises(local_server: LocalServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.Response(status=404, text="nope")
 
@@ -630,7 +638,7 @@ async def test_check_wellknown_non_200_raises(local_server) -> None:
         await check_wellknown(base_url, ssl.create_default_context())
 
 
-async def test_discover_url_with_protocol_and_slash_append(local_server) -> None:
+async def test_discover_url_with_protocol_and_slash_append(local_server: LocalServer) -> None:
     """A full URL (with protocol) is checked directly; allow_appending_slash
     normalises a missing trailing slash before hitting .well-known/fakts."""
 
@@ -666,7 +674,7 @@ async def test_discover_url_aggregates_protocol_errors() -> None:
         )
 
 
-async def test_device_code_polling_survives_a_transient_server_error(local_server) -> None:
+async def test_device_code_polling_survives_a_transient_server_error(local_server: LocalServer) -> None:
     """A 503 (or a dropped connection) mid-login must not end a half-approved login."""
     answers = iter(["unavailable", "pending", "granted"])
 
@@ -704,7 +712,7 @@ async def test_device_code_polling_survives_a_transient_server_error(local_serve
     assert response.access_token == TOKEN_BODY["access_token"]
 
 
-async def test_the_terminal_prompt_fills_in_the_approval_url(capsys, monkeypatch) -> None:
+async def test_the_terminal_prompt_fills_in_the_approval_url(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
     from fakts.grants.remote.authorizers.device_code import display_in_terminal
     from fakts.grants.remote.authorizers.utils import QR_ENV
 
@@ -739,7 +747,7 @@ async def test_a_grant_without_a_token_endpoint_fails_before_authorizing() -> No
     class MustNotRun:
         called = False
 
-        async def aauthorize(self, endpoint):
+        async def aauthorize(self, endpoint: FaktsEndpoint) -> Never:
             MustNotRun.called = True
             raise AssertionError("authorized against an endpoint the grant then refuses")
 
@@ -754,7 +762,7 @@ async def test_a_grant_without_a_token_endpoint_fails_before_authorizing() -> No
 # --------------------------------------------------------------------------- #
 
 
-async def test_logout_revokes_the_session_where_the_server_can(local_server, tmp_path) -> None:
+async def test_logout_revokes_the_session_where_the_server_can(local_server: LocalServer, tmp_path: Path) -> None:
     """A logout that only forgot the session would leave its refresh token usable."""
     from fakts import Fakts
     from fakts.cache.file import FileCache
@@ -792,7 +800,7 @@ async def test_logout_revokes_the_session_where_the_server_can(local_server, tmp
     assert not cache_file.exists()
 
 
-async def test_logout_still_forgets_when_the_server_cannot_be_reached(tmp_path) -> None:
+async def test_logout_still_forgets_when_the_server_cannot_be_reached(tmp_path: Path) -> None:
     from fakts import Fakts
     from fakts.cache.file import FileCache
 

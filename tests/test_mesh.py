@@ -8,8 +8,10 @@ when a lab mesh is configured.
 
 import asyncio
 import sys
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
-from typing import Any, ClassVar
+from types import ModuleType, SimpleNamespace
+from typing import Any, ClassVar, Never
 
 import pytest
 import pytest_asyncio
@@ -21,7 +23,7 @@ from fakts.errors import AttemptOutcome, CompositionError
 from fakts.grants.remote.authorizers.device_code import DeviceCodeAuthorizer
 from fakts.grants.remote.models import FaktsEndpoint
 from fakts.mesh import MeshError, MeshOptions, MeshPath, MeshProxy, NativeNode, hostname_label
-from fakts.models import ActiveFakts, Alias, Instance, Manifest, MeshClaim, Requirement, SelfFakt
+from fakts.models import ActiveFakts, Alias, ChallengeKey, Instance, Manifest, MeshClaim, Requirement, SelfFakt
 from fakts.oauth2 import TokenResponse, merge_token_response
 
 from .helpers import CountingGrant, make_fakts_value, make_manifest
@@ -136,8 +138,12 @@ def mesh_fakts() -> ActiveFakts:
     return value
 
 
+MeshProxyServer = tuple[str, list[str]]
+"""The ``mesh_proxy`` fixture: the proxy url, and the request lines it saw."""
+
+
 @pytest_asyncio.fixture
-async def mesh_proxy() -> Any:
+async def mesh_proxy() -> AsyncIterator[MeshProxyServer]:
     """A forward proxy that answers every challenge and records the request lines."""
     seen: list[str] = []
 
@@ -157,7 +163,7 @@ async def mesh_proxy() -> Any:
 
 
 @pytest.mark.asyncio
-async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: Any) -> None:
+async def test_mesh_aliases_are_challenged_through_the_proxy(mesh_proxy: MeshProxyServer) -> None:
     proxy, seen = mesh_proxy
     fakts = Fakts(
         grant=CountingGrant(fakts=mesh_fakts()),
@@ -222,7 +228,7 @@ async def test_mesh_aliases_are_skipped_without_the_mesh(
 ) -> None:
     challenged: list[str] = []
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         challenged.append(alias.id)
         return True
 
@@ -242,14 +248,14 @@ async def test_mesh_aliases_are_skipped_without_the_mesh(
 class FakeNode:
     started: ClassVar[list[dict]] = []
 
-    def __init__(self, statedir: str, proxy_url: str):
+    def __init__(self, statedir: str, proxy_url: str) -> None:
         self.statedir = statedir
         self.proxy_url = proxy_url
         self.closed = False
         self.forwards: list[tuple] = []
 
     @staticmethod
-    async def start(statedir, hostname, control_url=None, auth_key=None, timeout=90, **tuning):
+    async def start(statedir: str, hostname: str, control_url: str | None = None, auth_key: str | None = None, timeout: float = 90, **tuning: int | bool) -> "FakeNode":
         FakeNode.started.append(
             {
                 "statedir": statedir,
@@ -264,24 +270,20 @@ class FakeNode:
         return FakeNode(statedir, FakeNode.proxy)
 
     @staticmethod
-    def has_state(statedir):
+    def has_state(statedir: str) -> bool:
         return False
 
-    async def turn(self):
-        from types import SimpleNamespace
-
+    async def turn(self) -> SimpleNamespace:
         return SimpleNamespace(urls=["turn:127.0.0.1:3478?transport=udp"], username="u", credential="c")
 
-    async def forward(self, host, port):
+    async def forward(self, host: str, port: int) -> str:
         self.forwards.append((host, port))
         return "127.0.0.1:5555"
 
-    def path(self, host):
-        from types import SimpleNamespace
-
+    def path(self, host: str) -> SimpleNamespace:
         return SimpleNamespace(kind="relay", via=f"waw:{host}")
 
-    def close(self):
+    def close(self) -> None:
         self.closed = True
 
 
@@ -314,7 +316,7 @@ class FakeLockedOut(FakeMeshError):
 
 
 @pytest.fixture
-def fake_arkitekt_mesh(monkeypatch: pytest.MonkeyPatch):
+def fake_arkitekt_mesh(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     import types
 
     module = types.ModuleType("arkitekt_mesh")
@@ -332,7 +334,7 @@ def fake_arkitekt_mesh(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
-async def test_fakts_runs_the_native_node(fake_arkitekt_mesh: Any, tmp_path: Path, mesh_proxy: Any) -> None:
+async def test_fakts_runs_the_native_node(fake_arkitekt_mesh: ModuleType, tmp_path: Path, mesh_proxy: MeshProxyServer) -> None:
     proxy, seen = mesh_proxy
     FakeNode.proxy = proxy  # type: ignore[attr-defined]
     value = mesh_fakts()
@@ -366,7 +368,8 @@ async def test_fakts_runs_the_native_node(fake_arkitekt_mesh: Any, tmp_path: Pat
         # The path is the one to the alias's own host.
         assert fakts.mesh_path("test") == MeshPath(kind="relay", via="waw:100.64.0.9")
         node = fakts._mesh_route.node
-        assert node is not None and node._node.forwards == [
+        assert node is not None and isinstance(node._node, FakeNode)
+        assert node._node.forwards == [
             ("100.64.0.9", 8080),
             ("100.64.0.9", 7880),
         ]
@@ -375,22 +378,20 @@ async def test_fakts_runs_the_native_node(fake_arkitekt_mesh: Any, tmp_path: Pat
 
 @pytest.mark.asyncio
 async def test_a_node_the_mesh_no_longer_takes_says_so(
-    fake_arkitekt_mesh: Any,
+    fake_arkitekt_mesh: ModuleType,
     tmp_path: Path,
-    mesh_proxy: Any,
+    mesh_proxy: MeshProxyServer,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
     proxy, _ = mesh_proxy
     FakeNode.proxy = proxy  # type: ignore[attr-defined]
     # Bindings that tell how the node stands with control (arkitekt-mesh >= 0.13).
-    changes: asyncio.Queue = asyncio.Queue()
+    changes: asyncio.Queue[SimpleNamespace] = asyncio.Queue()
 
-    async def control_changed(self: FakeNode) -> Any:
+    async def control_changed(self: FakeNode) -> SimpleNamespace:
         return await changes.get()
 
-    fake_arkitekt_mesh.ControlStatus = SimpleNamespace
+    fake_arkitekt_mesh.ControlStatus = SimpleNamespace  # type: ignore[attr-defined]
     monkeypatch.setattr(FakeNode, "control_changed", control_changed, raising=False)
 
     async def settled() -> None:
@@ -430,14 +431,14 @@ async def test_a_node_the_mesh_no_longer_takes_says_so(
 
 
 @pytest.mark.asyncio
-async def test_the_tcp_buffer_reaches_the_node(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
+async def test_the_tcp_buffer_reaches_the_node(fake_arkitekt_mesh: ModuleType, tmp_path: Path) -> None:
     options = MeshOptions(tcp_buffer=4 << 20)
     await NativeNode.start(options, tmp_path / "n", "app", "https://mesh.example", "tskey")
     assert FakeNode.started[0]["tuning"] == {"tcp_buffer": 4 << 20}
 
 
 @pytest.mark.asyncio
-async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
+async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: ModuleType, tmp_path: Path) -> None:
     with pytest.raises(MeshError, match="no mesh key was granted") as raised:
         await NativeNode.start(MeshOptions(), tmp_path / "n", "app", "https://mesh.example", None)
     assert raised.value.code == "needs_login"
@@ -465,14 +466,14 @@ async def test_native_needs_login_is_a_mesh_error(fake_arkitekt_mesh: Any, tmp_p
 )
 @pytest.mark.asyncio
 async def test_node_errors_keep_their_code(
-    fake_arkitekt_mesh: Any,
+    fake_arkitekt_mesh: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     error: Exception,
     code: str,
     message: str,
 ) -> None:
-    async def fail(*args: Any, **kwargs: Any) -> Any:
+    async def fail(*args: Any, **kwargs: Any) -> Never:
         raise error
 
     monkeypatch.setattr(FakeNode, "start", staticmethod(fail))
@@ -490,7 +491,7 @@ async def test_missing_bindings_say_what_to_install(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_no_key_and_no_node_skips_the_mesh(fake_arkitekt_mesh: Any, tmp_path: Path) -> None:
+async def test_no_key_and_no_node_skips_the_mesh(fake_arkitekt_mesh: ModuleType, tmp_path: Path) -> None:
     fakts = Fakts(
         grant=CountingGrant(fakts=mesh_fakts()),
         manifest=make_manifest(),
@@ -527,15 +528,15 @@ def keyed(value: ActiveFakts) -> ActiveFakts:
     return value
 
 
-def challenge_only(*reachable: str) -> Any:
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+def challenge_only(*reachable: str) -> Callable[..., Awaitable[bool]]:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         return alias.id in reachable
 
     return challenge
 
 
 @pytest.mark.asyncio
-async def test_no_node_is_started_for_what_is_reachable_without_it(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_no_node_is_started_for_what_is_reachable_without_it(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The mesh alias comes first, but the direct one answers: a node would
     only cost a join (up to MeshOptions.timeout) for nothing."""
     monkeypatch.setattr(Fakts, "_achallenge_alias", challenge_only("mesh", "direct"))
@@ -551,12 +552,12 @@ async def test_no_node_is_started_for_what_is_reachable_without_it(fake_arkitekt
 
 
 @pytest.mark.asyncio
-async def test_a_service_last_reached_over_the_mesh_does_not_wait_for_the_others(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_service_last_reached_over_the_mesh_does_not_wait_for_the_others(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The mesh alias is first because it won last time, and the direct one
     does not answer: the node starts after the head start, not after the
     direct alias has timed out."""
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         if alias.id == "direct":
             await asyncio.Event().wait()
         return True
@@ -577,12 +578,12 @@ async def test_a_service_last_reached_over_the_mesh_does_not_wait_for_the_others
 
 
 @pytest.mark.asyncio
-async def test_a_forced_mesh_is_the_only_way_taken(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_forced_mesh_is_the_only_way_taken(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The direct alias answers, and would win: forced, it is not even asked,
     and the node starts without waiting for it."""
     asked: list[str] = []
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         asked.append(alias.id)
         return True
 
@@ -605,12 +606,12 @@ async def test_a_forced_mesh_is_the_only_way_taken(fake_arkitekt_mesh: Any, tmp_
 
 
 @pytest.mark.asyncio
-async def test_a_forced_mesh_does_not_fall_back(mesh_proxy: Any) -> None:
+async def test_a_forced_mesh_does_not_fall_back(mesh_proxy: MeshProxyServer) -> None:
     """Forced means forced: a mesh alias that does not answer is a failure,
     whatever else would, and so is a service that lists none."""
     proxy, _ = mesh_proxy
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         return alias.id == "direct"
 
     value = mesh_fakts()
@@ -643,12 +644,12 @@ async def test_a_forced_mesh_does_not_fall_back(mesh_proxy: Any) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_node_that_just_joined_is_asked_again(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_node_that_just_joined_is_asked_again(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The first connection through a new node waits for the peer to hear of
     it, which can outlast one challenge: silence is not yet a no."""
     asked = 0
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         nonlocal asked
         asked += 1
         if asked == 1:
@@ -671,22 +672,24 @@ async def test_a_node_that_just_joined_is_asked_again(fake_arkitekt_mesh: Any, t
 
 
 @pytest.mark.asyncio
-async def test_a_node_start_is_not_abandoned_when_a_direct_alias_wins(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_node_start_is_not_abandoned_when_a_direct_alias_wins(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The direct alias answers while the node is still joining. Cancelling
     the join would leave a node nobody holds, with its state directory
     locked: it is let finish, kept, and closed with the block."""
     asked = asyncio.Event()
     answer = asyncio.Event()
+    starting = asyncio.Event()
     joined = asyncio.Event()
     nodes: list[FakeNode] = []
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         asked.set()
         await answer.wait()
         return True
 
     async def slow_start(statedir: str, hostname: str, **kw: Any) -> FakeNode:
         FakeNode.started.append({"statedir": statedir})
+        starting.set()
         await joined.wait()
         nodes.append(FakeNode(statedir, "http://127.0.0.1:1"))
         return nodes[0]
@@ -703,15 +706,14 @@ async def test_a_node_start_is_not_abandoned_when_a_direct_alias_wins(fake_arkit
     async with fakts:
         lookup = asyncio.ensure_future(fakts.aget_alias("test", omit_report=True))
         await asked.wait()
-        while not FakeNode.started:
-            await asyncio.sleep(0.005)
+        await starting.wait()
         answer.set()
         assert (await asyncio.wait_for(lookup, 5)).id == "direct"
 
         route = fakts._mesh_route
         assert route is not None and route.node is None, "the join is still under way"
         joined.set()
-        while route.node is None:
+        while route.node is None:  # noqa: ASYNC110 -- MeshRoute sets .node with no event to wait on; the test only yields until it has
             await asyncio.sleep(0)
         assert route.node._node is nodes[0]
     assert nodes[0].closed
@@ -719,7 +721,7 @@ async def test_a_node_start_is_not_abandoned_when_a_direct_alias_wins(fake_arkit
 
 
 @pytest.mark.asyncio
-async def test_a_node_that_comes_up_after_the_block_is_closed(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_node_that_comes_up_after_the_block_is_closed(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     joined = asyncio.Event()
     nodes: list[FakeNode] = []
 
@@ -728,7 +730,7 @@ async def test_a_node_that_comes_up_after_the_block_is_closed(fake_arkitekt_mesh
         nodes.append(FakeNode(statedir, "http://127.0.0.1:1"))
         return nodes[0]
 
-    async def challenge(self: Fakts, alias: Alias, challenge_key: Any = None, **kw: Any) -> bool:
+    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
         if alias.id == "direct":
             await asyncio.sleep(0.05)
         return True
@@ -751,7 +753,7 @@ async def test_a_node_that_comes_up_after_the_block_is_closed(fake_arkitekt_mesh
 
 
 @pytest.mark.asyncio
-async def test_a_running_node_keeps_the_alias_order(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_running_node_keeps_the_alias_order(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Once another service started the node, a mesh alias listed first is
     used first again -- deferring is about not *starting* a node."""
     value = keyed(mesh_fakts())
@@ -786,7 +788,7 @@ async def test_a_running_node_keeps_the_alias_order(fake_arkitekt_mesh: Any, tmp
 
 
 @pytest.mark.asyncio
-async def test_services_that_need_the_node_at_once_start_it_once(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_services_that_need_the_node_at_once_start_it_once(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     value = keyed(make_fakts_value())
     value.auth.report_endpoint = None
     keys = ["a", "b", "c"]
@@ -813,11 +815,11 @@ async def test_services_that_need_the_node_at_once_start_it_once(fake_arkitekt_m
 
 
 @pytest.mark.asyncio
-async def test_a_node_that_cannot_start_does_not_block_plain_aliases(fake_arkitekt_mesh: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_node_that_cannot_start_does_not_block_plain_aliases(fake_arkitekt_mesh: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """One MeshError used to abort resolution of every alias, and every later
     lookup retried the join (up to MeshOptions.timeout each)."""
 
-    async def cannot_start(statedir, hostname, control_url=None, auth_key=None, timeout=90):
+    async def cannot_start(statedir: str, hostname: str, control_url: str | None = None, auth_key: str | None = None, timeout: float = 90) -> Never:
         FakeNode.started.append({"statedir": statedir})
         raise FakeTimeout("the mesh did not connect in time: control at https://mesh.example did not answer")
 
@@ -870,7 +872,7 @@ async def test_auto_without_the_bindings_is_quietly_off(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_auto_without_a_key_is_quiet(
-    fake_arkitekt_mesh: Any,
+    fake_arkitekt_mesh: ModuleType,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -896,7 +898,7 @@ async def test_auto_without_a_key_is_quiet(
     assert FakeNode.started == []
 
 
-def test_the_builders_use_the_mesh_when_it_is_available(fake_arkitekt_mesh: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_builders_use_the_mesh_when_it_is_available(fake_arkitekt_mesh: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     from fakts import build_device_code_fakts, build_mandate_key_fakts
 
     fakts = build_device_code_fakts("http://localhost:8000", make_manifest(), no_cache=True)
@@ -924,7 +926,7 @@ def test_the_mesh_config_is_one_tagged_union() -> None:
     assert isinstance(by_dict.mesh, MeshProxy) and by_dict.mesh.url == "http://p:1055"
     assert isinstance(Fakts(grant=grant, manifest=make_manifest(), mesh={"kind": "node"}).mesh, MeshOptions)
 
-    def asks_for_a_key(mesh: Any) -> bool:
+    def asks_for_a_key(mesh: MeshOptions | MeshProxy | None) -> bool:
         fakts = build_device_code_fakts("https://x.example", make_manifest(), mesh=mesh, no_cache=True)
         return fakts.grant.authorizer.request_auth_key  # type: ignore[attr-defined]
 

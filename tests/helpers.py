@@ -7,7 +7,10 @@ conftest.py.
 import asyncio
 import socket
 import time
+from collections.abc import Awaitable, Callable
+from typing import Any
 
+from aiohttp import web
 from pydantic import BaseModel
 
 from fakts.models import (
@@ -19,6 +22,12 @@ from fakts.models import (
     Requirement,
     SelfFakt,
 )
+
+Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
+"""An aiohttp request handler, as the local test servers take them."""
+
+TokenServer = Callable[[Handler], Awaitable[str]]
+"""The ``token_server`` fixture: serves one handler at /token, gives its url."""
 
 
 def make_fakts_value(
@@ -135,7 +144,7 @@ def token_body(access: str, refresh: str, expires_in: int = 3600) -> dict:
     }
 
 
-def fakts_pointing_at(token_endpoint: str, **kwargs) -> ActiveFakts:
+def fakts_pointing_at(token_endpoint: str, **kwargs: Any) -> ActiveFakts:
     value = make_fakts_value(**kwargs)
     value.auth.token_endpoint = token_endpoint
     value.auth.refresh_issued_at = time.time()

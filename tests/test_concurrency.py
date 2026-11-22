@@ -10,6 +10,7 @@ because it looks like coverage.
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import pytest
 from aiohttp import web
@@ -18,11 +19,12 @@ from pydantic import BaseModel
 from fakts import Fakts
 from fakts.cache.file import FileCache
 from fakts.errors import NeedsReauthenticationError, NotEnteredError
-from fakts.models import ActiveFakts
+from fakts.models import ActiveFakts, Alias, ChallengeKey
 
 from .helpers import (
     MemoryCache,
     StaticGrant,
+    TokenServer,
     fakts_pointing_at,
     make_fakts_value,
     make_manifest,
@@ -50,7 +52,7 @@ class SlowGrant(BaseModel):
         return self.fakts
 
 
-async def _always_pass(self, alias, challenge_key=None) -> bool:
+async def _always_pass(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
     return True
 
 
@@ -59,7 +61,7 @@ async def _always_pass(self, alias, challenge_key=None) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, monkeypatch) -> None:
+async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """A re-approval that *reduces* the grant must not leave us talking to a
     service we no longer have access to.
 
@@ -94,7 +96,7 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, m
         assert second.id == "relocated", "The refresh replaced this service's aliases; serving the one resolved against the previous grant is exactly the stale-access case instances_changed exists to catch"
 
 
-async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, monkeypatch) -> None:
+async def test_adopting_a_sibling_credential_reresolves_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """Adoption replaces the whole ActiveFakts, instances included.
 
     Pre-fix, `_aadopt_cached_credentials` never touched the alias state at
@@ -146,7 +148,7 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, mo
 # --------------------------------------------------------------------------- #
 
 
-async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server, monkeypatch) -> None:
+async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """A benign `arefresh()` running alongside a 401 must not turn into a
     demand for re-authentication.
 
@@ -197,7 +199,7 @@ async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server, 
 
 
 async def test_concurrent_alias_refresh_and_lookup_are_serialized(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`arefresh_aliases` is public and used to take no lock at all, while
     `aget_alias` read the same state under `_alias_lock`.
@@ -209,7 +211,7 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
     in_flight = 0
     overlaps = 0
 
-    async def yielding_challenge(self, alias, challenge_key=None) -> bool:
+    async def yielding_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         nonlocal in_flight, overlaps
         in_flight += 1
         if in_flight > 1:
@@ -245,7 +247,7 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
 # --------------------------------------------------------------------------- #
 
 
-async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, monkeypatch) -> None:
+async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
     """`test_alias_persist_cannot_clobber_a_rotated_credential` stamps
     `refresh_issued_at` on both sides, so it never exercises the branch that
     actually fires in production.
@@ -261,7 +263,7 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, mon
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self, alias, challenge_key=None) -> bool:
+    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -317,7 +319,7 @@ async def test_nested_enter_is_refused() -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_alogin_on_a_healthy_session_does_nothing(token_server) -> None:
+async def test_alogin_on_a_healthy_session_does_nothing(token_server: TokenServer) -> None:
     """`alogin()` is the recovery users are told to call, so it has to be
     safe to call unconditionally: no prompt, and above all no rotation.
 
@@ -347,7 +349,7 @@ async def test_alogin_on_a_healthy_session_does_nothing(token_server) -> None:
     assert grant.load_count == 1, "alogin() must not re-run the grant"
 
 
-async def test_alogin_recovers_a_dead_session_in_one_call(token_server) -> None:
+async def test_alogin_recovers_a_dead_session_in_one_call(token_server: TokenServer) -> None:
     """The README's worked example, as a test.
 
     The grant here *requires user interaction*, which is the whole point: an
@@ -379,7 +381,7 @@ async def test_alogin_recovers_a_dead_session_in_one_call(token_server) -> None:
         assert await fakts.aget_token() == "fresh_access"
 
 
-async def test_alogout_forgets_the_session(tmp_path) -> None:
+async def test_alogout_forgets_the_session(tmp_path: Path) -> None:
     """Logout clears both the cache and every scrap of in-memory state, so a
     later call re-runs the grant rather than resurrecting the old session."""
     cache_file = tmp_path / "cache.json"
@@ -407,7 +409,7 @@ async def test_alogout_forgets_the_session(tmp_path) -> None:
         assert grant.load_count == 2
 
 
-async def test_alogout_leaves_nothing_behind(tmp_path) -> None:
+async def test_alogout_leaves_nothing_behind(tmp_path: Path) -> None:
     """Logging out deletes the cache file and leaves nothing next to it."""
     cache_file = tmp_path / "cache.json"
     fakts = Fakts(
@@ -420,11 +422,11 @@ async def test_alogout_leaves_nothing_behind(tmp_path) -> None:
         await fakts.aload()
         await fakts.alogout()
 
-    assert list(tmp_path.iterdir()) == [], f"litter left: {list(tmp_path.iterdir())}"
+    assert list(tmp_path.iterdir()) == [], f"litter left: {list(tmp_path.iterdir())}"  # noqa: ASYNC240 -- a test inspecting its own tmp dir after the fact; nothing else runs on the loop
 
 
 async def test_alogout_concurrent_with_alias_resolution_does_not_deadlock(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """alogout() is the only operation holding all three locks, so it is the
     one that deadlocks if it takes them out of L1 order.
@@ -438,7 +440,7 @@ async def test_alogout_concurrent_with_alias_resolution_does_not_deadlock(
     challenging = asyncio.Event()
     proceed = asyncio.Event()
 
-    async def gated_challenge(self, alias, challenge_key=None) -> bool:
+    async def gated_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         challenging.set()
         await proceed.wait()
         return alias.id == "fallback"

@@ -19,7 +19,7 @@ from fakts.grants.remote.authorizers.mandate_key import MandateKeyAuthorizer
 from fakts.grants.remote.discovery.static import StaticDiscovery
 from fakts.grants.remote.models import FaktsEndpoint
 
-from .helpers import MemoryCache, make_manifest
+from .helpers import MemoryCache, TokenServer, make_manifest
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -27,7 +27,7 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest_asyncio.fixture
-async def token_endpoint() -> AsyncIterator[Callable[[Handler], Awaitable[str]]]:
+async def token_endpoint() -> AsyncIterator[TokenServer]:
     runners: list[web.AppRunner] = []
 
     async def start(handler: Handler) -> str:
@@ -83,7 +83,7 @@ def _fakts(base_url: str) -> Fakts:
     )
 
 
-async def test_a_key_session_renews_by_logging_in_again(token_endpoint) -> None:
+async def test_a_key_session_renews_by_logging_in_again(token_endpoint: TokenServer) -> None:
     logins: list[str] = []
 
     async def handler(request: web.Request) -> web.Response:
@@ -106,7 +106,7 @@ async def test_a_key_session_renews_by_logging_in_again(token_endpoint) -> None:
     assert loaded.auth.client_id == "keyed-client"
 
 
-async def test_a_revoked_key_needs_a_new_one(token_endpoint) -> None:
+async def test_a_revoked_key_needs_a_new_one(token_endpoint: TokenServer) -> None:
     calls = {"n": 0}
 
     async def handler(request: web.Request) -> web.Response:

@@ -2,7 +2,7 @@ import json
 import os
 from enum import Enum
 from hashlib import sha256
-from typing import Any, Literal
+from typing import Literal
 
 from arkitekt_spec import AppManifest, Requirement
 from arkitekt_spec.declare.wiring import Alias
@@ -208,7 +208,7 @@ class SelfFakt(BaseModel):
 
     @field_validator("sub", "organization", "hub", mode="before")
     @classmethod
-    def _ids_as_strings(cls, v: Any) -> Any:
+    def _ids_as_strings(cls, v: object) -> object:
         return str(v) if isinstance(v, int) else v
 
 
@@ -249,7 +249,7 @@ class ActiveFakts(BaseModel):
 
     @field_validator("statuses", mode="before")
     @classmethod
-    def _coerce_unknown_statuses(cls, v: Any) -> Any:
+    def _coerce_unknown_statuses(cls, v: object) -> object:
         if isinstance(v, dict):
             known = {status.value for status in GrantStatus}
             return {key: (value if isinstance(value, GrantStatus) or value in known else GrantStatus.UNKNOWN) for key, value in v.items()}

@@ -81,10 +81,10 @@ class EnvGrant(BaseModel):
 
         path = os.environ.get(self.file_var)
         if path:
-            if not os.path.exists(path):
+            if not os.path.exists(path):  # noqa: ASYNC240 -- a one-shot read of a local configuration file when the grant loads
                 raise GrantError(f"${self.file_var} points to '{path}', but that file does not exist.")
             try:
-                with open(path) as f:
+                with open(path) as f:  # noqa: ASYNC230 -- a one-shot read of a local configuration file when the grant loads
                     content = f.read()
             except OSError as e:
                 raise GrantError(f"Could not read the fakts configuration file '{path}' (from ${self.file_var}): {e}") from e

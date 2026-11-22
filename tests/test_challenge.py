@@ -7,7 +7,6 @@ import socket
 import ssl
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -31,7 +30,7 @@ from fakts.errors import (
     ServiceFailure,
     ServiceUnreachableError,
 )
-from fakts.models import ChallengeKey
+from fakts.models import ActiveFakts, Alias, ChallengeKey
 
 from .helpers import CountingGrant, make_fakts_value, make_manifest
 
@@ -55,7 +54,7 @@ def sign_nonce(private: Ed25519PrivateKey, nonce: str) -> str:
     return base64.b64encode(private.sign(build_challenge_message(nonce))).decode()
 
 
-async def test_verify_challenge_signature():
+async def test_verify_challenge_signature() -> None:
     private, key = make_keypair()
     _, other_key = make_keypair()
 
@@ -70,9 +69,12 @@ async def test_verify_challenge_signature():
 
 Handler = Callable[[web.Request], Awaitable[web.Response]]
 
+ChallengeServer = Callable[[Handler], Awaitable[int]]
+"""The ``challenge_server`` fixture: serves the handler at /test, gives the port."""
+
 
 @pytest_asyncio.fixture
-async def challenge_server() -> AsyncIterator[Callable[[Handler], Awaitable[int]]]:
+async def challenge_server() -> AsyncIterator[ChallengeServer]:
     """Starts a local http server whose /test route is the alias's
     challenge path. The handler is provided by the test."""
     runners = []
@@ -95,7 +97,7 @@ async def challenge_server() -> AsyncIterator[Callable[[Handler], Awaitable[int]
         await runner.cleanup()
 
 
-def make_pinned_fakts(port: int, key: ChallengeKey | None):
+def make_pinned_fakts(port: int, key: ChallengeKey | None) -> ActiveFakts:
     """ActiveFakts with a single alias pointing at the local server."""
     value = make_fakts_value(host="127.0.0.1")
     instance = value.instances["test"]
@@ -104,7 +106,7 @@ def make_pinned_fakts(port: int, key: ChallengeKey | None):
     return value
 
 
-async def test_signed_challenge_passes(challenge_server) -> None:
+async def test_signed_challenge_passes(challenge_server: ChallengeServer) -> None:
     private, key = make_keypair()
 
     async def handler(request: web.Request) -> web.Response:
@@ -120,7 +122,7 @@ async def test_signed_challenge_passes(challenge_server) -> None:
     assert alias.id == "primary"
 
 
-async def test_unsigned_200_fails_when_key_is_pinned(challenge_server) -> None:
+async def test_unsigned_200_fails_when_key_is_pinned(challenge_server: ChallengeServer) -> None:
     """With a pinned key, a host that merely answers 200 must not pass."""
     _, key = make_keypair()
 
@@ -135,7 +137,7 @@ async def test_unsigned_200_fails_when_key_is_pinned(challenge_server) -> None:
             await fakts.aget_alias("test", omit_report=True)
 
 
-async def test_wrong_key_signature_fails(challenge_server) -> None:
+async def test_wrong_key_signature_fails(challenge_server: ChallengeServer) -> None:
     """A host signing with a different key (impostor) must not pass."""
     impostor_private, _ = make_keypair()
     _, pinned_key = make_keypair()
@@ -152,7 +154,7 @@ async def test_wrong_key_signature_fails(challenge_server) -> None:
             await fakts.aget_alias("test", omit_report=True)
 
 
-async def test_plain_challenge_without_key_still_passes(challenge_server) -> None:
+async def test_plain_challenge_without_key_still_passes(challenge_server: ChallengeServer) -> None:
     """Instances without a challenge key keep the plain 200-check."""
 
     async def handler(request: web.Request) -> web.Response:
@@ -186,17 +188,17 @@ async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_sa
     assert "fakts[crypto]" in warnings[0].getMessage()
 
 
-async def test_generate_nonce_is_unique():
+async def test_generate_nonce_is_unique() -> None:
     nonces = {generate_nonce() for _ in range(100)}
     assert len(nonces) == 100, "Nonces must be fresh per probe"
 
 
-async def test_build_challenge_message_is_domain_separated():
+async def test_build_challenge_message_is_domain_separated() -> None:
     assert build_challenge_message("abc") == b"fakts-challenge-v1:abc"
     assert build_challenge_message("abc") == f"{CHALLENGE_DOMAIN}:abc".encode()
 
 
-async def test_an_unsupported_key_kind_fails_closed(challenge_server) -> None:
+async def test_an_unsupported_key_kind_fails_closed(challenge_server: ChallengeServer) -> None:
     """A pinned key of a kind this fakts cannot verify must not downgrade to
     the plain challenge: the instance pinned a key so a 200 is not enough."""
 
@@ -224,7 +226,7 @@ async def failure_of(fakts: Fakts) -> ServiceFailure:
     return failure
 
 
-async def test_a_wrong_status_is_reported_as_one(challenge_server) -> None:
+async def test_a_wrong_status_is_reported_as_one(challenge_server: ChallengeServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.Response(status=503, text="starting")
 
@@ -248,7 +250,7 @@ async def test_nothing_listening_is_unreachable() -> None:
     assert "running" in (failure.hint() or "")
 
 
-async def test_no_answer_in_time_is_a_timeout(challenge_server) -> None:
+async def test_no_answer_in_time_is_a_timeout(challenge_server: ChallengeServer) -> None:
     async def handler(request: web.Request) -> web.Response:
         await asyncio.sleep(1)
         return web.Response(text="late")
@@ -263,7 +265,7 @@ async def test_no_answer_in_time_is_a_timeout(challenge_server) -> None:
     assert attempt.describe().startswith("timed out after 0.")
 
 
-async def test_unsigned_and_forged_answers_are_told_apart(challenge_server) -> None:
+async def test_unsigned_and_forged_answers_are_told_apart(challenge_server: ChallengeServer) -> None:
     impostor, _ = make_keypair()
     _, pinned = make_keypair()
 
@@ -284,7 +286,7 @@ async def test_unsigned_and_forged_answers_are_told_apart(challenge_server) -> N
         assert [a.outcome for a in failure.attempts] == [outcome]
 
 
-async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challenge_server, caplog: pytest.LogCaptureFixture) -> None:
+async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challenge_server: ChallengeServer, caplog: pytest.LogCaptureFixture) -> None:
     """The alias that works is used, but a host that answers for the service
     without its key is not something to pass over in silence."""
     genuine, pinned = make_keypair()
@@ -334,7 +336,7 @@ async def test_a_challenge_that_says_no_is_still_an_attempt(
     """A challenger returning False used to leave no trace: 'all 2 aliases
     failed' over an empty list."""
 
-    async def refuses(self: Fakts, alias: Any, challenge_key: object = None) -> bool:
+    async def refuses(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
         return False
 
     monkeypatch.setattr(Fakts, "_achallenge_alias", refuses)
