@@ -22,7 +22,7 @@ import sys
 from collections.abc import Awaitable
 from hashlib import sha256
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol, Self, cast
+from typing import Annotated, Any, Literal, Protocol, TypeVar, cast
 
 from arkitekt_spec.declare.wiring import MeshError as AliasMeshError
 from arkitekt_spec.declare.wiring import TurnInfo
@@ -361,6 +361,9 @@ def _translate(error: Exception, bindings: _MeshBindings, statedir: Path) -> Mes
     return MeshError(_sentence(error), "start")
 
 
+_NodeT = TypeVar("_NodeT", bound="NativeNode")
+
+
 class NativeNode:
     """The mesh node running in this process; stop it with :meth:`close`."""
 
@@ -372,7 +375,7 @@ class NativeNode:
         the url is not for logs."""
         self.statedir = statedir
 
-    def __deepcopy__(self, memo: dict) -> Self:
+    def __deepcopy__(self: _NodeT, memo: dict) -> _NodeT:
         # A running node is shared, never copied: a deep copy of an alias
         # reached through it is still reached through it.
         return self
