@@ -94,13 +94,7 @@ async def test_a_plain_alias_off_the_mesh_is_never_used_even_when_it_answers(
 
 def test_a_rotated_certificate_is_a_changed_instance() -> None:
     before = strict_fakts().instances["test"]
-    after = before.model_copy(
-        update={
-            "tls": TlsClaim(
-                certificates=["-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"]
-            )
-        }
-    )
+    after = before.model_copy(update={"tls": TlsClaim(certificates=["-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"])})
     assert aliases._same_instance(before, before)
     assert not aliases._same_instance(before, after)
 

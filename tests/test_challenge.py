@@ -62,18 +62,10 @@ async def test_verify_challenge_signature():
     signature = sign_nonce(private, "some-nonce")
 
     assert verify_challenge_signature(key, "some-nonce", signature)
-    assert not verify_challenge_signature(key, "other-nonce", signature), (
-        "A signature must not verify for a different nonce (replay)"
-    )
-    assert not verify_challenge_signature(other_key, "some-nonce", signature), (
-        "A signature must not verify against another service's key"
-    )
-    assert not verify_challenge_signature(key, "some-nonce", "not base64!!"), (
-        "Garbage signatures must fail, not raise"
-    )
-    assert not verify_challenge_signature(
-        ChallengeKey(key="bm90IGEga2V5"), "some-nonce", signature
-    ), "A malformed pinned key must fail the challenge"
+    assert not verify_challenge_signature(key, "other-nonce", signature), "A signature must not verify for a different nonce (replay)"
+    assert not verify_challenge_signature(other_key, "some-nonce", signature), "A signature must not verify against another service's key"
+    assert not verify_challenge_signature(key, "some-nonce", "not base64!!"), "Garbage signatures must fail, not raise"
+    assert not verify_challenge_signature(ChallengeKey(key="bm90IGEga2V5"), "some-nonce", signature), "A malformed pinned key must fail the challenge"
 
 
 Handler = Callable[[web.Request], Awaitable[web.Response]]
@@ -176,9 +168,7 @@ async def test_plain_challenge_without_key_still_passes(challenge_server) -> Non
     assert alias.id == "primary"
 
 
-async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_says_so(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_says_so(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     """Without the optional 'cryptography' package the challenge passes unverified,
     as it would without a pinned key, and the process is told once."""
     import fakts.challenge as challenge
@@ -294,9 +284,7 @@ async def test_unsigned_and_forged_answers_are_told_apart(challenge_server) -> N
         assert [a.outcome for a in failure.attempts] == [outcome]
 
 
-async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(
-    challenge_server, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challenge_server, caplog: pytest.LogCaptureFixture) -> None:
     """The alias that works is used, but a host that answers for the service
     without its key is not something to pass over in silence."""
     genuine, pinned = make_keypair()
@@ -312,9 +300,7 @@ async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(
     genuine_port = await challenge_server(signing(genuine))
     value = make_pinned_fakts(forged_port, pinned)
     forged = value.instances["test"].aliases[0]
-    value.instances["test"].aliases.append(
-        forged.model_copy(update={"id": "genuine", "port": genuine_port})
-    )
+    value.instances["test"].aliases.append(forged.model_copy(update={"id": "genuine", "port": genuine_port}))
 
     with caplog.at_level("WARNING", logger="fakts.aliases"):
         async with Fakts(grant=CountingGrant(fakts=value), manifest=make_manifest()) as fakts:
@@ -332,9 +318,7 @@ async def test_a_forged_answer_is_listed_first() -> None:
         instance="test_instance",
         attempts=(
             AliasAttempt("lan", None, "http://10.0.0.4/ht", AttemptOutcome.TIMEOUT, None, 3.0),
-            AliasAttempt(
-                "pub", None, "https://lab.example/ht", AttemptOutcome.BAD_SIGNATURE, "forged"
-            ),
+            AliasAttempt("pub", None, "https://lab.example/ht", AttemptOutcome.BAD_SIGNATURE, "forged"),
         ),
     )
     lines = failure.render().splitlines()
@@ -393,9 +377,7 @@ def test_the_errors_survive_a_pickle() -> None:
 def test_a_certificate_error_is_not_just_unreachable() -> None:
     """aiohttp's certificate errors are connection errors too: the order of
     the checks is what tells them apart."""
-    assert _classify(ssl.SSLCertVerificationError("certificate verify failed"))[0] is (
-        AttemptOutcome.TLS
-    )
+    assert _classify(ssl.SSLCertVerificationError("certificate verify failed"))[0] is (AttemptOutcome.TLS)
     assert _classify(ConnectionRefusedError("refused"))[0] is AttemptOutcome.UNREACHABLE
     assert _classify(TimeoutError())[0] is AttemptOutcome.TIMEOUT
     assert _classify(ValueError("odd")) == (AttemptOutcome.ERROR, "ValueError: odd")

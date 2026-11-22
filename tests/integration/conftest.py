@@ -30,17 +30,9 @@ def integration_ports() -> Iterator[dict[str, int]]:
     lok_port, rekuest_port, minio_port = reserve_free_ports(3)
 
     template = Path(lok_config_template).read_text()
-    assert "__REKUEST_HOST_PORT__" in template, (
-        "lok.yaml lost its __REKUEST_HOST_PORT__ placeholder; the client would "
-        "be handed an address that nothing is listening on."
-    )
-    assert "__LOK_HOST_PORT__" in template, (
-        "lok.yaml lost its __LOK_HOST_PORT__ placeholder; lok would advertise "
-        "endpoints (and mint an `iss`) for a host the tests cannot reach."
-    )
-    rendered = template.replace("__REKUEST_HOST_PORT__", str(rekuest_port)).replace(
-        "__LOK_HOST_PORT__", str(lok_port)
-    )
+    assert "__REKUEST_HOST_PORT__" in template, "lok.yaml lost its __REKUEST_HOST_PORT__ placeholder; the client would be handed an address that nothing is listening on."
+    assert "__LOK_HOST_PORT__" in template, "lok.yaml lost its __LOK_HOST_PORT__ placeholder; lok would advertise endpoints (and mint an `iss`) for a host the tests cannot reach."
+    rendered = template.replace("__REKUEST_HOST_PORT__", str(rekuest_port)).replace("__LOK_HOST_PORT__", str(lok_port))
 
     with tempfile.TemporaryDirectory(prefix="fakts-integration-") as tmpdir:
         # Readable by the docker daemon, which mounts it into the container.
@@ -96,17 +88,13 @@ def deployed_infra(integration_ports: dict[str, int]) -> Generator[Deployment, N
     setup = testing(docker_compose_file)
     # Configure the Fakts instance
     setup.add_health_check(
-        url=lambda spec: (
-            f"http://localhost:{spec.find_service('lok').get_port_for_internal(80).published}/ht"
-        ),
+        url=lambda spec: f"http://localhost:{spec.find_service('lok').get_port_for_internal(80).published}/ht",
         service="lok",
         timeout=5,
         max_retries=10,
     )
     setup.add_health_check(
-        url=lambda spec: (
-            f"http://localhost:{spec.find_service('rekuest').get_port_for_internal(80).published}/ht"
-        ),
+        url=lambda spec: f"http://localhost:{spec.find_service('rekuest').get_port_for_internal(80).published}/ht",
         service="rekuest",
         timeout=5,
         max_retries=10,

@@ -102,11 +102,7 @@ def strict_view(instance: Instance) -> Instance:
         return instance
     assert instance.tls is not None
     certificates = list(instance.tls.certificates)
-    usable = [
-        alias.model_copy(update={"certificates": certificates}) if alias.ssl else alias
-        for alias in instance.aliases
-        if not is_insecure_transport(alias)
-    ]
+    usable = [alias.model_copy(update={"certificates": certificates}) if alias.ssl else alias for alias in instance.aliases if not is_insecure_transport(alias)]
     return instance.model_copy(update={"aliases": usable})
 
 
@@ -147,10 +143,7 @@ def _note_transport(service: str, alias: Alias) -> None:
         return
     _noted_insecure.add((service, alias.id))
     logger.info(
-        "Service %s is reached over plain HTTP at %s: the connection is not encrypted, so "
-        "anyone on the network in between can read and change it, tokens included. Its "
-        "challenge signature only proves the service answered the probe, not what follows. "
-        "Prefer an HTTPS alias or the mesh.",
+        "Service %s is reached over plain HTTP at %s: the connection is not encrypted, so anyone on the network in between can read and change it, tokens included. Its challenge signature only proves the service answered the probe, not what follows. Prefer an HTTPS alias or the mesh.",
         service,
         alias.to_http_path(),
     )
@@ -195,17 +188,14 @@ def _classify(error: Exception, proxied: bool = False) -> tuple[AttemptOutcome, 
     if isinstance(error, ChallengeSignatureError):
         return (
             AttemptOutcome.BAD_SIGNATURE,
-            "answered with an invalid signature (the host does not hold the "
-            "service's identity key)",
+            "answered with an invalid signature (the host does not hold the service's identity key)",
         )
     if isinstance(error, ChallengeUnsignedError):
         return AttemptOutcome.UNSIGNED, "answered without a signature"
     if isinstance(error, ChallengeStatusError):
         return AttemptOutcome.BAD_STATUS, f"answered with status {error.status}"
     # Before the connection errors: a certificate error is one of them.
-    if isinstance(
-        error, (aiohttp.ClientConnectorCertificateError, aiohttp.ClientSSLError, ssl.SSLError)
-    ):
+    if isinstance(error, (aiohttp.ClientConnectorCertificateError, aiohttp.ClientSSLError, ssl.SSLError)):
         return AttemptOutcome.TLS, _brief(error)
     if isinstance(error, (aiohttp.ClientConnectionError, OSError)):
         return AttemptOutcome.UNREACHABLE, _brief(error)
@@ -223,12 +213,7 @@ def _same_instance(left: Instance | None, right: Instance | None) -> bool:
     same hub certificate (a rotated one is asked again)."""
     if left is None or right is None:
         return left is right
-    return (
-        left.challenge_key == right.challenge_key
-        and left.tls == right.tls
-        and sorted(alias.model_dump_json() for alias in left.aliases)
-        == sorted(alias.model_dump_json() for alias in right.aliases)
-    )
+    return left.challenge_key == right.challenge_key and left.tls == right.tls and sorted(alias.model_dump_json() for alias in left.aliases) == sorted(alias.model_dump_json() for alias in right.aliases)
 
 
 def in_container() -> bool:
@@ -326,10 +311,7 @@ class AliasResolver:
             return "the user declined access to it"
         if status == GrantStatus.UNAVAILABLE:
             return f"the deployment does not offer the service '{service}'"
-        return (
-            "the user may have declined access, or the deployment does not "
-            f"offer the service '{service}'"
-        )
+        return f"the user may have declined access, or the deployment does not offer the service '{service}'"
 
     def undeclared_key_error(self, fakts_key: str) -> AliasNotFoundError:
         """The error for a key that is not declared in the manifest."""
@@ -365,20 +347,15 @@ class AliasResolver:
         assert state.alias_lock is not None
         try:
             async with state.alias_lock:
-                alias = await self._aget_alias_locked(
-                    fakts_key, omit_challenge, omit_report, force_refresh
-                )
+                alias = await self._aget_alias_locked(fakts_key, omit_challenge, omit_report, force_refresh)
         finally:
             await self.aflush_report()
         for mismatch in self.version_mismatches():
-            if mismatch.key != fakts_key or (
-                self._version_warned.get(fakts_key, "") == mismatch.running
-            ):
+            if mismatch.key != fakts_key or (self._version_warned.get(fakts_key, "") == mismatch.running):
                 continue
             self._version_warned[fakts_key] = mismatch.running
             logger.warning(
-                "'%s' (%s) runs %s here, and '%s' was written for %s. "
-                "It is used anyway; some calls may fail.",
+                "'%s' (%s) runs %s here, and '%s' was written for %s. It is used anyway; some calls may fail.",
                 mismatch.key,
                 mismatch.service,
                 mismatch.running or "an unknown version",
@@ -396,9 +373,7 @@ class AliasResolver:
         loaded = self._state.loaded_fakts
         if loaded is None:
             return []
-        wanted = {
-            r.key: getattr(r, "version", None) for r in self._state.manifest.requirements or []
-        }
+        wanted = {r.key: getattr(r, "version", None) for r in self._state.manifest.requirements or []}
         return [
             VersionMismatch(
                 key=key,
@@ -424,9 +399,7 @@ class AliasResolver:
             return None
         return self.alias_map.get(fakts_key)
 
-    async def arefresh_aliases(
-        self, omit_challenge: bool = False, omit_report: bool = False
-    ) -> None:
+    async def arefresh_aliases(self, omit_challenge: bool = False, omit_report: bool = False) -> None:
         """Resolve every requirement again; see :meth:`Fakts.arefresh_aliases`."""
         state = self._state
         state.ensure_entered()
@@ -460,9 +433,7 @@ class AliasResolver:
         stale_unchallenged = not omit_challenge and fakts_key in self._unchallenged_keys
         if force_refresh or stale_unchallenged or not self.current:
             try:
-                await self._arefresh_with_selfheal(
-                    omit_challenge=omit_challenge, omit_report=omit_report
-                )
+                await self._arefresh_with_selfheal(omit_challenge=omit_challenge, omit_report=omit_report)
             except CompositionError:
                 # Even if some *other* required service failed, the requested
                 # key may have resolved fine -- or not have been granted at all,
@@ -492,17 +463,10 @@ class AliasResolver:
             # instance was granted but is unreachable".
             if not self.is_granted(fakts_key):
                 kind = "optional" if requirement.optional else "required"
-                raise ServiceNotGrantedError(
-                    f"The {kind} service '{fakts_key}' is declared in the manifest of "
-                    f"'{manifest.identifier}', but the server did not grant an "
-                    f"instance for it "
-                    f"({self._not_granted_why(fakts_key, requirement.service)})."
-                )
+                raise ServiceNotGrantedError(f"The {kind} service '{fakts_key}' is declared in the manifest of '{manifest.identifier}', but the server did not grant an instance for it ({self._not_granted_why(fakts_key, requirement.service)}).")
 
             if (failure := self._failures.get(fakts_key)) is not None:
-                raise ServiceUnreachableError(
-                    f"Could not resolve alias for {fakts_key}: {failure.render()}", failure
-                )
+                raise ServiceUnreachableError(f"Could not resolve alias for {fakts_key}: {failure.render()}", failure)
 
         raise self.undeclared_key_error(fakts_key)
 
@@ -518,9 +482,7 @@ class AliasResolver:
     def _error_for(self, failure: ServiceFailure) -> Exception:
         """What a lookup of a service that failed like this raises."""
         if failure.optional:
-            return ServiceUnreachableError(
-                f"Could not resolve alias for {failure.key}: {failure.render()}", failure
-            )
+            return ServiceUnreachableError(f"Could not resolve alias for {failure.key}: {failure.render()}", failure)
         return self._composition_error((failure,))
 
     def _composition_error(self, failures: tuple[ServiceFailure, ...]) -> CompositionError:
@@ -528,9 +490,7 @@ class AliasResolver:
         deployment = state.loaded_fakts.self.deployment_name if state.loaded_fakts else None
         joined = "\n".join(failure.render() for failure in failures)
         return CompositionError(
-            f"Could not resolve all required services for app "
-            f"'{state.manifest.identifier}' (deployment '{deployment}'):\n{joined}\n"
-            f"Check that the services are running and reachable from this machine.",
+            f"Could not resolve all required services for app '{state.manifest.identifier}' (deployment '{deployment}'):\n{joined}\nCheck that the services are running and reachable from this machine.",
             failures,
         )
 
@@ -538,9 +498,7 @@ class AliasResolver:
     # Resolution (caller holds alias_lock)                               #
     # ------------------------------------------------------------------ #
 
-    async def _arefresh_with_selfheal(
-        self, omit_challenge: bool = False, omit_report: bool = True
-    ) -> None:
+    async def _arefresh_with_selfheal(self, omit_challenge: bool = False, omit_report: bool = True) -> None:
         """Resolve, reloading stale cached fakts once on failure.
 
         If resolution fails while the fakts came from the cache (services may
@@ -558,17 +516,10 @@ class AliasResolver:
         try:
             await self._arefresh_locked(omit_challenge=omit_challenge, omit_report=omit_report)
         except CompositionError as failed:
-            if not (
-                self._settings.refetch_on_alias_failure
-                and state.loaded_from_cache
-                and not state.grant_requires_interaction()
-            ):
+            if not (self._settings.refetch_on_alias_failure and state.loaded_from_cache and not state.grant_requires_interaction()):
                 raise
 
-            logger.warning(
-                "Alias resolution from cached fakts failed. Reloading fakts from the "
-                "grant and retrying."
-            )
+            logger.warning("Alias resolution from cached fakts failed. Reloading fakts from the grant and retrying.")
             previous = state.loaded_fakts
             try:
                 await state.aload(reload=True)
@@ -578,9 +529,7 @@ class AliasResolver:
                 # services failed, not why the retry did.
                 logger.warning("Reloading fakts from the grant failed too: %s", reload_failed)
                 raise failed from reload_failed
-            await self._arefresh_locked(
-                omit_challenge=omit_challenge, omit_report=omit_report, previous=previous
-            )
+            await self._arefresh_locked(omit_challenge=omit_challenge, omit_report=omit_report, previous=previous)
 
     async def _areport_token(self, omit_report: bool) -> str | None:
         """The token the report is sent with, taken before anything resolves.
@@ -634,9 +583,7 @@ class AliasResolver:
             )
 
         async def resolve(req: Requirement) -> _Resolved:
-            return standing(req) or await self._aresolve_requirement(
-                fakts, req, omit_challenge=omit_challenge
-            )
+            return standing(req) or await self._aresolve_requirement(fakts, req, omit_challenge=omit_challenge)
 
         results = await asyncio.gather(*(resolve(req) for req in requirements))
 
@@ -708,9 +655,7 @@ class AliasResolver:
             return
 
         fakts = state.loaded_fakts or fakts
-        resolved = await self._aresolve_requirement(
-            fakts, requirement, omit_challenge=omit_challenge
-        )
+        resolved = await self._aresolve_requirement(fakts, requirement, omit_challenge=omit_challenge)
 
         # Copies, swapped in: a reader never sees a map half changed.
         alias_map = {key: alias for key, alias in self.alias_map.items() if key != fakts_key}
@@ -801,14 +746,7 @@ class AliasResolver:
             instance = ranked_view(instance, self._settings.alias_policy)
             excluded = usable > len(instance.aliases) == 0
         if not instance or not instance.aliases:
-            reason = (
-                f"Every alias of {kind} service {req.key} is excluded by this client's alias policy."
-                if excluded
-                else f"No aliases listed for {kind} service {req.key}."
-                if instance
-                else f"No instance granted for {kind} service {req.key}: "
-                f"{self._not_granted_why(req.key, req.service)}."
-            )
+            reason = f"Every alias of {kind} service {req.key} is excluded by this client's alias policy." if excluded else f"No aliases listed for {kind} service {req.key}." if instance else f"No instance granted for {kind} service {req.key}: {self._not_granted_why(req.key, req.service)}."
             logger.log(level, reason)
             # Nothing granted is no failure of an optional service: it reports
             # as valid, and a lookup says "not granted", not "unreachable".
@@ -833,11 +771,7 @@ class AliasResolver:
                     service=req.service,
                     optional=req.optional,
                     instance=instance.identifier,
-                    reason=(
-                        f"The {kind} service {req.key} (instance '{instance.identifier}') "
-                        f"lists no alias on the mesh, and the mesh is forced: its "
-                        f"{len(instance.aliases)} other alias(es) were not tried."
-                    ),
+                    reason=(f"The {kind} service {req.key} (instance '{instance.identifier}') lists no alias on the mesh, and the mesh is forced: its {len(instance.aliases)} other alias(es) were not tried."),
                 )
             )
 
@@ -850,9 +784,7 @@ class AliasResolver:
             if attempt.outcome is AttemptOutcome.BAD_SIGNATURE:
                 # Also when another alias works: this one is not the service.
                 logger.warning(
-                    "Alias %s of service %s at %s answered its challenge with a signature "
-                    "that does not verify: either that host is not the service, or the "
-                    "pinned key is stale.",
+                    "Alias %s of service %s at %s answered its challenge with a signature that does not verify: either that host is not the service, or the pinned key is stale.",
                     attempt.alias_id,
                     req.key,
                     attempt.url,
@@ -879,9 +811,7 @@ class AliasResolver:
         _note_transport(req.key, selected)
         return _Resolved(selected, AliasReport(alias_id=selected.id, reason=None, valid=True))
 
-    async def _aselect_unchallenged(
-        self, fakts: ActiveFakts, instance: Instance
-    ) -> tuple[Alias | None, list[AliasAttempt]]:
+    async def _aselect_unchallenged(self, fakts: ActiveFakts, instance: Instance) -> tuple[Alias | None, list[AliasAttempt]]:
         """The alias to use when nothing is challenged: the first listed.
 
         A mesh alias still needs its route, so one listed ahead of a plain
@@ -912,9 +842,7 @@ class AliasResolver:
             return docker[0], attempts
         return None, attempts
 
-    async def _arace(
-        self, fakts: ActiveFakts, instance: Instance
-    ) -> tuple[Alias | None, list[AliasAttempt]]:
+    async def _arace(self, fakts: ActiveFakts, instance: Instance) -> tuple[Alias | None, list[AliasAttempt]]:
         """Challenge an instance's aliases; the one to use, and what came of each.
 
         The first alias (the last known good one) is challenged alone for
@@ -1036,9 +964,7 @@ class AliasResolver:
 
         for rank, alias in ranked:
             if rank not in attempts:
-                attempts[rank] = AliasAttempt(
-                    alias.id, alias.kind, alias.challenge_path, AttemptOutcome.SKIPPED
-                )
+                attempts[rank] = AliasAttempt(alias.id, alias.kind, alias.challenge_path, AttemptOutcome.SKIPPED)
         return winner, [
             *(attempts[rank] for rank, _ in ranked),
             *(
@@ -1055,15 +981,8 @@ class AliasResolver:
 
     def _off_the_mesh(self, alias: Alias, error: MeshError | None) -> AliasAttempt:
         """The attempt of a mesh alias this process has no route to."""
-        detail = (
-            f"not available: {error}"
-            if error is not None
-            else "off: pass mesh=MeshOptions() (with fakts[mesh] installed) or "
-            'mesh=MeshProxy(url="http://...") to Fakts.'
-        )
-        return AliasAttempt(
-            alias.id, alias.kind, alias.challenge_path, AttemptOutcome.MESH_UNAVAILABLE, detail
-        )
+        detail = f"not available: {error}" if error is not None else 'off: pass mesh=MeshOptions() (with fakts[mesh] installed) or mesh=MeshProxy(url="http://...") to Fakts.'
+        return AliasAttempt(alias.id, alias.kind, alias.challenge_path, AttemptOutcome.MESH_UNAVAILABLE, detail)
 
     async def _aattempt(self, instance: Instance, alias: Alias, selected: Alias) -> AliasAttempt:
         """Challenge ``selected`` (``alias`` as it is reached) and say how it went."""
@@ -1077,29 +996,18 @@ class AliasResolver:
                     self._probe(alias, instance.challenge_key, selected.proxy),
                     timeout=self._settings.alias_challenge_timeout,
                 )
-                outcome, detail = (
-                    (AttemptOutcome.OK, None) if passed else (AttemptOutcome.REFUSED, None)
-                )
+                outcome, detail = (AttemptOutcome.OK, None) if passed else (AttemptOutcome.REFUSED, None)
             except Exception as e:
                 outcome, detail = _classify(e, proxied=bool(selected.proxy))
                 logger.debug("Challenge of alias %s at %s: %s", alias.id, alias.challenge_path, e)
             # Through a node that has only just come up, silence may be the
             # peer not knowing of it yet: ask again rather than give up on
             # the one alias that works.
-            if (
-                outcome is AttemptOutcome.TIMEOUT
-                and tries < MESH_TRIES
-                and selected.proxy
-                and self._route.settling(loop.time())
-            ):
+            if outcome is AttemptOutcome.TIMEOUT and tries < MESH_TRIES and selected.proxy and self._route.settling(loop.time()):
                 continue
-            return AliasAttempt(
-                alias.id, alias.kind, alias.challenge_path, outcome, detail, loop.time() - started
-            )
+            return AliasAttempt(alias.id, alias.kind, alias.challenge_path, outcome, detail, loop.time() - started)
 
-    def _probe(
-        self, alias: Alias, challenge_key: ChallengeKey | None, proxy: str | None
-    ) -> Awaitable[bool]:
+    def _probe(self, alias: Alias, challenge_key: ChallengeKey | None, proxy: str | None) -> Awaitable[bool]:
         # `proxy` only when set, so challengers without the parameter keep working.
         if proxy:
             return self._challenge(alias, challenge_key=challenge_key, proxy=proxy)

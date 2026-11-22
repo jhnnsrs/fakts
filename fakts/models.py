@@ -100,9 +100,7 @@ class AliasPolicy(BaseModel):
 
     def excludes(self, alias: Alias) -> bool:
         """Whether this policy never uses ``alias``."""
-        return alias.id in self.exclude_aliases or (
-            alias.reach is not None and alias.reach in self.exclude_reach
-        )
+        return alias.id in self.exclude_aliases or (alias.reach is not None and alias.reach in self.exclude_reach)
 
     def reach_rank(self, alias: Alias) -> int:
         """Where ``alias``'s reach comes in :attr:`prefer_reach`; after all of them if not listed."""
@@ -254,14 +252,7 @@ class ActiveFakts(BaseModel):
     def _coerce_unknown_statuses(cls, v: Any) -> Any:
         if isinstance(v, dict):
             known = {status.value for status in GrantStatus}
-            return {
-                key: (
-                    value
-                    if isinstance(value, GrantStatus) or value in known
-                    else GrantStatus.UNKNOWN
-                )
-                for key, value in v.items()
-            }
+            return {key: (value if isinstance(value, GrantStatus) or value in known else GrantStatus.UNKNOWN) for key, value in v.items()}
         return v
 
 
@@ -303,9 +294,7 @@ class Manifest(AppManifest):
 
     requirements: list[Requirement] | None = Field(default_factory=lambda: [])
     """ The services the app needs, filled in by the server's instances. """
-    device_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("device_id", "node_id")
-    )
+    device_id: str | None = Field(default=None, validation_alias=AliasChoices("device_id", "node_id"))
     """ The device this app instance runs on; the runtime sets it. ``node_id`` is the
     deprecated spelling, still read from older configs and servers. """
     public_sources: list[PublicSource] | None = Field(default_factory=lambda: [])
@@ -341,17 +330,11 @@ class Manifest(AppManifest):
         # field arkitekt-spec adds to Requirement later does not move every
         # app's hash either.
         unsorted_dict["requirements"] = sorted(
-            (
-                {field: entry.get(field) for field in REQUIREMENT_HASH_FIELDS}
-                for entry in unsorted_dict.get("requirements") or []
-            ),
+            ({field: entry.get(field) for field in REQUIREMENT_HASH_FIELDS} for entry in unsorted_dict.get("requirements") or []),
             key=lambda x: (x["key"], x["service"]),
         )
         unsorted_dict["public_sources"] = sorted(
-            (
-                {field: entry.get(field) for field in PUBLIC_SOURCE_HASH_FIELDS}
-                for entry in unsorted_dict.get("public_sources") or []
-            ),
+            ({field: entry.get(field) for field in PUBLIC_SOURCE_HASH_FIELDS} for entry in unsorted_dict.get("public_sources") or []),
             key=lambda x: (x["kind"], x["url"]),
         )
         unsorted_dict["scopes"] = sorted(unsorted_dict.get("scopes") or [])
@@ -371,7 +354,5 @@ class Manifest(AppManifest):
         if len(v) == 0:
             raise ValueError("The app identifier must not be empty")
         if len(v) >= 256:
-            raise ValueError(
-                f"The app identifier must be shorter than 256 characters: got {len(v)} characters"
-            )
+            raise ValueError(f"The app identifier must be shorter than 256 characters: got {len(v)} characters")
         return v

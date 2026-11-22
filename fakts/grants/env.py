@@ -77,35 +77,20 @@ class EnvGrant(BaseModel):
             try:
                 return ActiveFakts.model_validate_json(raw)
             except ValidationError as e:
-                raise GrantError(
-                    f"${self.json_var} is set, but its content is not a valid "
-                    f"fakts configuration. Problems: {describe_validation_error(e)}"
-                ) from e
+                raise GrantError(f"${self.json_var} is set, but its content is not a valid fakts configuration. Problems: {describe_validation_error(e)}") from e
 
         path = os.environ.get(self.file_var)
         if path:
             if not os.path.exists(path):
-                raise GrantError(
-                    f"${self.file_var} points to '{path}', but that file does not exist."
-                )
+                raise GrantError(f"${self.file_var} points to '{path}', but that file does not exist.")
             try:
                 with open(path) as f:
                     content = f.read()
             except OSError as e:
-                raise GrantError(
-                    f"Could not read the fakts configuration file '{path}' "
-                    f"(from ${self.file_var}): {e}"
-                ) from e
+                raise GrantError(f"Could not read the fakts configuration file '{path}' (from ${self.file_var}): {e}") from e
             try:
                 return ActiveFakts.model_validate_json(content)
             except ValidationError as e:
-                raise GrantError(
-                    f"The file '{path}' (from ${self.file_var}) does not contain "
-                    f"a valid fakts configuration. Problems: {describe_validation_error(e)}"
-                ) from e
+                raise GrantError(f"The file '{path}' (from ${self.file_var}) does not contain a valid fakts configuration. Problems: {describe_validation_error(e)}") from e
 
-        raise GrantError(
-            f"No fakts configuration found in the environment: neither "
-            f"${self.json_var} (inline JSON) nor ${self.file_var} "
-            f"(path to a JSON file) is set."
-        )
+        raise GrantError(f"No fakts configuration found in the environment: neither ${self.json_var} (inline JSON) nor ${self.file_var} (path to a JSON file) is set.")

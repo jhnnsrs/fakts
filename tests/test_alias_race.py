@@ -41,9 +41,7 @@ class Gated:
             self._gates[alias].set()
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> "Gated":
-        async def challenge(
-            _fakts: FaktsClass, alias: Alias, challenge_key: object = None, proxy: Any = None
-        ) -> bool:
+        async def challenge(_fakts: FaktsClass, alias: Alias, challenge_key: object = None, proxy: Any = None) -> bool:
             self.calls.append(alias.id)
             if alias.id in self.held:
                 await self._gates[alias.id].wait()
@@ -148,9 +146,7 @@ async def test_aliases_that_do_not_answer_cost_one_timeout_between_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     value = make_fakts_value()
-    value.instances["test"].aliases.append(
-        Alias(id="third", host="localhost", port=8002, path="/test")
-    )
+    value.instances["test"].aliases.append(Alias(id="third", host="localhost", port=8002, path="/test"))
     Gated().hold("primary", "fallback", "third").install(monkeypatch)
     fakts = Fakts(
         grant=CountingGrant(fakts=value),

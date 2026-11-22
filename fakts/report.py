@@ -81,16 +81,14 @@ async def areport_aliases(
         oauth2.check_transport(fakts.auth.report_endpoint, allow_insecure_transport)
     except Exception:
         logger.warning(
-            "Not reporting alias status: the report endpoint would require "
-            "sending the access token over an untrusted transport.",
+            "Not reporting alias status: the report endpoint would require sending the access token over an untrusted transport.",
             exc_info=True,
         )
         return
 
     if not _same_origin(fakts.auth.report_endpoint, fakts.auth.token_endpoint):
         logger.warning(
-            "Not reporting alias status: the report endpoint (%s) is not on the "
-            "same origin as the token endpoint this app authenticated against.",
+            "Not reporting alias status: the report endpoint (%s) is not on the same origin as the token endpoint this app authenticated against.",
             fakts.auth.report_endpoint,
         )
         return

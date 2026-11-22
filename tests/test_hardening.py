@@ -104,10 +104,7 @@ async def test_challenge_does_not_follow_redirects(server) -> None:
         with pytest.raises(Exception):
             await fakts._achallenge_alias(alias)
 
-    assert not signed_by_real_service["hit"], (
-        "the probe was relayed to the genuine service — a redirector could "
-        "satisfy the challenge and still receive all the traffic"
-    )
+    assert not signed_by_real_service["hit"], "the probe was relayed to the genuine service — a redirector could satisfy the challenge and still receive all the traffic"
 
 
 async def test_omit_challenge_does_not_disable_later_verification(
@@ -150,11 +147,7 @@ async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog) -
     credential that made it corrupt."""
     secret = "v1.SUPERSECRET_REFRESH_TOKEN_ABCDEFGHIJKLMNOP"
     cache_file = tmp_path / "cache.json"
-    cache_file.write_text(
-        '{"fakts": {"self": {"deployment_name": "d", "alias": {"id": "a", "host": "h"}},'
-        ' "auth": {"client_id": "c", "refresh_token": "' + secret + '"},'
-        ' "instances": {}, "statuses": {}}, "created": "2026-01-01T00:00:00", "hash": ""}'
-    )
+    cache_file.write_text('{"fakts": {"self": {"deployment_name": "d", "alias": {"id": "a", "host": "h"}}, "auth": {"client_id": "c", "refresh_token": "' + secret + '"}, "instances": {}, "statuses": {}}, "created": "2026-01-01T00:00:00", "hash": ""}')
 
     with caplog.at_level("DEBUG"):
         assert await FileCache(cache_file=str(cache_file)).aload() is None
@@ -298,9 +291,7 @@ async def test_browser_only_opens_http_urls(server, monkeypatch, uri, should_ope
     async def no_sleep(_seconds: float) -> None:
         return None
 
-    authorizer = DeviceCodeAuthorizer(
-        manifest=make_manifest(), sleeper=no_sleep, allow_insecure_transport=True
-    )
+    authorizer = DeviceCodeAuthorizer(manifest=make_manifest(), sleeper=no_sleep, allow_insecure_transport=True)
 
     with pytest.raises(UserDeniedError):
         await authorizer.aauthorize(endpoint)
@@ -342,9 +333,7 @@ def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 @_posix_only
-async def test_group_writable_dir_with_self_only_group_loads_silently(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_group_writable_dir_with_self_only_group_loads_silently(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """The reported bug. `umask 002` plus a user-private group makes every
     directory an app creates 0775 with a single-member group, and the old
     predicate called that "writable by other users" and refused to read."""
@@ -358,9 +347,7 @@ async def test_group_writable_dir_with_self_only_group_loads_silently(
 
 
 @_posix_only
-async def test_group_writable_dir_with_populated_group_warns_but_loads(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_group_writable_dir_with_populated_group_warns_but_loads(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """A group with real other members is a real finding -- but a finding is
     all it is now, because refusing re-runs the grant and hangs scripts."""
     monkeypatch.setattr(file_cache, "_group_may_contain_others", lambda *_: True)
@@ -374,9 +361,7 @@ async def test_group_writable_dir_with_populated_group_warns_but_loads(
 
 
 @_posix_only
-async def test_unresolvable_gid_warns(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_unresolvable_gid_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """A gid we cannot enumerate is assumed shared: on an LDAP box it may name
     a real, populated group. Guessing loud costs one log line now."""
 
@@ -413,9 +398,7 @@ async def test_self_only_group_resolves_as_no_other_members(
 
 
 @_posix_only
-async def test_sticky_other_writable_dir_is_silent(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_sticky_other_writable_dir_is_silent(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """The /tmp case: with the sticky bit set, only the owner may replace an
     entry, so world-writable says nothing about who can swap our cache."""
     cache = await _seeded_cache(_loose_dir(tmp_path, 0o1777))
@@ -427,9 +410,7 @@ async def test_sticky_other_writable_dir_is_silent(
 
 
 @_posix_only
-async def test_other_writable_dir_without_sticky_warns(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_other_writable_dir_without_sticky_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     cache = await _seeded_cache(_loose_dir(tmp_path, 0o777))
 
     with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
@@ -442,9 +423,7 @@ async def test_other_writable_dir_without_sticky_warns(
 
 
 @_posix_only
-async def test_world_writable_cache_warns_loads_and_is_tightened(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_world_writable_cache_warns_loads_and_is_tightened(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Replaces `test_world_writable_cache_is_refused`.
 
     A world-writable cache is still a genuine finding and still warns, but it
@@ -467,9 +446,7 @@ async def test_world_writable_cache_warns_loads_and_is_tightened(
 
 
 @_posix_only
-async def test_foreign_owner_warns_but_loads(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_foreign_owner_warns_but_loads(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """A cache owned by another uid is the one genuinely exploitable case --
     whoever owns it picks the token endpoint. It is a deliberate decision that
     it warns rather than refuses; the compensating control is that the cache
@@ -489,9 +466,7 @@ async def test_foreign_owner_warns_but_loads(
 
 
 @_posix_only
-async def test_group_writable_cache_file_is_tightened(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_group_writable_cache_file_is_tightened(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """Benign group, so nothing to report -- but the file is still narrowed,
     because the self-heal is now the strongest control left on an existing
     file."""
@@ -509,9 +484,7 @@ async def test_group_writable_cache_file_is_tightened(
 
 
 @_posix_only
-async def test_symlinked_cache_is_reported_as_a_symlink(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_symlinked_cache_is_reported_as_a_symlink(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """O_NOFOLLOW already makes this read fail; the point is that it now says
     so, instead of surfacing as a generic "could not load"."""
     real = await _seeded_cache(_loose_dir(tmp_path, 0o700))
@@ -561,9 +534,7 @@ async def test_hard_grant_does_not_hand_out_its_own_object() -> None:
     assert value.instances["test"].aliases[0].id == "primary"
 
 
-async def test_env_grant_recovers_unattended_when_credential_ages(
-    monkeypatch, tmp_path: Path
-) -> None:
+async def test_env_grant_recovers_unattended_when_credential_ages(monkeypatch, tmp_path: Path) -> None:
     """An aged env credential must reload from the environment rather than
     raise — that is the whole headless story."""
 

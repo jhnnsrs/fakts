@@ -118,9 +118,7 @@ async def test_a_token_endpoint_on_another_origin_is_refused(wellknown) -> None:
         await check_wellknown(f"http://{host}/", ssl.create_default_context())
 
     # Opted into, for a deployment that really splits its hosts.
-    endpoint = await check_wellknown(
-        f"http://{host}/", ssl.create_default_context(), allow_cross_origin_endpoints=True
-    )
+    endpoint = await check_wellknown(f"http://{host}/", ssl.create_default_context(), allow_cross_origin_endpoints=True)
     assert endpoint.token_endpoint == "https://evil.example/o/token/"
 
 
@@ -137,9 +135,7 @@ async def test_a_plain_http_server_is_still_found_without_a_scheme(wellknown) ->
     """https against a plain-http dev server is a protocol mismatch: fall back."""
     host = await wellknown(_document)
 
-    endpoint = await discover_url(
-        f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"]
-    )
+    endpoint = await discover_url(f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"])
     assert endpoint.token_endpoint == f"http://{host}/o/token/"
 
 
@@ -192,9 +188,7 @@ async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown) 
     host = await wellknown(_document, ssl_context=_untrusted_tls_context())
 
     with pytest.raises(DiscoveryError, match="TLS verification failed"):
-        await discover_url(
-            f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"]
-        )
+        await discover_url(f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"])
 
 
 # --------------------------------------------------------------------------- #
@@ -205,12 +199,8 @@ async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown) 
 def _refresh(previous, **members) -> "object":
     from fakts.oauth2 import TokenResponse, merge_token_response
 
-    response = TokenResponse(
-        access_token="a2", refresh_token="r2", client_id="test_client_id", **members
-    )
-    return merge_token_response(
-        previous, response, token_endpoint="http://x/token", report_endpoint=None, skew=30
-    )
+    response = TokenResponse(access_token="a2", refresh_token="r2", client_id="test_client_id", **members)
+    return merge_token_response(previous, response, token_endpoint="http://x/token", report_endpoint=None, skew=30)
 
 
 def test_a_refresh_that_withdraws_every_service_withdraws_them() -> None:

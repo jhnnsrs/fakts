@@ -18,9 +18,7 @@ from .helpers import CountingGrant, make_fakts_value, make_manifest
 def docker_fakts(*order: str) -> ActiveFakts:
     """One instance with a docker and a direct alias, listed in ``order``."""
     known = {
-        "docker": Alias(
-            id="docker", host="gateway", port=80, path="/test", challenge="ht", kind="docker"
-        ),
+        "docker": Alias(id="docker", host="gateway", port=80, path="/test", challenge="ht", kind="docker"),
         "direct": Alias(id="direct", host="localhost", port=1, path="/test", challenge="ht"),
     }
     value = make_fakts_value()
@@ -146,9 +144,7 @@ async def test_an_unreachable_docker_alias_fails_like_any_other(
     assert probed == ["direct", "docker"]
 
 
-def test_a_container_is_recognised_by_its_marker_file(
-    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_container_is_recognised_by_its_marker_file(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     marker = tmp_path / ".dockerenv"
     monkeypatch.setattr(aliases, "_CONTAINER_MARKERS", (str(marker),))
 

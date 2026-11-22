@@ -84,12 +84,7 @@ def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str
         global _warned_unverified
         if not _warned_unverified:
             _warned_unverified = True
-            logger.warning(
-                "The instance pins a challenge key, but the 'cryptography' package is "
-                "not installed, so signatures are not verified: an alias that answers "
-                "its challenge is trusted as it would be without a pinned key. "
-                "Install it with: pip install fakts[crypto]"
-            )
+            logger.warning("The instance pins a challenge key, but the 'cryptography' package is not installed, so signatures are not verified: an alias that answers its challenge is trusted as it would be without a pinned key. Install it with: pip install fakts[crypto]")
         return True
 
     from cryptography.exceptions import InvalidSignature

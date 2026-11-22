@@ -66,9 +66,7 @@ async def test_env_grant_errors_are_verbose(monkeypatch: pytest.MonkeyPatch, tmp
         await grant.aload()
 
 
-async def test_env_grant_errors_never_echo_the_credential(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
+async def test_env_grant_errors_never_echo_the_credential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """A malformed FAKTS blob must not put the refresh token in the error.
 
     This is the whole failure mode: no attacker is involved, just a typo in a
@@ -116,9 +114,7 @@ async def test_build_device_code_fakts_wiring(tmp_path: Path):
     assert fakts.manifest is manifest
     assert fakts.grant.authorizer.open_browser is False
     assert isinstance(fakts.cache, FileCache)
-    assert fakts.cache.hash, (
-        "The builder should bind a hash so manifest/server changes invalidate the cache"
-    )
+    assert fakts.cache.hash, "The builder should bind a hash so manifest/server changes invalidate the cache"
 
 
 async def test_builder_cache_hash_binds_url_and_manifest(tmp_path: Path):

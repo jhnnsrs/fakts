@@ -165,12 +165,8 @@ async def test_device_code_happy_path(local_server, monkeypatch) -> None:
     assert response.client_id == "minted_client_id"
     assert response.statuses["test"].value == "granted"
     assert seen_codes == ["USERCODE"]
-    assert seen_links == ["http://example.com/configure/USERCODE"], (
-        "The hook is handed the link to approve at; a host shows it instead of a browser"
-    )
-    assert opened == ["http://example.com/configure/USERCODE"], (
-        "The browser must open the server-supplied complete URL, not a derived one"
-    )
+    assert seen_links == ["http://example.com/configure/USERCODE"], "The hook is handed the link to approve at; a host shows it instead of a browser"
+    assert opened == ["http://example.com/configure/USERCODE"], "The browser must open the server-supplied complete URL, not a derived one"
 
 
 async def test_device_code_polls_while_pending(local_server) -> None:
@@ -446,9 +442,7 @@ async def test_a_refused_mandate_key_needs_a_new_one(local_server) -> None:
 
     base_url = await local_server({"/o/token/": token})
 
-    authorizer = MandateKeyAuthorizer(
-        manifest=make_manifest(), key=SecretStr("revoked"), allow_insecure_transport=True
-    )
+    authorizer = MandateKeyAuthorizer(manifest=make_manifest(), key=SecretStr("revoked"), allow_insecure_transport=True)
 
     with pytest.raises(NeedsReauthenticationError, match="revoked"):
         await authorizer.aauthorize(endpoint_for(base_url))
@@ -588,9 +582,7 @@ async def test_check_wellknown_v1_server_names_the_protocol(local_server) -> Non
     further down the flow."""
 
     async def handler(request: web.Request) -> web.Response:
-        return web.json_response(
-            {"name": "OldServer", "base_url": "http://x/f/", "claim": "http://x/f/claim/"}
-        )
+        return web.json_response({"name": "OldServer", "base_url": "http://x/f/", "claim": "http://x/f/claim/"})
 
     base_url = await local_server({"/.well-known/fakts": handler}, method="GET")
 
@@ -600,9 +592,7 @@ async def test_check_wellknown_v1_server_names_the_protocol(local_server) -> Non
 
 async def test_check_wellknown_v2_without_token_endpoint_raises(local_server) -> None:
     async def handler(request: web.Request) -> web.Response:
-        return web.json_response(
-            {"name": "Broken", "base_url": "http://x/f/", "protocol_version": "2"}
-        )
+        return web.json_response({"name": "Broken", "base_url": "http://x/f/", "protocol_version": "2"})
 
     base_url = await local_server({"/.well-known/fakts": handler}, method="GET")
 

@@ -69,9 +69,7 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, m
     """
     body = token_body("access_2", "refresh_2")
     # The renewed session grants a different alias set for the same service.
-    body["instances"]["test"]["aliases"] = [
-        {"id": "relocated", "host": "localhost", "port": 9000, "path": "/test"}
-    ]
+    body["instances"]["test"]["aliases"] = [{"id": "relocated", "host": "localhost", "port": 9000, "path": "/test"}]
 
     async def handler(request: web.Request) -> web.Response:
         return web.json_response(body)
@@ -93,11 +91,7 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server, m
         await fakts.arefresh_token()
 
         second = await fakts.aget_alias("test", omit_report=True)
-        assert second.id == "relocated", (
-            "The refresh replaced this service's aliases; serving the one "
-            "resolved against the previous grant is exactly the stale-access "
-            "case instances_changed exists to catch"
-        )
+        assert second.id == "relocated", "The refresh replaced this service's aliases; serving the one resolved against the previous grant is exactly the stale-access case instances_changed exists to catch"
 
 
 async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, monkeypatch) -> None:
@@ -144,9 +138,7 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, mo
         await fakts.arefresh_token()
 
         second = await fakts.aget_alias("test", omit_report=True)
-        assert second.id == "fallback", (
-            "Adopting a credential whose instances differ must re-resolve"
-        )
+        assert second.id == "fallback", "Adopting a credential whose instances differ must re-resolve"
 
 
 # --------------------------------------------------------------------------- #
@@ -154,9 +146,7 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server, mo
 # --------------------------------------------------------------------------- #
 
 
-async def test_concurrent_reload_does_not_force_a_spurious_reauth(
-    token_server, monkeypatch
-) -> None:
+async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server, monkeypatch) -> None:
     """A benign `arefresh()` running alongside a 401 must not turn into a
     demand for re-authentication.
 
@@ -198,10 +188,7 @@ async def test_concurrent_reload_does_not_force_a_spurious_reauth(
         results = await asyncio.gather(reload_task, token_task)
 
     assert isinstance(results[1], str) and results[1]
-    assert "superseded" not in posted, (
-        "The renewal used the credential the concurrent reload had already "
-        f"replaced. Posted: {posted}"
-    )
+    assert "superseded" not in posted, f"The renewal used the credential the concurrent reload had already replaced. Posted: {posted}"
 
 
 # --------------------------------------------------------------------------- #
@@ -247,10 +234,7 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
             fakts.aget_alias("test", omit_report=True),
         )
 
-        assert overlaps == 0, (
-            "Two alias resolutions ran concurrently; one sorts each instance's "
-            "alias list in place while the other iterates it"
-        )
+        assert overlaps == 0, "Two alias resolutions ran concurrently; one sorts each instance's alias list in place while the other iterates it"
         for alias in (results[1], results[3]):
             assert alias.id == "fallback"
         assert fakts.alias_map["test"].id == "fallback"
@@ -301,10 +285,7 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server, mon
         await fakts.aget_alias("test", omit_report=True)
 
     assert cache.value is not None
-    assert cache.value.auth.refresh_token == "freshly_rotated", (
-        "An untimed credential must not overwrite one that was demonstrably "
-        "rotated; the token on disk would be revoked"
-    )
+    assert cache.value.auth.refresh_token == "freshly_rotated", "An untimed credential must not overwrite one that was demonstrably rotated; the token on disk would be revoked"
 
 
 # --------------------------------------------------------------------------- #
@@ -328,9 +309,7 @@ async def test_nested_enter_is_refused() -> None:
         with pytest.raises(NotEnteredError):
             async with fakts:
                 pass
-        assert fakts._state.load_lock is outer_lock, (
-            "the refused re-entry must leave the outer scope's locks intact"
-        )
+        assert fakts._state.load_lock is outer_lock, "the refused re-entry must leave the outer scope's locks intact"
 
 
 # --------------------------------------------------------------------------- #

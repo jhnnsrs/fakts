@@ -148,11 +148,7 @@ class TokenSession:
         state.ensure_entered()
         assert state.token_lock is not None
         async with state.token_lock:
-            if (
-                stale_token is not None
-                and state.loaded_token is not None
-                and state.loaded_token != stale_token
-            ):
+            if stale_token is not None and state.loaded_token is not None and state.loaded_token != stale_token:
                 return state.loaded_token
             return await self._fetch(False)
 
@@ -222,11 +218,7 @@ class TokenSession:
             # Deliberately "did it change", never "is it valid": arefresh_token
             # gets here precisely when loaded_token is the token the server just
             # rejected, and a rejected token is usually not expired.
-            if (
-                state.loaded_token is not None
-                and state.loaded_token != entry_token
-                and self.token_is_valid()
-            ):
+            if state.loaded_token is not None and state.loaded_token != entry_token and self.token_is_valid():
                 return state.loaded_token
 
             auth = fakts.auth
@@ -243,14 +235,10 @@ class TokenSession:
                 data = await self._apost_refresh(auth)
             except oauth2.OAuth2ErrorResponse as e:
                 if e.error not in ("invalid_grant", "invalid_client"):
-                    raise FaktsError(
-                        f"The token endpoint {auth.token_endpoint} refused to renew "
-                        f"the session for client '{auth.client_id}': {e}"
-                    ) from e
+                    raise FaktsError(f"The token endpoint {auth.token_endpoint} refused to renew the session for client '{auth.client_id}': {e}") from e
 
                 logger.debug(
-                    "Refresh rejected (%s); looking for a credential another "
-                    "process may have written.",
+                    "Refresh rejected (%s); looking for a credential another process may have written.",
                     e.error,
                 )
                 adopted = await self._aawait_untried_credentials(tried)
@@ -270,10 +258,7 @@ class TokenSession:
             except FaktsError:
                 raise
             except Exception as e:
-                raise FaktsError(
-                    f"Could not reach the token endpoint {auth.token_endpoint} to "
-                    f"renew the session: {e}"
-                ) from e
+                raise FaktsError(f"Could not reach the token endpoint {auth.token_endpoint} to renew the session: {e}") from e
 
             return await self._acommit_token_response(fakts, data)
 
@@ -327,9 +312,7 @@ class TokenSession:
         credential on disk stayed revoked -- a breakage that surfaces at the
         next restart, far from its cause.
         """
-        return await self._acommit_parsed(
-            previous, oauth2.parse_token_response(data, previous.auth.token_endpoint)
-        )
+        return await self._acommit_parsed(previous, oauth2.parse_token_response(data, previous.auth.token_endpoint))
 
     async def _acommit_parsed(self, previous: ActiveFakts, response: oauth2.TokenResponse) -> str:
         state = self._state
@@ -355,15 +338,10 @@ class TokenSession:
             state.invalidate_aliases()
 
         if not state.loaded_token:
-            raise FaktsError(
-                f"The token endpoint {candidate.auth.token_endpoint} answered "
-                f"without an access_token."
-            )
+            raise FaktsError(f"The token endpoint {candidate.auth.token_endpoint} answered without an access_token.")
         return state.loaded_token
 
-    async def _aawait_untried_credentials(
-        self, tried: set[tuple[str, str | None]]
-    ) -> ActiveFakts | None:
+    async def _aawait_untried_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
         """Wait briefly for a sibling's rotation to land, then adopt it.
 
         Terminates for the right reason: we only ever accept a credential we
@@ -386,9 +364,7 @@ class TokenSession:
             await asyncio.sleep(REFRESH_RETRY_DELAY * (1 + random.random()))
         return None
 
-    async def _aadopt_cached_credentials(
-        self, tried: set[tuple[str, str | None]]
-    ) -> ActiveFakts | None:
+    async def _aadopt_cached_credentials(self, tried: set[tuple[str, str | None]]) -> ActiveFakts | None:
         """Adopt the cached credential if it is one we have not tried.
 
         The key is the whole ``(client_id, refresh_token)`` pair, not the token
@@ -423,10 +399,7 @@ class TokenSession:
             ):
                 return None
 
-            logger.info(
-                "Adopting the credential another process wrote to the cache "
-                "instead of renewing our own."
-            )
+            logger.info("Adopting the credential another process wrote to the cache instead of renewing our own.")
             # Adopting replaces the whole ActiveFakts, instances included, so
             # any alias resolved against the old ones may now point at a service
             # this credential does not reach. Under multi-process load this is
@@ -469,17 +442,8 @@ class TokenSession:
             return await self._afetch_after_reload()
 
         if policy is ReauthPolicy.NEVER:
-            raise NeedsReauthenticationError(
-                f"{explanation} This app must be authorized again, and "
-                f"reauth_policy=ReauthPolicy.NEVER forbids prompting from this "
-                f"process: authorize it elsewhere (or provision a fresh credential)."
-            )
-        raise NeedsReauthenticationError(
-            f"{explanation} This app must be authorized again, which needs "
-            f"someone at a browser. Call fakts.alogin() when prompting is "
-            f"appropriate, or set reauth_policy=ReauthPolicy.ALWAYS to let the "
-            f"token path prompt on its own."
-        )
+            raise NeedsReauthenticationError(f"{explanation} This app must be authorized again, and reauth_policy=ReauthPolicy.NEVER forbids prompting from this process: authorize it elsewhere (or provision a fresh credential).")
+        raise NeedsReauthenticationError(f"{explanation} This app must be authorized again, which needs someone at a browser. Call fakts.alogin() when prompting is appropriate, or set reauth_policy=ReauthPolicy.ALWAYS to let the token path prompt on its own.")
 
     async def _afetch_after_reload(self) -> str:
         """Return the token the freshly reloaded grant produced."""

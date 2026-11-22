@@ -94,9 +94,7 @@ def _write_tls(directory: Path, address: str) -> None:
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         # Python 3.13's default context is VERIFY_X509_STRICT: without the key
         # identifiers it rejects the chain, and the health check just times out.
-        .add_extension(
-            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False
-        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
         .add_extension(
             x509.KeyUsage(
                 digital_signature=True,
@@ -151,9 +149,7 @@ def _write_tls(directory: Path, address: str) -> None:
     pem = serialization.Encoding.PEM
     (tls / "ca.pem").write_bytes(ca.public_bytes(pem))
     (tls / "ionskale.pem").write_bytes(cert.public_bytes(pem) + ca.public_bytes(pem))
-    (tls / "ionskale.key").write_bytes(
-        key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
-    )
+    (tls / "ionskale.key").write_bytes(key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
     # Read by the container's unprivileged user; throwaway material.
     tls.chmod(0o755)
     for file in tls.iterdir():
@@ -240,9 +236,7 @@ def mesh_lab() -> Iterator[MeshLab]:
                 except TimeoutError as e:
                     # Say why: a runner's docker differs in ways a local run hides.
                     state = deployed.ps(services=["ionskale"])
-                    logs = "\n".join(
-                        line for _, line in deployed.logs(services=["ionskale"], tail=60)
-                    )
+                    logs = "\n".join(line for _, line in deployed.logs(services=["ionskale"], tail=60))
                     raise TimeoutError(f"{e}\ncontainer: {state}\nlogs:\n{logs}") from None
 
                 cli_env = {

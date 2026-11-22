@@ -154,10 +154,7 @@ def parse_token_response(data: Mapping[str, Any], source: str) -> TokenResponse:
     try:
         return TokenResponse.model_validate(data)
     except ValidationError as e:
-        raise FaktsError(
-            f"{source} answered with a token response fakts cannot use: "
-            f"{describe_validation_error(e)}"
-        ) from None
+        raise FaktsError(f"{source} answered with a token response fakts cannot use: {describe_validation_error(e)}") from None
 
 
 def is_loopback(url: str) -> bool:
@@ -185,19 +182,14 @@ def check_transport(url: str, allow_insecure: bool) -> None:
 
     if not (allow_insecure or _env_opt_in()):
         raise InsecureTransportError(
-            f"Refusing to send OAuth2 credentials over plain HTTP to {url}. "
-            f"Fakts supports plain HTTP on network hosts, but it must be opted "
-            f"into: pass allow_insecure_transport=True to the builder, or set "
-            f"{INSECURE_TRANSPORT_ENV}=1. Use https:// instead if this "
-            f"deployment terminates TLS."
+            f"Refusing to send OAuth2 credentials over plain HTTP to {url}. Fakts supports plain HTTP on network hosts, but it must be opted into: pass allow_insecure_transport=True to the builder, or set {INSECURE_TRANSPORT_ENV}=1. Use https:// instead if this deployment terminates TLS."
         )
 
     host = urlparse(url).netloc
     if host not in _warned_insecure_hosts:
         _warned_insecure_hosts.add(host)
         logger.warning(
-            "Sending OAuth2 credentials over plain HTTP to %s. This was "
-            "explicitly allowed; anyone on the path can read the refresh token.",
+            "Sending OAuth2 credentials over plain HTTP to %s. This was explicitly allowed; anyone on the path can read the refresh token.",
             host,
         )
 
@@ -226,11 +218,7 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
         # Never followed (allow_redirects=False): on 307/308 aiohttp would resend
         # the form body -- the refresh token, mandate key or device code -- to
         # wherever Location points, plain http included.
-        raise FaktsError(
-            f"{url} answered with a redirect ({response.status}) to "
-            f"{response.headers.get('Location', '<no Location>')}; refusing to "
-            f"follow a redirect with credentials. Configure the endpoint's final URL."
-        )
+        raise FaktsError(f"{url} answered with a redirect ({response.status}) to {response.headers.get('Location', '<no Location>')}; refusing to follow a redirect with credentials. Configure the endpoint's final URL.")
 
     text = await response.text()
     if response.status >= 500:
@@ -240,9 +228,7 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise FaktsError(
-            f"{url} did not answer with JSON (status {response.status}): {text[:200]}"
-        ) from e
+        raise FaktsError(f"{url} did not answer with JSON (status {response.status}): {text[:200]}") from e
 
     if not isinstance(data, dict):
         raise FaktsError(f"{url} answered with {type(data).__name__}, expected an object")
@@ -419,8 +405,7 @@ def resolve_expiry(expires_in: int | None, skew: int, now: float | None = None) 
     now = time.time() if now is None else now
     if expires_in <= 0:
         logger.error(
-            "Token endpoint returned expires_in=%s; treating the access token as "
-            "already expired. This is a server-side bug.",
+            "Token endpoint returned expires_in=%s; treating the access token as already expired. This is a server-side bug.",
             expires_in,
         )
         return now
@@ -453,18 +438,13 @@ def merge_token_response(
 
     client_id = response.client_id or fallback_client_id
     if not client_id:
-        raise FaktsError(
-            "The token response carried no client_id and none was remembered from "
-            "the authorization step. The client cannot refresh without one."
-        )
+        raise FaktsError("The token response carried no client_id and none was remembered from the authorization step. The client cannot refresh without one.")
 
     # A mandate-key login carries no refresh token: the session is renewed by
     # logging in again, so there is no chain to track.
     refresh_token = response.refresh_token or (previous.auth.refresh_token if previous else None)
     rotated = previous is None or previous.auth.refresh_token != refresh_token
-    chain_started_at = (
-        previous.auth.chain_started_at if previous and previous.auth.chain_started_at else now
-    )
+    chain_started_at = previous.auth.chain_started_at if previous and previous.auth.chain_started_at else now
     if refresh_token is None:
         chain_started_at = None
 
@@ -477,42 +457,29 @@ def merge_token_response(
         refresh_token=refresh_token,
         access_token=response.access_token,
         expires_at=resolve_expiry(response.expires_in, skew, now),
-        refresh_issued_at=None
-        if refresh_token is None
-        else (now if rotated else (previous.auth.refresh_issued_at if previous else now)),
+        refresh_issued_at=None if refresh_token is None else (now if rotated else (previous.auth.refresh_issued_at if previous else now)),
         chain_started_at=chain_started_at,
         token_type=response.token_type or "Bearer",
     )
 
     previous_instances = previous.instances if previous else {}
-    instances = (
-        dict(previous_instances)
-        if response.instances is None
-        else _merge_instances(previous_instances, response.instances)
-    )
+    instances = dict(previous_instances) if response.instances is None else _merge_instances(previous_instances, response.instances)
 
     self_fakt = response.self_ or (previous.self if previous else None)
     if self_fakt is None:
-        raise FaktsError(
-            "The token response carried no 'self' block and none was cached. The "
-            "client cannot identify the deployment it is talking to."
-        )
+        raise FaktsError("The token response carried no 'self' block and none was cached. The client cannot identify the deployment it is talking to.")
 
     return ActiveFakts(
         self=self_fakt,
         auth=auth,
         instances=instances,
-        statuses=response.statuses
-        if response.statuses is not None
-        else (previous.statuses if previous else {}),
+        statuses=response.statuses if response.statuses is not None else (previous.statuses if previous else {}),
         # Only the first token carries the key; keep it for later starts.
         mesh=response.mesh or (previous.mesh if previous else None),
     )
 
 
-def _merge_instances(
-    previous: Mapping[str, Instance], incoming: Mapping[str, Instance]
-) -> dict[str, Instance]:
+def _merge_instances(previous: Mapping[str, Instance], incoming: Mapping[str, Instance]) -> dict[str, Instance]:
     """Adopt the server's instances, aliases in the server's order, keeping the
     alias that worked last time (``preferred_alias``) while the server still lists it.
 
@@ -545,8 +512,4 @@ def instances_changed(previous: ActiveFakts | None, candidate: ActiveFakts) -> b
         return True
     if set(previous.instances) != set(candidate.instances):
         return True
-    return any(
-        {alias.id for alias in previous.instances[key].aliases}
-        != {alias.id for alias in candidate.instances[key].aliases}
-        for key in previous.instances
-    )
+    return any({alias.id for alias in previous.instances[key].aliases} != {alias.id for alias in candidate.instances[key].aliases} for key in previous.instances)

@@ -121,14 +121,11 @@ class AliasAttempt:
 _HINTS: tuple[tuple[AttemptOutcome, str], ...] = (
     (
         AttemptOutcome.BAD_SIGNATURE,
-        "An alias answered with a signature that does not verify. Either that host is "
-        "not the service, or the key in the cached configuration is stale: log in "
-        "again to fetch the current one.",
+        "An alias answered with a signature that does not verify. Either that host is not the service, or the key in the cached configuration is stale: log in again to fetch the current one.",
     ),
     (
         AttemptOutcome.UNSIGNED,
-        "The instance pins an identity key, but a host answered without signing: it "
-        "may run a version of the service that does not sign its challenge yet.",
+        "The instance pins an identity key, but a host answered without signing: it may run a version of the service that does not sign its challenge yet.",
     ),
     (
         AttemptOutcome.TLS,
@@ -136,18 +133,15 @@ _HINTS: tuple[tuple[AttemptOutcome, str], ...] = (
     ),
     (
         AttemptOutcome.BAD_STATUS,
-        "A host answered, but not as the service: it may still be starting, or "
-        "something else listens there.",
+        "A host answered, but not as the service: it may still be starting, or something else listens there.",
     ),
     (
         AttemptOutcome.TIMEOUT,
-        "Check that the service is running and that this machine is on a network it "
-        "is reachable from.",
+        "Check that the service is running and that this machine is on a network it is reachable from.",
     ),
     (
         AttemptOutcome.UNREACHABLE,
-        "Check that the service is running and that this machine is on a network it "
-        "is reachable from.",
+        "Check that the service is running and that this machine is on a network it is reachable from.",
     ),
 )
 
@@ -179,14 +173,8 @@ class ServiceFailure:
         grave = AttemptOutcome.BAD_SIGNATURE
         attempts = sorted(self.attempts, key=lambda attempt: attempt.outcome is not grave)
         width = max(len(attempt.alias_id) for attempt in attempts)
-        lines = [
-            f"  - {attempt.alias_id:<{width}}  {attempt.url}  {attempt.describe()}"
-            for attempt in attempts
-        ]
-        text = (
-            f"All {len(attempts)} alias(es) of service {self.key} "
-            f"(instance '{self.instance}') failed their challenge:\n" + "\n".join(lines)
-        )
+        lines = [f"  - {attempt.alias_id:<{width}}  {attempt.url}  {attempt.describe()}" for attempt in attempts]
+        text = f"All {len(attempts)} alias(es) of service {self.key} (instance '{self.instance}') failed their challenge:\n" + "\n".join(lines)
         if hint := self.hint():
             text += f"\n  {hint}"
         return text

@@ -84,9 +84,7 @@ class TestingFakts(Fakts):
         self._token_index += 1
         state = self._get_state()
         state.loaded_token = token
-        state.token_expires_at = (
-            time.time() + self.token_lifetime if self.token_lifetime is not None else None
-        )
+        state.token_expires_at = time.time() + self.token_lifetime if self.token_lifetime is not None else None
         return token
 
 
@@ -96,10 +94,7 @@ def _parse_alias(key: str, value: str | Alias) -> Alias:
         return value
     parsed = urlparse(value)
     if not parsed.scheme or not parsed.hostname:
-        raise ValueError(
-            f"Alias for '{key}' must be an Alias or a URL with scheme and "
-            f"host (e.g. 'http://testserver'), got {value!r}"
-        )
+        raise ValueError(f"Alias for '{key}' must be an Alias or a URL with scheme and host (e.g. 'http://testserver'), got {value!r}")
     return Alias(
         id=key,
         host=parsed.hostname,
@@ -143,10 +138,7 @@ def build_testing_fakts(
             report_endpoint=None,
             access_token=None,
         ),
-        instances={
-            key: Instance(service=f"testing.{key}", identifier=f"testing.{key}", aliases=[alias])
-            for key, alias in resolved.items()
-        },
+        instances={key: Instance(service=f"testing.{key}", identifier=f"testing.{key}", aliases=[alias]) for key, alias in resolved.items()},
         statuses={key: GrantStatus.GRANTED for key in resolved},
     )
 

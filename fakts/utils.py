@@ -35,7 +35,4 @@ def describe_validation_error(error: ValidationError) -> str:
     put (part of) a live refresh token into logs and tracebacks. Report only
     where each problem is and what kind it was.
     """
-    return "; ".join(
-        f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}"
-        for problem in error.errors()
-    )
+    return "; ".join(f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}" for problem in error.errors())

@@ -79,9 +79,7 @@ async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.Monkey
         third = await fakts.aget_alias("test", omit_report=True)
 
     assert first.id == second.id == third.id == "primary"
-    assert challenge_count == challenges_after_first, (
-        "Subsequent gets must use the cached alias without re-challenging"
-    )
+    assert challenge_count == challenges_after_first, "Subsequent gets must use the cached alias without re-challenging"
 
 
 async def test_last_used_alias_is_persisted_as_preferred(
@@ -105,9 +103,7 @@ async def test_last_used_alias_is_persisted_as_preferred(
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].preferred_alias == "fallback", (
-        "The selected alias should be persisted as the preferred one"
-    )
+    assert cache.value.instances["test"].preferred_alias == "fallback", "The selected alias should be persisted as the preferred one"
 
 
 async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch):
@@ -187,9 +183,7 @@ async def test_optional_missing_service_does_not_refresh_every_time():
     """A missing optional service raises, but must not re-resolve on every get."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(
-        Requirement(key="missing", service="missing_service", optional=True)
-    )
+    manifest.requirements.append(Requirement(key="missing", service="missing_service", optional=True))
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -210,9 +204,7 @@ async def test_optional_not_granted_raises_service_not_granted():
     ServiceNotGrantedError, so callers can degrade gracefully."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(
-        Requirement(key="declined", service="declined_service", optional=True)
-    )
+    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -267,12 +259,8 @@ async def test_grant_status_explicit_derived_and_unknown():
 
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(
-        Requirement(key="declined", service="declined_service", optional=True)
-    )
-    manifest.requirements.append(
-        Requirement(key="mystery", service="mystery_service", optional=True)
-    )
+    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
+    manifest.requirements.append(Requirement(key="mystery", service="mystery_service", optional=True))
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -296,12 +284,8 @@ async def test_explicit_status_is_reflected_in_error_message():
 
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(
-        Requirement(key="declined", service="declined_service", optional=True)
-    )
-    manifest.requirements.append(
-        Requirement(key="missing", service="missing_service", optional=True)
-    )
+    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
+    manifest.requirements.append(Requirement(key="missing", service="missing_service", optional=True))
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -329,9 +313,7 @@ async def test_aget_alias_or_none():
     still raise (a bug, not a runtime condition)."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(
-        Requirement(key="declined", service="declined_service", optional=True)
-    )
+    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -340,10 +322,7 @@ async def test_aget_alias_or_none():
         alias = await fakts.aget_alias_or_none("test", omit_challenge=True, omit_report=True)
         assert alias is not None and alias.id == "primary"
 
-        assert (
-            await fakts.aget_alias_or_none("declined", omit_challenge=True, omit_report=True)
-            is None
-        )
+        assert await fakts.aget_alias_or_none("declined", omit_challenge=True, omit_report=True) is None
 
         with pytest.raises(AliasNotFoundError, match="Add 'undeclared'"):
             await fakts.aget_alias_or_none("undeclared", omit_challenge=True)
@@ -518,9 +497,7 @@ async def test_reapproval_rotating_client_id_is_adopted():
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._state_session()._aadopt_cached_credentials(
-            {("old_client", "same_token")}
-        )
+        adopted = await fakts._state_session()._aadopt_cached_credentials({("old_client", "same_token")})
 
     assert adopted is not None
     assert adopted.auth.client_id == "rotated_client"

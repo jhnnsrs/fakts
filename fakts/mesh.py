@@ -46,21 +46,11 @@ class MeshError(FaktsError, AliasMeshError):
         self.code = code
 
 
-NEEDS_LOGIN = (
-    "This node is not on the mesh and no mesh key was granted; authorize "
-    "the app again (without the cache) and allow mesh access"
-)
+NEEDS_LOGIN = "This node is not on the mesh and no mesh key was granted; authorize the app again (without the cache) and allow mesh access"
 
-KEY_EXPIRED = (
-    "This node's mesh key expired; authorize the app again (without the cache) "
-    "and allow mesh access to join with a new one"
-)
+KEY_EXPIRED = "This node's mesh key expired; authorize the app again (without the cache) and allow mesh access to join with a new one"
 
-REMOVED = (
-    "The mesh no longer takes this node (it was removed, or its key was "
-    "revoked); authorize the app again (without the cache) and allow mesh "
-    "access to join anew"
-)
+REMOVED = "The mesh no longer takes this node (it was removed, or its key was revoked); authorize the app again (without the cache) and allow mesh access to join anew"
 
 NOT_INSTALLED = (
     f"The mesh needs the arkitekt-mesh bindings, which are not installed here "
@@ -70,11 +60,7 @@ NOT_INSTALLED = (
     "them from source, which needs a Rust toolchain"
 )
 
-NO_KEY = (
-    "This app holds no mesh key and no joined node: the server granted none (mesh "
-    "access was opted out of, or the organization has no mesh). To join, allow mesh "
-    "access and authorize the app again without the cache"
-)
+NO_KEY = "This app holds no mesh key and no joined node: the server granted none (mesh access was opted out of, or the organization has no mesh). To join, allow mesh access and authorize the app again without the cache"
 
 
 def bindings_installed() -> bool:
@@ -316,9 +302,7 @@ class NativeNode:
         if auth_key:
             logger.info("Joining the mesh as %s", hostname)
         # Only when set: older bindings do not take it.
-        tuning: dict[str, Any] = (
-            {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
-        )
+        tuning: dict[str, Any] = {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
         if hasattr(bindings, "ControlStatus"):  # arkitekt-mesh >= 0.13
             # The proxy asks for credentials (they come back in its url):
             # without them any user of this machine is this node to the mesh.
@@ -533,12 +517,8 @@ class MeshRoute:
         if me.sub and me.organization and me.hub:
             identity = f"{me.sub}-{me.organization}-{me.hub}"
         else:
-            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[
-                :16
-            ]
-        statedir = self.options.node_dir(
-            f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
-        )
+            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[:16]
+        statedir = self.options.node_dir(f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}")
 
         claim = fakts.mesh
         if claim is None and not NativeNode.has_state(statedir):
@@ -549,9 +529,7 @@ class MeshRoute:
         if claim is not None and not coord_url:
             raise MeshError("The server sent a mesh key but no coordination url")
 
-        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[
-            :8
-        ]
+        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[:8]
         hostname = self.options.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
         return await NativeNode.start(
             self.options,

@@ -37,8 +37,8 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.1",
     "pytest>=8.3.5",
-    "basedpyright>=1.21",
-    "ruff>=0.15",
+    "basedpyright==1.40.2",
+    "ruff==0.17.6",
     "segno>=1.6",
 ]
 

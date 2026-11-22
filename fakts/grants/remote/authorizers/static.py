@@ -23,12 +23,7 @@ def split_credential(value: str) -> tuple[str, str]:
     """
     client_id, separator, refresh_token = value.partition(":")
     if not separator or not client_id or not refresh_token:
-        raise RetrieveError(
-            "Expected a credential of the form 'client_id:refresh_token', got a "
-            f"value of {len(value)} characters without that shape. A bare refresh "
-            "token is not enough: the token endpoint authenticates the client "
-            "before it validates the token."
-        )
+        raise RetrieveError(f"Expected a credential of the form 'client_id:refresh_token', got a value of {len(value)} characters without that shape. A bare refresh token is not enough: the token endpoint authenticates the client before it validates the token.")
     return client_id, refresh_token
 
 
@@ -56,11 +51,7 @@ class StaticAuthorizer(SSLContextModel):
                 allow_insecure_transport=self.allow_insecure_transport,
             )
         except oauth2.OAuth2ErrorResponse as e:
-            raise RetrieveError(
-                f"{endpoint.name} refused the supplied credential: {e}. Refresh "
-                f"tokens rotate on every use, so a credential captured from an "
-                f"earlier session may already have been superseded."
-            ) from e
+            raise RetrieveError(f"{endpoint.name} refused the supplied credential: {e}. Refresh tokens rotate on every use, so a credential captured from an earlier session may already have been superseded.") from e
 
         data.setdefault("client_id", client_id)
         return oauth2.parse_token_response(data, str(endpoint.token_endpoint))

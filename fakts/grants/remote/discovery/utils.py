@@ -89,19 +89,10 @@ async def check_wellknown(
                 data = await resp.json()
             except Exception as e:
                 body = await resp.text()
-                raise DiscoveryError(
-                    f"The well-known endpoint {url} answered with status 200, "
-                    f"but the response is not valid JSON. Is a Fakts server "
-                    f"really running at this address? "
-                    f"Response body: {truncate(body) or '<empty>'}"
-                ) from e
+                raise DiscoveryError(f"The well-known endpoint {url} answered with status 200, but the response is not valid JSON. Is a Fakts server really running at this address? Response body: {truncate(body) or '<empty>'}") from e
 
             if "name" not in data:
-                raise DiscoveryError(
-                    f"The well-known endpoint {url} answered, but the response "
-                    f"is missing the required 'name' field. Is a Fakts server "
-                    f"really running at this address? Received: {truncate(str(data))}"
-                )
+                raise DiscoveryError(f"The well-known endpoint {url} answered, but the response is missing the required 'name' field. Is a Fakts server really running at this address? Received: {truncate(str(data))}")
 
             # A v1 server omits protocol_version entirely. Name that
             # explicitly: a missing token_endpoint further down is a
@@ -109,39 +100,23 @@ async def check_wellknown(
             protocol_version = str(data.get("protocol_version", "1"))
             if protocol_version != "2":
                 raise DiscoveryError(
-                    f"{url} speaks fakts protocol version {protocol_version}, but "
-                    f"fakts >= 5 requires version 2. The v2 protocol is an "
-                    f"OAuth 2.0 extension and shares no endpoints with v1, so there "
-                    f"is no compatibility mode. Upgrade the server, or pin "
-                    f"fakts < 5 to keep talking to this one."
+                    f"{url} speaks fakts protocol version {protocol_version}, but fakts >= 5 requires version 2. The v2 protocol is an OAuth 2.0 extension and shares no endpoints with v1, so there is no compatibility mode. Upgrade the server, or pin fakts < 5 to keep talking to this one."
                 )
 
             if not data.get("token_endpoint"):
-                raise DiscoveryError(
-                    f"{url} claims fakts protocol version 2 but advertises no "
-                    f"'token_endpoint'. Received: {truncate(str(data))}"
-                )
+                raise DiscoveryError(f"{url} claims fakts protocol version 2 but advertises no 'token_endpoint'. Received: {truncate(str(data))}")
 
             if not allow_cross_origin_endpoints:
                 for field in CREDENTIAL_ENDPOINTS:
                     endpoint_url = data.get(field)
                     if endpoint_url and _origin(endpoint_url) != _origin(url):
-                        raise DiscoveryError(
-                            f"{url} names its {field} on another origin: "
-                            f"{endpoint_url}. Credentials are only sent to the origin "
-                            f"that was discovered; if this deployment really splits "
-                            f"its hosts, pass allow_cross_origin_endpoints=True."
-                        )
+                        raise DiscoveryError(f"{url} names its {field} on another origin: {endpoint_url}. Credentials are only sent to the origin that was discovered; if this deployment really splits its hosts, pass allow_cross_origin_endpoints=True.")
 
             return FaktsEndpoint(**data)
 
         else:
             body = await resp.text()
-            raise DiscoveryError(
-                f"The well-known endpoint {url} answered with status code "
-                f"{resp.status} (expected 200). Is the Fakts server running and "
-                f"is the URL correct? Response body: {truncate(body) or '<empty>'}"
-            )
+            raise DiscoveryError(f"The well-known endpoint {url} answered with status code {resp.status} (expected 200). Is the Fakts server running and is the URL correct? Response body: {truncate(body) or '<empty>'}")
 
 
 async def discover_url(
@@ -184,10 +159,7 @@ async def discover_url(
     if "://" not in url:
         logger.info(f"No protocol specified on {url}")
         if not auto_protocols or len(auto_protocols) == 0:
-            raise DiscoveryError(
-                f"The url '{url}' does not specify a protocol (e.g. 'https://{url}'), "
-                f"and no auto_protocols are configured on the discovery to try instead."
-            )
+            raise DiscoveryError(f"The url '{url}' does not specify a protocol (e.g. 'https://{url}'), and no auto_protocols are configured on the discovery to try instead.")
 
         errors: list[tuple[str, Exception]] = []
 
@@ -207,11 +179,7 @@ async def discover_url(
                 if _is_tls_failure(e):
                     # A failed certificate check is an answer, not an absence: falling
                     # back to plain http here is exactly what an attacker wants.
-                    raise DiscoveryError(
-                        f"TLS verification failed for {protocol}://{url}: {e}. Not "
-                        f"falling back to another protocol. Fix the certificate (or "
-                        f"the trusted CAs), or pass an explicit http:// URL."
-                    ) from e
+                    raise DiscoveryError(f"TLS verification failed for {protocol}://{url}: {e}. Not falling back to another protocol. Fix the certificate (or the trusted CAs), or pass an explicit http:// URL.") from e
                 logger.info(f"Could not connect to {protocol}://{url}")
                 errors.append((protocol, e))
                 continue

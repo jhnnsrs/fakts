@@ -222,9 +222,7 @@ class FileCache(pydantic.BaseModel):
         if self.hash and cache.hash != self.hash:
             return None
 
-        if self.expires_in and _as_utc(cache.created) + datetime.timedelta(
-            seconds=self.expires_in
-        ) < datetime.datetime.now(datetime.UTC):
+        if self.expires_in and _as_utc(cache.created) + datetime.timedelta(seconds=self.expires_in) < datetime.datetime.now(datetime.UTC):
             return None
 
         return cache.fakts
@@ -288,10 +286,7 @@ class FileCache(pydantic.BaseModel):
 
                 if is_leaf and stat.S_ISLNK(mode):
                     logger.warning(
-                        "The fakts cache at %s is a symlink. It selects the endpoints "
-                        "this app sends its refresh token to, so it is opened with "
-                        "O_NOFOLLOW and this read will fail. Replace it with a real "
-                        "file (rm %s) and re-authenticate.",
+                        "The fakts cache at %s is a symlink. It selects the endpoints this app sends its refresh token to, so it is opened with O_NOFOLLOW and this read will fail. Replace it with a real file (rm %s) and re-authenticate.",
                         target,
                         target,
                     )
@@ -299,10 +294,7 @@ class FileCache(pydantic.BaseModel):
 
                 if info.st_uid != uid:
                     logger.warning(
-                        "The fakts cache %s %s is owned by uid %s, not by this user "
-                        "(uid %s). Whoever owns it chooses the endpoint this app POSTs "
-                        "its refresh token to. Using it anyway; to be safe, remove it "
-                        "(rm %s) and re-authenticate.",
+                        "The fakts cache %s %s is owned by uid %s, not by this user (uid %s). Whoever owns it chooses the endpoint this app POSTs its refresh token to. Using it anyway; to be safe, remove it (rm %s) and re-authenticate.",
                         kind,
                         target,
                         info.st_uid,
@@ -317,9 +309,7 @@ class FileCache(pydantic.BaseModel):
 
                 if mode & 0o002 and not sticky:
                     logger.warning(
-                        "The fakts cache %s %s is writable by any user on this machine "
-                        "(mode %s), any of whom could redirect this app's refresh "
-                        "token. Using it anyway; fix with: chmod o-w %s",
+                        "The fakts cache %s %s is writable by any user on this machine (mode %s), any of whom could redirect this app's refresh token. Using it anyway; fix with: chmod o-w %s",
                         kind,
                         target,
                         oct(mode & 0o777),
@@ -329,10 +319,7 @@ class FileCache(pydantic.BaseModel):
                 if mode & 0o020:
                     if _group_may_contain_others(info.st_gid, info.st_uid):
                         logger.warning(
-                            "The fakts cache %s %s is group-writable (mode %s) and its "
-                            "group %s has members besides you, any of whom could "
-                            "redirect this app's refresh token. Using it anyway; fix "
-                            "with: chmod g-w %s",
+                            "The fakts cache %s %s is group-writable (mode %s) and its group %s has members besides you, any of whom could redirect this app's refresh token. Using it anyway; fix with: chmod g-w %s",
                             kind,
                             target,
                             oct(mode & 0o777),
@@ -344,8 +331,7 @@ class FileCache(pydantic.BaseModel):
                         # there is nothing to report -- this is the false alarm
                         # this function exists to have stopped emitting.
                         logger.debug(
-                            "The fakts cache %s %s is group-writable (mode %s), but "
-                            "group %s has no other members.",
+                            "The fakts cache %s %s is group-writable (mode %s), but group %s has no other members.",
                             kind,
                             target,
                             oct(mode & 0o777),

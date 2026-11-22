@@ -68,19 +68,14 @@ class MandateKeyAuthorizer(SSLContextModel):
             )
         except oauth2.OAuth2ErrorResponse as e:
             if e.error == "invalid_grant":
-                raise NeedsReauthenticationError(
-                    f"The server refused the mandate key: {(e.description or e.error).rstrip('.')}. "
-                    f"It was revoked, has expired, or does not cover this app; ask for a new one."
-                ) from e
+                raise NeedsReauthenticationError(f"The server refused the mandate key: {(e.description or e.error).rstrip('.')}. It was revoked, has expired, or does not cover this app; ask for a new one.") from e
             raise RetrieveError(f"The server refused the mandate-key login: {e}") from e
         return oauth2.parse_token_response(data, token_endpoint)
 
     async def aauthorize(self, endpoint: FaktsEndpoint) -> TokenResponse:
         if not endpoint.token_endpoint:
             raise RetrieveError(f"{endpoint.name} advertised no token_endpoint to log in at.")
-        return await self._alogin(
-            str(endpoint.token_endpoint), request_auth_key=self.request_auth_key
-        )
+        return await self._alogin(str(endpoint.token_endpoint), request_auth_key=self.request_auth_key)
 
     async def arenew(self, token_endpoint: str) -> TokenResponse:
         """Log in again for a fresh access token (and a freshly rendered envelope)."""

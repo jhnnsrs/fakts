@@ -115,10 +115,7 @@ class SessionState:
 
     def ensure_entered(self) -> None:
         if not self.entered:
-            raise NotEnteredError(
-                "You need to enter the Fakts context (`with`/`async with`) before "
-                "calling this function"
-            )
+            raise NotEnteredError("You need to enter the Fakts context (`with`/`async with`) before calling this function")
 
     # ------------------------------------------------------------------ #
     # Loading                                                            #
@@ -141,10 +138,7 @@ class SessionState:
         if self.loaded_fakts:
             return self.loaded_fakts
         if not self.allow_auto_load:
-            raise FaktsError(
-                "No fakts loaded and allow_auto_load is disabled. Please call load() "
-                "explicitly first."
-            )
+            raise FaktsError("No fakts loaded and allow_auto_load is disabled. Please call load() explicitly first.")
         return await self.aload()
 
     async def aload(self, reload: bool = False) -> ActiveFakts:
@@ -241,17 +235,13 @@ class SessionState:
             # Unknowable either way: skipping would lose a fresh rotation,
             # writing may replace a sibling's newer one. Write, but say so.
             logger.warning(
-                "Could not read the fakts cache before writing it; writing without "
-                "the stale-credential check.",
+                "Could not read the fakts cache before writing it; writing without the stale-credential check.",
                 exc_info=True,
             )
             existing = None
 
         if existing is not None and not fresh_from_grant and is_stale_auth(fakts, existing):
-            logger.debug(
-                "Skipping cache write: the cache holds a newer credential than "
-                "the one we are about to persist."
-            )
+            logger.debug("Skipping cache write: the cache holds a newer credential than the one we are about to persist.")
             return
 
         try:
@@ -261,9 +251,7 @@ class SessionState:
             if not self.cache_write_failed:
                 self.cache_write_failed = True
                 logger.error(
-                    "Could not persist the fakts to the cache. If a refresh token "
-                    "was just rotated, the credential on disk is now revoked and "
-                    "the next start of this app will need to authenticate again.",
+                    "Could not persist the fakts to the cache. If a refresh token was just rotated, the credential on disk is now revoked and the next start of this app will need to authenticate again.",
                     exc_info=True,
                 )
 

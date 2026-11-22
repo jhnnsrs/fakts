@@ -59,9 +59,7 @@ def _build_remote_fakts(
     cache."""
     return Fakts(
         grant=RemoteGrant(
-            discovery=WellKnownDiscovery(
-                url=url, auto_protocols=["https", "http"], ssl_context=context
-            ),
+            discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"], ssl_context=context),
             authorizer=authorizer,
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),

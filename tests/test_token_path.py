@@ -358,9 +358,7 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server, m
         await fakts.aget_alias("test", omit_report=True)
 
     assert cache.value is not None
-    assert cache.value.auth.refresh_token == "freshly_rotated", (
-        "Persisting the alias order must not roll the credential back"
-    )
+    assert cache.value.auth.refresh_token == "freshly_rotated", "Persisting the alias order must not roll the credential back"
 
 
 async def test_report_cannot_wipe_resolved_aliases(token_server, monkeypatch) -> None:
@@ -442,9 +440,7 @@ def loose_umask() -> Iterator[None]:
 
 
 @posix_only
-async def test_ensure_private_dir_creates_0700_under_loose_umask(
-    tmp_path: Path, loose_umask: None
-) -> None:
+async def test_ensure_private_dir_creates_0700_under_loose_umask(tmp_path: Path, loose_umask: None) -> None:
     """`os.makedirs(mode=0o700)` would not be enough on its own: the mode
     argument is masked by the umask, so it would land as 0700 & ~002."""
     directory = tmp_path / "fresh"
@@ -455,9 +451,7 @@ async def test_ensure_private_dir_creates_0700_under_loose_umask(
 
 
 @posix_only
-async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
-    tmp_path: Path, loose_umask: None
-) -> None:
+async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(tmp_path: Path, loose_umask: None) -> None:
     """The other half of why a `mode=` argument would not do: with
     `exist_ok=True` it is not applied at all to a directory that already
     exists -- and an already-existing 0775 directory is the actual case here,
@@ -472,9 +466,7 @@ async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
 
 
 @posix_only
-async def test_ensure_private_dir_leaves_a_foreign_dir_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_ensure_private_dir_leaves_a_foreign_dir_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """We have no standing to narrow someone else's directory; the load-time
     diagnostic reports it instead."""
     directory = tmp_path / "foreign"
@@ -645,9 +637,7 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server, m
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].preferred_alias == "fallback", (
-        "The working alias must still be persisted as the preferred one"
-    )
+    assert cache.value.instances["test"].preferred_alias == "fallback", "The working alias must still be persisted as the preferred one"
 
 
 async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_server) -> None:
@@ -669,9 +659,7 @@ async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_ser
     assert calls["n"] == 2
 
 
-async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(
-    token_server, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server, monkeypatch: pytest.MonkeyPatch) -> None:
     """The server may have rotated before the connection broke: repeating the
     refresh would present a dead token. It fails instead of retrying."""
     calls = {"n": 0}

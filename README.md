@@ -57,10 +57,10 @@ fakts = build_device_code_fakts(
 )
 
 async with fakts:
-    alias = await fakts.aget_alias("rekuest")   # a verified, reachable address
-    url = alias.to_http_path("graphql")         # http(s)://host:port/path/graphql
-    ws = alias.to_ws_path("graphql")            # ws(s)://...
-    token = await fakts.aget_token()            # OAuth2 access token
+    alias = await fakts.aget_alias("rekuest")  # a verified, reachable address
+    url = alias.to_http_path("graphql")  # http(s)://host:port/path/graphql
+    ws = alias.to_ws_path("graphql")  # ws(s)://...
+    token = await fakts.aget_token()  # OAuth2 access token
 ```
 
 The **first run** opens the browser: the server shows what `my-app` is asking
@@ -125,9 +125,12 @@ then treats missing services as `unknown`.
 
 ```python
 match await fakts.aget_grant_status("kabinet"):
-    case GrantStatus.DENIED: ...       # the user said no — respect it
-    case GrantStatus.UNAVAILABLE: ...  # the deployment can't offer it
-    case GrantStatus.GRANTED: ...
+    case GrantStatus.DENIED:
+        ...  # the user said no — respect it
+    case GrantStatus.UNAVAILABLE:
+        ...  # the deployment can't offer it
+    case GrantStatus.GRANTED:
+        ...
 
 # or simply, for graceful degradation:
 if alias := await fakts.aget_alias_or_none("kabinet"):
@@ -173,11 +176,11 @@ When no alias of a service passes, the error says what was tried:
 ```python
 try:
     alias = await fakts.aget_alias("mikro")
-except CompositionError as e:           # a required service
+except CompositionError as e:  # a required service
     for failure in e.failures:
         for attempt in failure.attempts:
             print(attempt.alias_id, attempt.url, attempt.outcome, attempt.describe())
-except ServiceUnreachableError as e:    # an optional one; e.failure
+except ServiceUnreachableError as e:  # an optional one; e.failure
     ...
 ```
 
@@ -217,7 +220,7 @@ call `fakts.alogin()` at a point where prompting is appropriate:
 try:
     token = await fakts.aget_token()
 except NeedsReauthenticationError:
-    await fakts.alogin()     # prompts only if the session cannot be revived
+    await fakts.alogin()  # prompts only if the session cannot be revived
     token = await fakts.aget_token()
 ```
 
@@ -611,8 +614,8 @@ from fakts import build_testing_fakts
 
 fakts = build_testing_fakts(
     {"rekuest": "http://localhost:8090"},
-    tokens=["first", "second"],   # handed out in order; the last one repeats
-    token_lifetime=0,             # 0: every aget_token() renews; None: never expires
+    tokens=["first", "second"],  # handed out in order; the last one repeats
+    token_lifetime=0,  # 0: every aget_token() renews; None: never expires
 )
 
 async with fakts:
@@ -664,10 +667,10 @@ Choose explicitly with `mesh`:
 ```python
 from fakts import MeshOptions, MeshProxy, build_device_code_fakts
 
-build_device_code_fakts(url=url, manifest=manifest)                           # MeshOptions(auto=True)
-build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())       # the same, but report what is missing
+build_device_code_fakts(url=url, manifest=manifest)  # MeshOptions(auto=True)
+build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())  # the same, but report what is missing
 build_device_code_fakts(url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055"))  # a running proxy
-build_device_code_fakts(url=url, manifest=manifest, mesh=None)                # off
+build_device_code_fakts(url=url, manifest=manifest, mesh=None)  # off
 ```
 
 A mesh alias comes back with `proxy` set, so an HTTP client that honours it
@@ -675,8 +678,8 @@ reaches the service over the mesh. For traffic that cannot go through an HTTP
 proxy, an alias resolved through a node this process runs also offers:
 
 ```python
-local = await alias.aforward()      # "127.0.0.1:P", forwarding TCP to the alias
-ice = await alias.aturn()           # TurnInfo: the node's TURN relay, as an ICE server
+local = await alias.aforward()  # "127.0.0.1:P", forwarding TCP to the alias
+ice = await alias.aturn()  # TurnInfo: the node's TURN relay, as an ICE server
 ```
 
 Both raise `arkitekt_spec`'s `MeshError` for an alias reached through a
