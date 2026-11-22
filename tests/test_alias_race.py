@@ -11,7 +11,14 @@ import pytest
 from fakts import Fakts
 from fakts.errors import AttemptOutcome, CompositionError, ServiceUnreachableError
 from fakts.fakts import Fakts as FaktsClass
-from fakts.models import ActiveFakts, Alias, ChallengeKey, Instance, Manifest, Requirement
+from fakts.models import (
+    ActiveFakts,
+    Alias,
+    ChallengeKey,
+    Instance,
+    Manifest,
+    Requirement,
+)
 
 from .helpers import CountingGrant, MemoryCache, make_fakts_value, make_manifest
 
@@ -48,7 +55,12 @@ class Gated:
             self._gates[alias].set()
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> "Gated":
-        async def challenge(_fakts: FaktsClass, alias: Alias, challenge_key: ChallengeKey | None = None, proxy: str | None = None) -> bool:
+        async def challenge(
+            _fakts: FaktsClass,
+            alias: Alias,
+            challenge_key: ChallengeKey | None = None,
+            proxy: str | None = None,
+        ) -> bool:
             self.calls.append(alias.id)
             self._called.set()
             if alias.id in self.held:
@@ -93,14 +105,18 @@ async def test_an_alias_that_answers_at_once_is_the_only_one_asked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     gated = Gated().install(monkeypatch)
-    fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
+    fakts = Fakts(
+        grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest()
+    )
     async with fakts:
         alias = await fakts.aget_alias("test", omit_report=True)
     assert alias.id == "primary"
     assert gated.calls == ["primary"]
 
 
-async def test_a_slow_first_alias_is_joined_by_the_others(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_slow_first_alias_is_joined_by_the_others(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The first alias never answers: after the head start the next one is
     asked too, and used. Nobody waits out the first one's timeout."""
     gated = Gated().hold("primary").install(monkeypatch)
@@ -116,7 +132,9 @@ async def test_a_slow_first_alias_is_joined_by_the_others(monkeypatch: pytest.Mo
     assert gated.calls == ["primary", "fallback"]
 
 
-async def test_a_first_alias_that_fails_is_not_waited_for(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_first_alias_that_fails_is_not_waited_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The head start is for an answer, not a pause: a refusal ends it."""
     Gated(primary=OSError("connection refused")).install(monkeypatch)
     fakts = Fakts(
@@ -153,7 +171,9 @@ async def test_aliases_that_do_not_answer_cost_one_timeout_between_them(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     value = make_fakts_value()
-    value.instances["test"].aliases.append(Alias(id="third", host="localhost", port=8002, path="/test"))
+    value.instances["test"].aliases.append(
+        Alias(id="third", host="localhost", port=8002, path="/test")
+    )
     Gated().hold("primary", "fallback", "third").install(monkeypatch)
     fakts = Fakts(
         grant=CountingGrant(fakts=value),
@@ -191,7 +211,9 @@ async def test_a_service_that_is_down_is_not_asked_again_at_once(
         asked = len(gated.calls)
         with pytest.raises(CompositionError) as second:
             await fakts.aget_alias("test", omit_report=True)
-        assert len(gated.calls) == asked, "a service just found down was challenged again"
+        assert len(gated.calls) == asked, (
+            "a service just found down was challenged again"
+        )
         assert second.value.failures == first.value.failures
 
         # Asking for it is asking.
@@ -208,7 +230,9 @@ async def test_only_the_service_that_was_down_is_asked_again(
 ) -> None:
     value, manifest = two_services()
     gated = Gated(down=OSError("connection refused")).install(monkeypatch)
-    fakts = Fakts(grant=CountingGrant(fakts=value), manifest=manifest, alias_retry_after=0)
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value), manifest=manifest, alias_retry_after=0
+    )
     async with fakts:
         assert (await fakts.aget_alias("up", omit_report=True)).id == "up"
         for _ in range(3):
@@ -232,14 +256,20 @@ async def test_a_resolved_service_is_served_while_another_is_being_challenged(
     that used to hold the alias lock, and every other lookup with it."""
     value, manifest = two_services()
     gated = Gated(down=OSError("connection refused")).install(monkeypatch)
-    fakts = Fakts(grant=CountingGrant(fakts=value), manifest=manifest, alias_retry_after=0)
+    fakts = Fakts(
+        grant=CountingGrant(fakts=value), manifest=manifest, alias_retry_after=0
+    )
     async with fakts:
         await fakts.aget_alias("up", omit_report=True)
         gated.hold("down")
         asked = len(gated.calls)
-        waiting = asyncio.ensure_future(fakts.aget_alias_or_none("down", omit_report=True))
+        waiting = asyncio.ensure_future(
+            fakts.aget_alias_or_none("down", omit_report=True)
+        )
         await gated.until(lambda calls: len(calls) != asked)
-        assert (await asyncio.wait_for(fakts.aget_alias("up", omit_report=True), 1)).id == "up"
+        assert (
+            await asyncio.wait_for(fakts.aget_alias("up", omit_report=True), 1)
+        ).id == "up"
         gated.release("down")
         assert await waiting is None
 

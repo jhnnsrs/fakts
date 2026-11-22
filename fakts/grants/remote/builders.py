@@ -13,7 +13,10 @@ from fakts.grants.remote.authorizers.device_code import (
     ClientRole,
     DeviceCodeAuthorizer,
 )
-from fakts.grants.remote.authorizers.mandate_key import HeadlessClientKind, MandateKeyAuthorizer
+from fakts.grants.remote.authorizers.mandate_key import (
+    HeadlessClientKind,
+    MandateKeyAuthorizer,
+)
 from fakts.grants.remote.discovery.well_known import WellKnownDiscovery
 from fakts.mesh import AUTO_MESH, MeshOptions, MeshProxy
 from fakts.models import Manifest
@@ -30,7 +33,9 @@ def _resolve_ssl(ssl_context: ssl.SSLContext | None) -> ssl.SSLContext:
     return ssl_context or ssl.create_default_context(cafile=certifi.where())
 
 
-def _build_cache(url: str, manifest: Manifest, cache_file: str, no_cache: bool) -> FaktsCache:
+def _build_cache(
+    url: str, manifest: Manifest, cache_file: str, no_cache: bool
+) -> FaktsCache:
     """Build the default cache: a FileCache bound to the server url and the
     manifest hash, so a changed manifest *or* a different server invalidates
     previously cached fakts (instead of silently serving the old server's
@@ -59,7 +64,9 @@ def _build_remote_fakts(
     cache."""
     return Fakts(
         grant=RemoteGrant(
-            discovery=WellKnownDiscovery(url=url, auto_protocols=["https", "http"], ssl_context=context),
+            discovery=WellKnownDiscovery(
+                url=url, auto_protocols=["https", "http"], ssl_context=context
+            ),
             authorizer=authorizer,
         ),
         cache=_build_cache(url, manifest, cache_file, no_cache),

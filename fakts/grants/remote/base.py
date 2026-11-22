@@ -45,12 +45,16 @@ class RemoteGrant(BaseModel):
         try:
             endpoint = await self.discovery.adiscover()
         except Exception as e:
-            raise RemoteGrantError(f"Could not discover the Fakts endpoint using {self.discovery.__class__.__name__}: {e}") from e
+            raise RemoteGrantError(
+                f"Could not discover the Fakts endpoint using {self.discovery.__class__.__name__}: {e}"
+            ) from e
 
         # Before authorizing: otherwise the server mints a client (and the user
         # may approve it) only for the grant to throw it away.
         if not endpoint.token_endpoint:
-            raise RemoteGrantError(f"{endpoint.name} advertised no token_endpoint, so the session could not be renewed later.")
+            raise RemoteGrantError(
+                f"{endpoint.name} advertised no token_endpoint, so the session could not be renewed later."
+            )
 
         response = await self.authorizer.aauthorize(endpoint)
 

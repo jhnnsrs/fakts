@@ -59,11 +59,15 @@ async def test_concurrent_first_access_loads_grant_once() -> None:
     assert results[2].id == "primary"
 
 
-async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_alias_is_cached_after_first_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """After the first full resolution, getting an alias must not challenge again."""
     challenge_count = 0
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         nonlocal challenge_count
         challenge_count += 1
         return True
@@ -81,7 +85,9 @@ async def test_alias_is_cached_after_first_resolution(monkeypatch: pytest.Monkey
         third = await fakts.aget_alias("test", omit_report=True)
 
     assert first.id == second.id == third.id == "primary"
-    assert challenge_count == challenges_after_first, "Subsequent gets must use the cached alias without re-challenging"
+    assert challenge_count == challenges_after_first, (
+        "Subsequent gets must use the cached alias without re-challenging"
+    )
 
 
 async def test_last_used_alias_is_persisted_as_preferred(
@@ -89,7 +95,9 @@ async def test_last_used_alias_is_persisted_as_preferred(
 ) -> None:
     """If a fallback alias is selected, it becomes the preferred alias in the cache."""
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -105,13 +113,17 @@ async def test_last_used_alias_is_persisted_as_preferred(
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].preferred_alias == "fallback", "The selected alias should be persisted as the preferred one"
+    assert cache.value.instances["test"].preferred_alias == "fallback", (
+        "The selected alias should be persisted as the preferred one"
+    )
 
 
 async def test_stale_cache_self_heals(monkeypatch: pytest.MonkeyPatch) -> None:
     """If aliases from cached fakts fail, the fakts are reloaded from the grant."""
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         if alias.host == "stale-host":
             raise Exception("unreachable")
         return True
@@ -136,7 +148,9 @@ async def test_a_self_heal_whose_grant_fails_reports_why_the_services_failed(
     in invalid_grant. That failure must not replace the one the person can act on."""
     from fakts.grants.remote.errors import RetrieveError
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         raise Exception("unreachable")
 
     monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
@@ -155,15 +169,21 @@ async def test_a_self_heal_whose_grant_fails_reports_why_the_services_failed(
             await fakts.aget_alias("test", omit_report=True)
 
     assert grant.load_count == 1, "the self-heal was tried"
-    assert isinstance(failed.value.__cause__, RetrieveError), "and why it failed is kept"
+    assert isinstance(failed.value.__cause__, RetrieveError), (
+        "and why it failed is kept"
+    )
 
 
-async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_failed_lookup_never_reruns_an_interactive_grant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Self-heal re-ran whatever grant there was: for a device-code app, one
     unreachable service opened a browser and replaced the client, cutting
     off every sibling process. Only a non-interactive grant self-heals."""
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         if alias.host == "stale-host":
             raise Exception("unreachable")
         return True
@@ -178,14 +198,18 @@ async def test_a_failed_lookup_never_reruns_an_interactive_grant(monkeypatch: py
         with pytest.raises(CompositionError):
             await fakts.aget_alias("test", omit_report=True)
 
-    assert grant.load_count == 0, "a failed lookup must not re-run the interactive grant"
+    assert grant.load_count == 0, (
+        "a failed lookup must not re-run the interactive grant"
+    )
 
 
 async def test_optional_missing_service_does_not_refresh_every_time() -> None:
     """A missing optional service raises, but must not re-resolve on every get."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(Requirement(key="missing", service="missing_service", optional=True))
+    manifest.requirements.append(
+        Requirement(key="missing", service="missing_service", optional=True)
+    )
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -206,7 +230,9 @@ async def test_optional_not_granted_raises_service_not_granted() -> None:
     ServiceNotGrantedError, so callers can degrade gracefully."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
+    manifest.requirements.append(
+        Requirement(key="declined", service="declined_service", optional=True)
+    )
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -234,7 +260,9 @@ async def test_unreachable_granted_service_is_not_a_grant_problem(
     """A granted but unreachable optional service must not look like a
     declined grant."""
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         raise Exception("unreachable")
 
     monkeypatch.setattr(FaktsClass, "_achallenge_alias", fake_challenge)
@@ -247,7 +275,9 @@ async def test_unreachable_granted_service_is_not_a_grant_problem(
     fakts = Fakts(grant=grant, manifest=manifest)
 
     async with fakts:
-        with pytest.raises(AliasNotFoundError, match="failed their challenge") as excinfo:
+        with pytest.raises(
+            AliasNotFoundError, match="failed their challenge"
+        ) as excinfo:
             await fakts.aget_alias("test", omit_report=True)
 
     assert not isinstance(excinfo.value, ServiceNotGrantedError)
@@ -261,8 +291,12 @@ async def test_grant_status_explicit_derived_and_unknown() -> None:
 
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
-    manifest.requirements.append(Requirement(key="mystery", service="mystery_service", optional=True))
+    manifest.requirements.append(
+        Requirement(key="declined", service="declined_service", optional=True)
+    )
+    manifest.requirements.append(
+        Requirement(key="mystery", service="mystery_service", optional=True)
+    )
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -286,8 +320,12 @@ async def test_explicit_status_is_reflected_in_error_message() -> None:
 
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
-    manifest.requirements.append(Requirement(key="missing", service="missing_service", optional=True))
+    manifest.requirements.append(
+        Requirement(key="declined", service="declined_service", optional=True)
+    )
+    manifest.requirements.append(
+        Requirement(key="missing", service="missing_service", optional=True)
+    )
 
     grant = CountingGrant(fakts=value)
     fakts = Fakts(grant=grant, manifest=manifest)
@@ -315,16 +353,25 @@ async def test_aget_alias_or_none() -> None:
     still raise (a bug, not a runtime condition)."""
     manifest = make_manifest()
     assert manifest.requirements is not None
-    manifest.requirements.append(Requirement(key="declined", service="declined_service", optional=True))
+    manifest.requirements.append(
+        Requirement(key="declined", service="declined_service", optional=True)
+    )
 
     grant = CountingGrant(fakts=make_fakts_value())
     fakts = Fakts(grant=grant, manifest=manifest)
 
     async with fakts:
-        alias = await fakts.aget_alias_or_none("test", omit_challenge=True, omit_report=True)
+        alias = await fakts.aget_alias_or_none(
+            "test", omit_challenge=True, omit_report=True
+        )
         assert alias is not None and alias.id == "primary"
 
-        assert await fakts.aget_alias_or_none("declined", omit_challenge=True, omit_report=True) is None
+        assert (
+            await fakts.aget_alias_or_none(
+                "declined", omit_challenge=True, omit_report=True
+            )
+            is None
+        )
 
         with pytest.raises(AliasNotFoundError, match="Add 'undeclared'"):
             await fakts.aget_alias_or_none("undeclared", omit_challenge=True)
@@ -363,13 +410,17 @@ async def test_manifest_hash_invalidates_cache(tmp_path: Path) -> None:
     cache_file = str(tmp_path / "cache.json")
 
     grant = CountingGrant(fakts=make_fakts_value())
-    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
+    fakts = Fakts(
+        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
+    )
     async with fakts:
         await fakts.aload()
     assert grant.load_count == 1
 
     # Same manifest: the cache is reused
-    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
+    fakts = Fakts(
+        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
+    )
     async with fakts:
         await fakts.aload()
     assert grant.load_count == 1
@@ -390,7 +441,9 @@ async def test_corrupt_cache_file_is_ignored(tmp_path: Path) -> None:
         f.write("{not valid json")
 
     grant = CountingGrant(fakts=make_fakts_value())
-    fakts = Fakts(grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest())
+    fakts = Fakts(
+        grant=grant, cache=FileCache(cache_file=cache_file), manifest=make_manifest()
+    )
     async with fakts:
         loaded = await fakts.aload()
 
@@ -431,10 +484,14 @@ async def test_entering_does_not_run_the_grant() -> None:
         assert fakts.loaded_fakts is not None
 
 
-async def test_cache_write_failure_is_not_fatal(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cache_write_failure_is_not_fatal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A failing cache write must not break loading or alias resolution."""
 
-    async def fake_challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def fake_challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -484,7 +541,9 @@ async def test_already_tried_credential_is_not_adopted_again() -> None:
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._state_session()._aadopt_cached_credentials({("cid_a", "tok_a")})
+        adopted = await fakts._state_session()._aadopt_cached_credentials(
+            {("cid_a", "tok_a")}
+        )
 
     assert adopted is None
 
@@ -499,7 +558,9 @@ async def test_reapproval_rotating_client_id_is_adopted() -> None:
     fakts = Fakts(grant=grant, cache=cache, manifest=make_manifest())
 
     async with fakts:
-        adopted = await fakts._state_session()._aadopt_cached_credentials({("old_client", "same_token")})
+        adopted = await fakts._state_session()._aadopt_cached_credentials(
+            {("old_client", "same_token")}
+        )
 
     assert adopted is not None
     assert adopted.auth.client_id == "rotated_client"
@@ -523,17 +584,23 @@ async def test_delete_on_exit(tmp_path: Path) -> None:
     assert fakts.loaded_fakts is None
 
 
-async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reentering_resolves_aliases_afresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Aliases resolved in one `async with` may be bound to that block's mesh
     node, closed on exit: a second block must not serve them."""
     challenged: list[str] = []
 
-    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         challenged.append(alias.id)
         return True
 
     monkeypatch.setattr(FaktsClass, "_achallenge_alias", challenge)
-    fakts = Fakts(grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest())
+    fakts = Fakts(
+        grant=CountingGrant(fakts=make_fakts_value()), manifest=make_manifest()
+    )
 
     async with fakts:
         await fakts.aget_alias("test", omit_report=True)
@@ -543,12 +610,16 @@ async def test_reentering_resolves_aliases_afresh(monkeypatch: pytest.MonkeyPatc
     assert challenged == ["primary", "primary"]
 
 
-async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_service_that_was_down_is_tried_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A required service unreachable at the first lookup used to stay failed
     for the life of the process: nothing ever challenged it again."""
     up = False
 
-    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         if not up:
             raise Exception("connection refused")
         return True
@@ -569,14 +640,18 @@ async def test_a_service_that_was_down_is_tried_again(monkeypatch: pytest.Monkey
     assert alias.id == "primary"
 
 
-async def test_the_alias_report_is_sent_outside_the_alias_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_alias_report_is_sent_outside_the_alias_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A slow report endpoint used to stall every alias lookup in the process
     for up to REPORT_TIMEOUT, because the report ran under _alias_lock."""
     import fakts.aliases as aliases_module
 
     held: list[bool] = []
 
-    async def challenge(self: FaktsClass, alias: Alias, challenge_key: object = None) -> bool:
+    async def challenge(
+        self: FaktsClass, alias: Alias, challenge_key: object = None
+    ) -> bool:
         return True
 
     async def report(pending: PendingReport, **kwargs: Any) -> None:

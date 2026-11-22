@@ -15,7 +15,9 @@ from fakts.testing import build_testing_fakts
 
 def test_require_keys_the_requirement_by_the_parameter_name() -> None:
     """The parameter name is the key -- that is what stops the two drifting."""
-    requirement = Require("live.arkitekt.mikro", "Where the data lives").to_requirement("mikro")
+    requirement = Require("live.arkitekt.mikro", "Where the data lives").to_requirement(
+        "mikro"
+    )
     assert requirement.key == "mikro"
     assert requirement.service == "live.arkitekt.mikro"
     assert requirement.description == "Where the data lives"
@@ -23,7 +25,9 @@ def test_require_keys_the_requirement_by_the_parameter_name() -> None:
 
 
 def test_require_carries_optional() -> None:
-    assert Require("live.arkitekt.s3", optional=True).to_requirement("s3").optional is True
+    assert (
+        Require("live.arkitekt.s3", optional=True).to_requirement("s3").optional is True
+    )
 
 
 def test_own_declares_nothing_to_provision() -> None:
@@ -38,7 +42,9 @@ def test_fakts_satisfies_the_token_loader_with_no_adapter() -> None:
 
 @pytest.mark.asyncio
 async def test_the_token_loader_gets_and_renews() -> None:
-    async with build_testing_fakts(aliases={}, tokens=["a", "b"], token_lifetime=0) as fakts:
+    async with build_testing_fakts(
+        aliases={}, tokens=["a", "b"], token_lifetime=0
+    ) as fakts:
         loader: TokenLoader = fakts
         assert await loader.aget_token() == "a"
         assert await loader.arefresh_token(stale_token="a") == "b"
@@ -74,7 +80,9 @@ async def test_a_401_refreshes_with_the_token_that_failed() -> None:
     loader = _RecordingLoader()
     link = FaktsAuthLink(token_loader=loader)
 
-    operation = Operation.model_construct(context=Operation.model_fields["context"].annotation())
+    operation = Operation.model_construct(
+        context=Operation.model_fields["context"].annotation()
+    )
     operation.context.headers = {"Authorization": "Bearer stale-token"}
 
     assert await link.arefresh_token(operation) == "fresh-token"
@@ -91,7 +99,9 @@ async def test_a_bare_authorization_header_refreshes_with_none() -> None:
     loader = _RecordingLoader()
     link = FaktsAuthLink(token_loader=loader)
 
-    operation = Operation.model_construct(context=Operation.model_fields["context"].annotation())
+    operation = Operation.model_construct(
+        context=Operation.model_fields["context"].annotation()
+    )
     operation.context.headers = {}
 
     await link.arefresh_token(operation)

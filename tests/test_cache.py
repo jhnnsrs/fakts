@@ -9,7 +9,15 @@ from fakts import Fakts
 from fakts.cache.file import CacheFile, FileCache
 from fakts.cache.nocache import NoCache
 from fakts.grants.hard import HardFaktsGrant
-from fakts.models import ActiveFakts, Alias, AuthFakt, Instance, Manifest, Requirement, SelfFakt
+from fakts.models import (
+    ActiveFakts,
+    Alias,
+    AuthFakt,
+    Instance,
+    Manifest,
+    Requirement,
+    SelfFakt,
+)
 
 from .helpers import make_fakts_value
 
@@ -172,7 +180,9 @@ async def test_nocache_never_persists() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content", ["[]", '"a string"', "42", "null", "{", "\xff\xfe"])
-async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, content: str) -> None:
+async def test_filecache_non_object_json_is_a_miss_not_a_crash(
+    tmp_path: Path, content: str
+) -> None:
     """A corrupt cache must never break startup, whatever JSON (or not) it holds."""
     cache_file = tmp_path / "cache.json"
     cache_file.write_text(content, encoding="latin-1")
@@ -182,7 +192,9 @@ async def test_filecache_non_object_json_is_a_miss_not_a_crash(tmp_path: Path, c
 
 
 @pytest.mark.asyncio
-async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: Path) -> None:
+async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(
+    tmp_path: Path,
+) -> None:
     """Caches written before UTC stamping carry naive local times."""
     import datetime
     import json
@@ -196,6 +208,8 @@ async def test_filecache_expiry_reads_a_naive_timestamp_as_local_time(tmp_path: 
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is not None
 
-    data["created"] = (datetime.datetime.now() - datetime.timedelta(hours=2)).isoformat()  # noqa: DTZ005 -- naive local time on purpose, as above
+    data["created"] = (
+        datetime.datetime.now() - datetime.timedelta(hours=2)
+    ).isoformat()  # noqa: DTZ005 -- naive local time on purpose, as above
     cache_file.write_text(json.dumps(data))
     assert await cache.aload() is None

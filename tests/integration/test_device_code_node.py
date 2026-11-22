@@ -19,7 +19,9 @@ TESTS_FOLDER = str(os.path.dirname(os.path.abspath(__file__)))
 
 @pytest.mark.integration
 def test_device_code_grant_device_id(deployed_infra: Deployment) -> None:
-    port_for_lok = deployed_infra.spec.find_service("lok").get_port_for_internal(80).published
+    port_for_lok = (
+        deployed_infra.spec.find_service("lok").get_port_for_internal(80).published
+    )
 
     manifest = Manifest(
         version="0.1.0",
@@ -61,5 +63,9 @@ def test_device_code_grant_device_id(deployed_infra: Deployment) -> None:
     with fakts:
         alias = fakts.get_alias("rekuest", omit_challenge=False)
         # The challenge should have resolved to the correct URL (which is reachable in the test environment)
-        port_for_rekuest = deployed_infra.spec.find_service("rekuest").get_port_for_internal(80).published
+        port_for_rekuest = (
+            deployed_infra.spec.find_service("rekuest")
+            .get_port_for_internal(80)
+            .published
+        )
         assert alias.challenge_path == f"http://localhost:{port_for_rekuest}/ht"

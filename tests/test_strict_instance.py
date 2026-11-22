@@ -22,8 +22,17 @@ def strict_fakts(*, certificates: list[str] | None = None) -> ActiveFakts:
         service="test_service",
         identifier="test_instance",
         aliases=[
-            Alias(id="lab", host="lab.local", port=443, path="/test", challenge="ht", ssl=True),
-            Alias(id="lab+http", host="lab.local", port=80, path="/test", challenge="ht"),
+            Alias(
+                id="lab",
+                host="lab.local",
+                port=443,
+                path="/test",
+                challenge="ht",
+                ssl=True,
+            ),
+            Alias(
+                id="lab+http", host="lab.local", port=80, path="/test", challenge="ht"
+            ),
             Alias(
                 id="mesh",
                 host="hub.tail.ts.net",
@@ -38,8 +47,12 @@ def strict_fakts(*, certificates: list[str] | None = None) -> ActiveFakts:
     return value
 
 
-def recording(seen: list[tuple[str, bool]], *answering: str) -> Callable[..., Awaitable[bool]]:
-    async def challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any) -> bool:
+def recording(
+    seen: list[tuple[str, bool]], *answering: str
+) -> Callable[..., Awaitable[bool]]:
+    async def challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None, **kw: Any
+    ) -> bool:
         seen.append((alias.id, alias.is_pinned()))
         return alias.id in answering
 
@@ -54,7 +67,10 @@ async def resolve(value: ActiveFakts) -> Alias:
 
 def test_the_strict_view_pins_tls_and_keeps_plain_only_on_the_mesh() -> None:
     view = aliases.strict_view(strict_fakts().instances["test"])
-    assert [(a.id, a.is_pinned()) for a in view.aliases] == [("lab", True), ("mesh", False)]
+    assert [(a.id, a.is_pinned()) for a in view.aliases] == [
+        ("lab", True),
+        ("mesh", False),
+    ]
     assert view.aliases[0].certificates == [HUB]
 
 
@@ -95,13 +111,23 @@ async def test_a_plain_alias_off_the_mesh_is_never_used_even_when_it_answers(
 
 def test_a_rotated_certificate_is_a_changed_instance() -> None:
     before = strict_fakts().instances["test"]
-    after = before.model_copy(update={"tls": TlsClaim(certificates=["-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"])})
+    after = before.model_copy(
+        update={
+            "tls": TlsClaim(
+                certificates=[
+                    "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----"
+                ]
+            )
+        }
+    )
     assert aliases._same_instance(before, before)
     assert not aliases._same_instance(before, after)
 
 
 @pytest.mark.asyncio
-async def test_a_pinned_challenge_runs_over_tls_verified_by_the_hub_certificate() -> None:
+async def test_a_pinned_challenge_runs_over_tls_verified_by_the_hub_certificate() -> (
+    None
+):
     import ssl
 
     from aiohttp import web
@@ -117,8 +143,17 @@ async def test_a_pinned_challenge_runs_over_tls_verified_by_the_hub_certificate(
     await site.start()
     port = site._server.sockets[0].getsockname()[1]  # type: ignore[union-attr]
     try:
-        fakts = Fakts(grant=CountingGrant(fakts=strict_fakts()), manifest=make_manifest())
-        at = dict(id="lab", host="localhost", port=port, path="/test", challenge="ht", ssl=True)
+        fakts = Fakts(
+            grant=CountingGrant(fakts=strict_fakts()), manifest=make_manifest()
+        )
+        at = dict(
+            id="lab",
+            host="localhost",
+            port=port,
+            path="/test",
+            challenge="ht",
+            ssl=True,
+        )
         assert await fakts._achallenge_alias(Alias(**at, certificates=[HUB]))
         # The same server, not pinned: the public roots do not know it.
         with pytest.raises(Exception, match=r"(?i)certificate"):

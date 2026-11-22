@@ -54,7 +54,9 @@ def ensure_private_dir(path: str) -> None:
             return
         if info.st_mode & 0o077:
             os.chmod(path, 0o700)
-            logger.debug("Tightened %s from %s to 0700.", path, oct(info.st_mode & 0o777))
+            logger.debug(
+                "Tightened %s from %s to 0700.", path, oct(info.st_mode & 0o777)
+            )
     except OSError:
         logger.debug("Could not make %s private.", path, exc_info=True)
 
@@ -222,7 +224,9 @@ class FileCache(pydantic.BaseModel):
         if self.hash and cache.hash != self.hash:
             return None
 
-        if self.expires_in and _as_utc(cache.created) + datetime.timedelta(seconds=self.expires_in) < datetime.datetime.now(datetime.UTC):
+        if self.expires_in and _as_utc(cache.created) + datetime.timedelta(
+            seconds=self.expires_in
+        ) < datetime.datetime.now(datetime.UTC):
             return None
 
         return cache.fakts
@@ -385,7 +389,9 @@ class FileCache(pydantic.BaseModel):
     async def aset(self, value: ActiveFakts) -> None:
         """Write ``value`` to the cache file, atomically and private (0600)."""
 
-        cache = CacheFile(fakts=value, created=datetime.datetime.now(datetime.UTC), hash=self.hash)
+        cache = CacheFile(
+            fakts=value, created=datetime.datetime.now(datetime.UTC), hash=self.hash
+        )
 
         # This file holds a live, rotating refresh token, so it is created
         # 0600 *before* anything is written to it. The mode has to be right
@@ -433,7 +439,9 @@ class FileCache(pydantic.BaseModel):
             logger.debug("Could not fsync %s after writing the cache.", directory)
 
     @staticmethod
-    async def _areplace_with_retry(source: str, destination: str, attempts: int = 5) -> None:
+    async def _areplace_with_retry(
+        source: str, destination: str, attempts: int = 5
+    ) -> None:
         """os.replace, tolerating a concurrent reader on Windows.
 
         POSIX renames over an open file happily; Windows raises

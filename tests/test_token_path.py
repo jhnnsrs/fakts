@@ -37,7 +37,9 @@ from .helpers import (
 
 # File modes, owners and groups are POSIX: on Windows the cache neither sets
 # nor checks them (see fakts.cache.file), so there is nothing to assert.
-posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX file modes, owners and groups")
+posix_only = pytest.mark.skipif(
+    os.name != "posix", reason="POSIX file modes, owners and groups"
+)
 
 
 pytestmark = pytest.mark.asyncio
@@ -51,7 +53,9 @@ Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_rotates_and_persists_before_use(token_server: TokenServer) -> None:
+async def test_refresh_rotates_and_persists_before_use(
+    token_server: TokenServer,
+) -> None:
     """A rotated refresh token must reach the cache. The server has already
     revoked the old one by the time it answers, so anything we fail to
     persist is simply lost."""
@@ -78,7 +82,9 @@ async def test_refresh_rotates_and_persists_before_use(token_server: TokenServer
     assert cache.value.auth.access_token == "new_access"
 
 
-async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server: TokenServer) -> None:
+async def test_a_refresh_offers_the_manifest_the_app_has_now(
+    token_server: TokenServer,
+) -> None:
     """What the server stored at login goes stale when the app is upgraded: the
     versions of the services it wants travel with every refresh."""
     offered: list[dict] = []
@@ -90,14 +96,20 @@ async def test_a_refresh_offers_the_manifest_the_app_has_now(token_server: Token
 
     endpoint = await token_server(handler)
     manifest = make_manifest()
-    fakts = Fakts(grant=StaticGrant(fakts=fakts_pointing_at(endpoint)), cache=MemoryCache(), manifest=manifest)
+    fakts = Fakts(
+        grant=StaticGrant(fakts=fakts_pointing_at(endpoint)),
+        cache=MemoryCache(),
+        manifest=manifest,
+    )
     async with fakts:
         await fakts.aget_token()
 
     assert offered == [manifest.model_dump()]
 
 
-async def test_cached_access_token_is_reused_without_refreshing(token_server: TokenServer) -> None:
+async def test_cached_access_token_is_reused_without_refreshing(
+    token_server: TokenServer,
+) -> None:
     """The main defence against a refresh stampede: a still-valid access
     token from the cache is used as-is, so parallel starts do not all rotate."""
     calls = {"n": 0}
@@ -134,13 +146,17 @@ async def test_expired_access_token_triggers_refresh(token_server: TokenServer) 
         expires_at=time.time() - 10,
     )
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         assert await fakts.aget_token() == "fresh"
 
 
-async def test_invalid_grant_adopts_sibling_credential(token_server: TokenServer) -> None:
+async def test_invalid_grant_adopts_sibling_credential(
+    token_server: TokenServer,
+) -> None:
     """The rotation race: another process rotated first and wrote the result.
     Adopting it is what keeps a herd converging instead of each member
     re-running the grant and deleting the others' client."""
@@ -195,7 +211,9 @@ async def test_invalid_grant_without_alternative_raises_rather_than_prompting(
     assert grant.load_count == 1, "Only the initial load; no interactive re-run"
 
 
-async def test_non_interactive_grant_reauthenticates_unattended(token_server: TokenServer) -> None:
+async def test_non_interactive_grant_reauthenticates_unattended(
+    token_server: TokenServer,
+) -> None:
     """Non-interactive grants carry no human cost, so they may re-run on their
     own. This is what keeps headless deployments alive past the refresh caps."""
     calls = {"n": 0}
@@ -206,7 +224,9 @@ async def test_non_interactive_grant_reauthenticates_unattended(token_server: To
 
     endpoint = await token_server(handler)
     dead = fakts_pointing_at(endpoint, refresh_token="dead_token")
-    revived = fakts_pointing_at(endpoint, refresh_token="revived", access_token="revived_access")
+    revived = fakts_pointing_at(
+        endpoint, refresh_token="revived", access_token="revived_access"
+    )
     revived.auth.expires_at = time.time() + 3600
 
     class RevivingGrant(StaticGrant):
@@ -229,7 +249,9 @@ async def test_non_interactive_grant_reauthenticates_unattended(token_server: To
 # --------------------------------------------------------------------------- #
 
 
-async def test_idle_refresh_token_fails_without_a_round_trip(token_server: TokenServer) -> None:
+async def test_idle_refresh_token_fails_without_a_round_trip(
+    token_server: TokenServer,
+) -> None:
     """An obviously-dead credential should not be spent on a doomed request,
     and the error should say what actually happened."""
     calls = {"n": 0}
@@ -242,7 +264,9 @@ async def test_idle_refresh_token_fails_without_a_round_trip(token_server: Token
     value = fakts_pointing_at(endpoint)
     value.auth.refresh_issued_at = time.time() - REFRESH_TOKEN_MAX_AGE - 60
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         with pytest.raises(NeedsReauthenticationError, match="unused for too long"):
@@ -251,7 +275,9 @@ async def test_idle_refresh_token_fails_without_a_round_trip(token_server: Token
     assert calls["n"] == 0
 
 
-async def test_expired_refresh_chain_is_named_as_such(token_server: TokenServer) -> None:
+async def test_expired_refresh_chain_is_named_as_such(
+    token_server: TokenServer,
+) -> None:
     """Rotating does not reset the chain cap, so even a permanently running
     app eventually needs a human — and should be told so plainly."""
 
@@ -262,7 +288,9 @@ async def test_expired_refresh_chain_is_named_as_such(token_server: TokenServer)
     value = fakts_pointing_at(endpoint)
     value.auth.chain_started_at = time.time() - REFRESH_CHAIN_MAX_AGE - 60
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         with pytest.raises(NeedsReauthenticationError, match="maximum age"):
@@ -295,10 +323,14 @@ async def test_refresh_token_never_prompts(token_server: TokenServer) -> None:
         with pytest.raises(NeedsReauthenticationError):
             await fakts.arefresh_token()
 
-    assert grant.load_count == 1, "arefresh_token is non-interactive by contract, even under ALWAYS"
+    assert grant.load_count == 1, (
+        "arefresh_token is non-interactive by contract, even under ALWAYS"
+    )
 
 
-async def test_stale_token_cas_collapses_repeated_401s(token_server: TokenServer) -> None:
+async def test_stale_token_cas_collapses_repeated_401s(
+    token_server: TokenServer,
+) -> None:
     """Transports retry a rejected operation several times. Each retry that
     reached the token endpoint would rotate again, spending credentials to
     fix something the first renewal already fixed."""
@@ -306,12 +338,16 @@ async def test_stale_token_cas_collapses_repeated_401s(token_server: TokenServer
 
     async def handler(request: web.Request) -> web.Response:
         calls["n"] += 1
-        return web.json_response(token_body(f"access_{calls['n']}", f"rot_{calls['n']}"))
+        return web.json_response(
+            token_body(f"access_{calls['n']}", f"rot_{calls['n']}")
+        )
 
     endpoint = await token_server(handler)
     value = fakts_pointing_at(endpoint, refresh_token="original")
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         first = await fakts.arefresh_token(stale_token="whatever_failed")
@@ -328,7 +364,9 @@ async def test_stale_token_cas_collapses_repeated_401s(token_server: TokenServer
 # --------------------------------------------------------------------------- #
 
 
-async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_alias_persist_cannot_clobber_a_rotated_credential(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The sharpest failure mode, and it needs no refresh contention at all:
     a process that never refreshed persists the preferred alias order — and
     with it the whole ActiveFakts, including the stale credential it happens
@@ -339,7 +377,9 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server: T
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def fake_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -360,10 +400,14 @@ async def test_alias_persist_cannot_clobber_a_rotated_credential(token_server: T
         await fakts.aget_alias("test", omit_report=True)
 
     assert cache.value is not None
-    assert cache.value.auth.refresh_token == "freshly_rotated", "Persisting the alias order must not roll the credential back"
+    assert cache.value.auth.refresh_token == "freshly_rotated", (
+        "Persisting the alias order must not roll the credential back"
+    )
 
 
-async def test_report_cannot_wipe_resolved_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_report_cannot_wipe_resolved_aliases(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Regression: taking the report token used to be able to adopt a cached
     credential mid-resolution, clearing the alias map that had just been
     published and turning a successful resolution into AliasNotFoundError."""
@@ -373,7 +417,9 @@ async def test_report_cannot_wipe_resolved_aliases(token_server: TokenServer, mo
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def fake_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         return True
 
     monkeypatch.setattr(Fakts, "_achallenge_alias", fake_challenge)
@@ -442,7 +488,9 @@ def loose_umask() -> Iterator[None]:
 
 
 @posix_only
-async def test_ensure_private_dir_creates_0700_under_loose_umask(tmp_path: Path, loose_umask: None) -> None:
+async def test_ensure_private_dir_creates_0700_under_loose_umask(
+    tmp_path: Path, loose_umask: None
+) -> None:
     """`os.makedirs(mode=0o700)` would not be enough on its own: the mode
     argument is masked by the umask, so it would land as 0700 & ~002."""
     directory = tmp_path / "fresh"
@@ -453,7 +501,9 @@ async def test_ensure_private_dir_creates_0700_under_loose_umask(tmp_path: Path,
 
 
 @posix_only
-async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(tmp_path: Path, loose_umask: None) -> None:
+async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(
+    tmp_path: Path, loose_umask: None
+) -> None:
     """The other half of why a `mode=` argument would not do: with
     `exist_ok=True` it is not applied at all to a directory that already
     exists -- and an already-existing 0775 directory is the actual case here,
@@ -468,7 +518,9 @@ async def test_ensure_private_dir_narrows_an_existing_group_writable_dir(tmp_pat
 
 
 @posix_only
-async def test_ensure_private_dir_leaves_a_foreign_dir_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_ensure_private_dir_leaves_a_foreign_dir_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """We have no standing to narrow someone else's directory; the load-time
     diagnostic reports it instead."""
     directory = tmp_path / "foreign"
@@ -482,7 +534,9 @@ async def test_ensure_private_dir_leaves_a_foreign_dir_alone(tmp_path: Path, mon
 
 
 @posix_only
-async def test_ensure_private_dir_is_idempotent(tmp_path: Path, loose_umask: None) -> None:
+async def test_ensure_private_dir_is_idempotent(
+    tmp_path: Path, loose_umask: None
+) -> None:
     """It runs on every folder creation, so it must not care how often."""
     directory = tmp_path / "twice"
 
@@ -553,7 +607,9 @@ async def test_cache_write_failure_is_not_fatal(token_server: TokenServer) -> No
         async def areset(self) -> None:
             return None
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=FailingCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=FailingCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         assert await fakts.aget_token() == "good_access"
@@ -564,7 +620,9 @@ async def test_cache_write_failure_is_not_fatal(token_server: TokenServer) -> No
 # --------------------------------------------------------------------------- #
 
 
-async def test_no_expires_in_token_is_opaque_and_reused(token_server: TokenServer) -> None:
+async def test_no_expires_in_token_is_opaque_and_reused(
+    token_server: TokenServer,
+) -> None:
     """Without expires_in the token has no known lifetime, so it is treated
     as opaque: reused rather than renewed on a timer."""
     calls = {"n": 0}
@@ -578,7 +636,9 @@ async def test_no_expires_in_token_is_opaque_and_reused(token_server: TokenServe
     endpoint = await token_server(handler)
     value = fakts_pointing_at(endpoint, refresh_token="original")
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         first = await fakts.aget_token()
@@ -588,7 +648,9 @@ async def test_no_expires_in_token_is_opaque_and_reused(token_server: TokenServe
     assert calls["n"] == 1, "An opaque token must not be renewed speculatively"
 
 
-async def test_opaque_token_can_still_be_renewed_after_rejection(token_server: TokenServer) -> None:
+async def test_opaque_token_can_still_be_renewed_after_rejection(
+    token_server: TokenServer,
+) -> None:
     """Since no timer will ever renew an opaque token, rejection is the only
     recovery — so it must actually get through to a renewal."""
     calls = {"n": 0}
@@ -602,7 +664,9 @@ async def test_opaque_token_can_still_be_renewed_after_rejection(token_server: T
     endpoint = await token_server(handler)
     value = fakts_pointing_at(endpoint, refresh_token="original")
 
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         first = await fakts.aget_token()
@@ -614,7 +678,9 @@ async def test_opaque_token_can_still_be_renewed_after_rejection(token_server: T
     assert calls["n"] == 2
 
 
-async def test_alias_order_persists_when_credential_is_unchanged(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_alias_order_persists_when_credential_is_unchanged(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The lost-update guard must not cost us the alias-preference
     optimization in the ordinary single-process case."""
 
@@ -623,7 +689,9 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server: T
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def fake_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -639,10 +707,14 @@ async def test_alias_order_persists_when_credential_is_unchanged(token_server: T
 
     assert alias.id == "fallback"
     assert cache.value is not None
-    assert cache.value.instances["test"].preferred_alias == "fallback", "The working alias must still be persisted as the preferred one"
+    assert cache.value.instances["test"].preferred_alias == "fallback", (
+        "The working alias must still be persisted as the preferred one"
+    )
 
 
-async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_server: TokenServer) -> None:
+async def test_a_refresh_is_retried_when_the_server_never_processed_it(
+    token_server: TokenServer,
+) -> None:
     """A 5xx rotated nothing: retry instead of failing the token path."""
     calls = {"n": 0}
 
@@ -654,14 +726,18 @@ async def test_a_refresh_is_retried_when_the_server_never_processed_it(token_ser
 
     endpoint = await token_server(handler)
     value = fakts_pointing_at(endpoint, refresh_token="original_token")
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     async with fakts:
         assert await fakts.aget_token() == "new_access"
     assert calls["n"] == 2
 
 
-async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The server may have rotated before the connection broke: repeating the
     refresh would present a dead token. It fails instead of retrying."""
     calls = {"n": 0}
@@ -673,7 +749,9 @@ async def test_a_refresh_is_not_repeated_after_an_ambiguous_failure(token_server
 
     endpoint = await token_server(handler)
     value = fakts_pointing_at(endpoint, refresh_token="original_token")
-    fakts = Fakts(grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest())
+    fakts = Fakts(
+        grant=StaticGrant(fakts=value), cache=MemoryCache(), manifest=make_manifest()
+    )
 
     real_post = oauth2.apost_form
 

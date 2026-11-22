@@ -37,7 +37,14 @@ import aiohttp
 from pydantic import BaseModel, Field, ValidationError
 
 from fakts.errors import FaktsError
-from fakts.models import ActiveFakts, AuthFakt, GrantStatus, Instance, MeshClaim, SelfFakt
+from fakts.models import (
+    ActiveFakts,
+    AuthFakt,
+    GrantStatus,
+    Instance,
+    MeshClaim,
+    SelfFakt,
+)
 from fakts.utils import describe_validation_error
 
 logger = logging.getLogger(__name__)
@@ -154,7 +161,9 @@ def parse_token_response(data: Mapping[str, Any], source: str) -> TokenResponse:
     try:
         return TokenResponse.model_validate(data)
     except ValidationError as e:
-        raise FaktsError(f"{source} answered with a token response fakts cannot use: {describe_validation_error(e)}") from None
+        raise FaktsError(
+            f"{source} answered with a token response fakts cannot use: {describe_validation_error(e)}"
+        ) from None
 
 
 def is_loopback(url: str) -> bool:
@@ -218,7 +227,9 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
         # Never followed (allow_redirects=False): on 307/308 aiohttp would resend
         # the form body -- the refresh token, mandate key or device code -- to
         # wherever Location points, plain http included.
-        raise FaktsError(f"{url} answered with a redirect ({response.status}) to {response.headers.get('Location', '<no Location>')}; refusing to follow a redirect with credentials. Configure the endpoint's final URL.")
+        raise FaktsError(
+            f"{url} answered with a redirect ({response.status}) to {response.headers.get('Location', '<no Location>')}; refusing to follow a redirect with credentials. Configure the endpoint's final URL."
+        )
 
     text = await response.text()
     if response.status >= 500:
@@ -228,10 +239,14 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        raise FaktsError(f"{url} did not answer with JSON (status {response.status}): {text[:200]}") from e
+        raise FaktsError(
+            f"{url} did not answer with JSON (status {response.status}): {text[:200]}"
+        ) from e
 
     if not isinstance(data, dict):
-        raise FaktsError(f"{url} answered with {type(data).__name__}, expected an object")
+        raise FaktsError(
+            f"{url} answered with {type(data).__name__}, expected an object"
+        )
 
     if "error" in data and data.get("error"):
         raise OAuth2ErrorResponse(
@@ -242,7 +257,9 @@ async def _handle(response: aiohttp.ClientResponse, url: str) -> dict[str, Any]:
 
     # The fakts device endpoint signals failure inside a 200 body.
     if data.get("status") == "error":
-        raise FaktsError(f"{url} rejected the request: {data.get('error', 'unknown error')}")
+        raise FaktsError(
+            f"{url} rejected the request: {data.get('error', 'unknown error')}"
+        )
 
     if response.status >= 400:
         raise FaktsError(f"{url} answered {response.status}: {text[:200]}")
@@ -353,7 +370,11 @@ async def arefresh(
     has to be asked (an upgraded client wanting another version of a service it already
     has), and goes on as approved otherwise. Never a condition of the refresh.
     """
-    form = {"grant_type": REFRESH_GRANT, "refresh_token": refresh_token, "client_id": client_id}
+    form = {
+        "grant_type": REFRESH_GRANT,
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
     if manifest is not None:
         form["manifest"] = json.dumps(manifest)
     return await apost_form(
@@ -378,13 +399,19 @@ async def arevoke(
     """
     await apost_form(
         revocation_endpoint,
-        {"token": refresh_token, "token_type_hint": "refresh_token", "client_id": client_id},
+        {
+            "token": refresh_token,
+            "token_type_hint": "refresh_token",
+            "client_id": client_id,
+        },
         ssl_context=ssl_context,
         allow_insecure_transport=allow_insecure_transport,
     )
 
 
-def resolve_expiry(expires_in: int | None, skew: int, now: float | None = None) -> float | None:
+def resolve_expiry(
+    expires_in: int | None, skew: int, now: float | None = None
+) -> float | None:
     """Turn ``expires_in`` into an absolute timestamp.
 
     Three cases, all of which have bitten someone:
@@ -438,13 +465,21 @@ def merge_token_response(
 
     client_id = response.client_id or fallback_client_id
     if not client_id:
-        raise FaktsError("The token response carried no client_id and none was remembered from the authorization step. The client cannot refresh without one.")
+        raise FaktsError(
+            "The token response carried no client_id and none was remembered from the authorization step. The client cannot refresh without one."
+        )
 
     # A mandate-key login carries no refresh token: the session is renewed by
     # logging in again, so there is no chain to track.
-    refresh_token = response.refresh_token or (previous.auth.refresh_token if previous else None)
+    refresh_token = response.refresh_token or (
+        previous.auth.refresh_token if previous else None
+    )
     rotated = previous is None or previous.auth.refresh_token != refresh_token
-    chain_started_at = previous.auth.chain_started_at if previous and previous.auth.chain_started_at else now
+    chain_started_at = (
+        previous.auth.chain_started_at
+        if previous and previous.auth.chain_started_at
+        else now
+    )
     if refresh_token is None:
         chain_started_at = None
 
@@ -457,29 +492,43 @@ def merge_token_response(
         refresh_token=refresh_token,
         access_token=response.access_token,
         expires_at=resolve_expiry(response.expires_in, skew, now),
-        refresh_issued_at=None if refresh_token is None else (now if rotated else (previous.auth.refresh_issued_at if previous else now)),
+        refresh_issued_at=None
+        if refresh_token is None
+        else (
+            now if rotated else (previous.auth.refresh_issued_at if previous else now)
+        ),
         chain_started_at=chain_started_at,
         token_type=response.token_type or "Bearer",
     )
 
     previous_instances = previous.instances if previous else {}
-    instances = dict(previous_instances) if response.instances is None else _merge_instances(previous_instances, response.instances)
+    instances = (
+        dict(previous_instances)
+        if response.instances is None
+        else _merge_instances(previous_instances, response.instances)
+    )
 
     self_fakt = response.self_ or (previous.self if previous else None)
     if self_fakt is None:
-        raise FaktsError("The token response carried no 'self' block and none was cached. The client cannot identify the deployment it is talking to.")
+        raise FaktsError(
+            "The token response carried no 'self' block and none was cached. The client cannot identify the deployment it is talking to."
+        )
 
     return ActiveFakts(
         self=self_fakt,
         auth=auth,
         instances=instances,
-        statuses=response.statuses if response.statuses is not None else (previous.statuses if previous else {}),
+        statuses=response.statuses
+        if response.statuses is not None
+        else (previous.statuses if previous else {}),
         # Only the first token carries the key; keep it for later starts.
         mesh=response.mesh or (previous.mesh if previous else None),
     )
 
 
-def _merge_instances(previous: Mapping[str, Instance], incoming: Mapping[str, Instance]) -> dict[str, Instance]:
+def _merge_instances(
+    previous: Mapping[str, Instance], incoming: Mapping[str, Instance]
+) -> dict[str, Instance]:
     """Adopt the server's instances, aliases in the server's order, keeping the
     alias that worked last time (``preferred_alias``) while the server still lists it.
 
@@ -493,8 +542,12 @@ def _merge_instances(previous: Mapping[str, Instance], incoming: Mapping[str, In
         old = previous.get(key)
         preferred = None
         if old is not None:
-            preferred = old.preferred_alias or (old.aliases[0].id if old.aliases else None)
-        if preferred is not None and any(alias.id == preferred for alias in instance.aliases):
+            preferred = old.preferred_alias or (
+                old.aliases[0].id if old.aliases else None
+            )
+        if preferred is not None and any(
+            alias.id == preferred for alias in instance.aliases
+        ):
             merged[key] = instance.model_copy(update={"preferred_alias": preferred})
         else:
             merged[key] = instance
@@ -512,4 +565,8 @@ def instances_changed(previous: ActiveFakts | None, candidate: ActiveFakts) -> b
         return True
     if set(previous.instances) != set(candidate.instances):
         return True
-    return any({alias.id for alias in previous.instances[key].aliases} != {alias.id for alias in candidate.instances[key].aliases} for key in previous.instances)
+    return any(
+        {alias.id for alias in previous.instances[key].aliases}
+        != {alias.id for alias in candidate.instances[key].aliases}
+        for key in previous.instances
+    )

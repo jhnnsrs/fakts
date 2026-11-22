@@ -171,10 +171,18 @@ class ServiceFailure:
         if self.reason is not None:
             return self.reason
         grave = AttemptOutcome.BAD_SIGNATURE
-        attempts = sorted(self.attempts, key=lambda attempt: attempt.outcome is not grave)
+        attempts = sorted(
+            self.attempts, key=lambda attempt: attempt.outcome is not grave
+        )
         width = max(len(attempt.alias_id) for attempt in attempts)
-        lines = [f"  - {attempt.alias_id:<{width}}  {attempt.url}  {attempt.describe()}" for attempt in attempts]
-        text = f"All {len(attempts)} alias(es) of service {self.key} (instance '{self.instance}') failed their challenge:\n" + "\n".join(lines)
+        lines = [
+            f"  - {attempt.alias_id:<{width}}  {attempt.url}  {attempt.describe()}"
+            for attempt in attempts
+        ]
+        text = (
+            f"All {len(attempts)} alias(es) of service {self.key} (instance '{self.instance}') failed their challenge:\n"
+            + "\n".join(lines)
+        )
         if hint := self.hint():
             text += f"\n  {hint}"
         return text

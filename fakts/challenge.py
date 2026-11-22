@@ -68,7 +68,9 @@ def build_challenge_message(nonce: str) -> bytes:
     return f"{CHALLENGE_DOMAIN}:{nonce}".encode()
 
 
-def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str) -> bool:
+def verify_challenge_signature(
+    key: ChallengeKey, nonce: str, signature_b64: str
+) -> bool:
     """Verify a signed challenge response against the pinned public key.
 
     Returns False on any mismatch (wrong key, wrong nonce, malformed
@@ -84,13 +86,17 @@ def verify_challenge_signature(key: ChallengeKey, nonce: str, signature_b64: str
         global _warned_unverified
         if not _warned_unverified:
             _warned_unverified = True
-            logger.warning("The instance pins a challenge key, but the 'cryptography' package is not installed, so signatures are not verified: an alias that answers its challenge is trusted as it would be without a pinned key. Install it with: pip install fakts[crypto]")
+            logger.warning(
+                "The instance pins a challenge key, but the 'cryptography' package is not installed, so signatures are not verified: an alias that answers its challenge is trusted as it would be without a pinned key. Install it with: pip install fakts[crypto]"
+            )
         return True
 
     from cryptography.exceptions import InvalidSignature
 
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(base64.b64decode(key.key, validate=True))
+        public_key = Ed25519PublicKey.from_public_bytes(
+            base64.b64decode(key.key, validate=True)
+        )
     except (ValueError, TypeError):
         logger.warning(
             "Could not parse the pinned challenge key. Failing the challenge.",

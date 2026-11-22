@@ -135,8 +135,18 @@ def token_body(access: str, refresh: str, expires_in: int = 3600) -> dict:
                 "service": "test_service",
                 "identifier": "1",
                 "aliases": [
-                    {"id": "primary", "host": "localhost", "port": 8000, "path": "/test"},
-                    {"id": "fallback", "host": "localhost", "port": 8001, "path": "/test"},
+                    {
+                        "id": "primary",
+                        "host": "localhost",
+                        "port": 8000,
+                        "path": "/test",
+                    },
+                    {
+                        "id": "fallback",
+                        "host": "localhost",
+                        "port": 8001,
+                        "path": "/test",
+                    },
                 ],
             }
         },

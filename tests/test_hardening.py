@@ -49,7 +49,9 @@ Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 class Server(Protocol):
     """The ``server`` fixture: serves ``routes`` (by ``method``), gives the base url."""
 
-    def __call__(self, routes: dict[str, Handler], method: str = "GET") -> Awaitable[str]: ...
+    def __call__(
+        self, routes: dict[str, Handler], method: str = "GET"
+    ) -> Awaitable[str]: ...
 
 
 @pytest_asyncio.fixture
@@ -112,7 +114,9 @@ async def test_challenge_does_not_follow_redirects(server: Server) -> None:
         with pytest.raises(ChallengeStatusError):
             await fakts._achallenge_alias(alias)
 
-    assert not signed_by_real_service["hit"], "the probe was relayed to the genuine service — a redirector could satisfy the challenge and still receive all the traffic"
+    assert not signed_by_real_service["hit"], (
+        "the probe was relayed to the genuine service — a redirector could satisfy the challenge and still receive all the traffic"
+    )
 
 
 async def test_omit_challenge_does_not_disable_later_verification(
@@ -122,7 +126,9 @@ async def test_omit_challenge_does_not_disable_later_verification(
     whole process, skipping the pinned-key check for every later caller."""
     challenged: list[str] = []
 
-    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def fake_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         challenged.append(alias.id)
         return True
 
@@ -150,12 +156,18 @@ async def test_omit_challenge_does_not_disable_later_verification(
 # --------------------------------------------------------------------------- #
 
 
-async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_cache_load_error_does_not_log_the_token(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """A corrupt cache is logged on every start; the log must not carry the
     credential that made it corrupt."""
     secret = "v1.SUPERSECRET_REFRESH_TOKEN_ABCDEFGHIJKLMNOP"
     cache_file = tmp_path / "cache.json"
-    cache_file.write_text('{"fakts": {"self": {"deployment_name": "d", "alias": {"id": "a", "host": "h"}}, "auth": {"client_id": "c", "refresh_token": "' + secret + '"}, "instances": {}, "statuses": {}}, "created": "2026-01-01T00:00:00", "hash": ""}')
+    cache_file.write_text(
+        '{"fakts": {"self": {"deployment_name": "d", "alias": {"id": "a", "host": "h"}}, "auth": {"client_id": "c", "refresh_token": "'
+        + secret
+        + '"}, "instances": {}, "statuses": {}}, "created": "2026-01-01T00:00:00", "hash": ""}'
+    )
 
     with caplog.at_level("DEBUG"):
         assert await FileCache(cache_file=str(cache_file)).aload() is None
@@ -168,7 +180,9 @@ async def test_cache_load_error_does_not_log_the_token(tmp_path: Path, caplog: p
 # --------------------------------------------------------------------------- #
 
 
-async def test_insecure_transport_env_var_respects_falsey_values(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_insecure_transport_env_var_respects_falsey_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """FAKTS_ALLOW_INSECURE_TRANSPORT=0 must not *enable* insecure transport."""
     url = "http://some-lan-box:8000/o/token/"
 
@@ -181,7 +195,9 @@ async def test_insecure_transport_env_var_respects_falsey_values(monkeypatch: py
     check_transport(url, False)  # must not raise
 
 
-async def test_report_is_skipped_over_untrusted_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_report_is_skipped_over_untrusted_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The report carries the access token, so it gets the same gate as the
     token endpoint. It used to be the one credential-bearing call without one."""
     import aiohttp
@@ -189,7 +205,9 @@ async def test_report_is_skipped_over_untrusted_transport(monkeypatch: pytest.Mo
     posted: list[str] = []
     real_post = aiohttp.ClientSession.post
 
-    def spy(self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any) -> _RequestContextManager:
+    def spy(
+        self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any
+    ) -> _RequestContextManager:
         posted.append(str(url))
         return real_post(self, url, *args, **kwargs)
 
@@ -202,7 +220,9 @@ async def test_report_is_skipped_over_untrusted_transport(monkeypatch: pytest.Mo
     value.auth.report_endpoint = "http://some-lan-box:8000/f/report/"
 
     await areport_aliases(
-        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        PendingReport(
+            fakts=value, report_map={}, functional=True, token="an-access-token"
+        ),
         ssl_context=ssl.create_default_context(),
         allow_insecure_transport=False,
     )
@@ -217,7 +237,9 @@ async def test_report_over_https_is_sent(monkeypatch: pytest.MonkeyPatch) -> Non
     posted: list[str] = []
     real_post = aiohttp.ClientSession.post
 
-    def spy(self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any) -> _RequestContextManager:
+    def spy(
+        self: aiohttp.ClientSession, url: StrOrURL, *args: Any, **kwargs: Any
+    ) -> _RequestContextManager:
         posted.append(str(url))
         return real_post(self, url, *args, **kwargs)
 
@@ -228,7 +250,9 @@ async def test_report_over_https_is_sent(monkeypatch: pytest.MonkeyPatch) -> Non
     value.auth.report_endpoint = "https://example.com/f/report/"
 
     await areport_aliases(
-        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        PendingReport(
+            fakts=value, report_map={}, functional=True, token="an-access-token"
+        ),
         ssl_context=ssl.create_default_context(),
         allow_insecure_transport=False,
     )
@@ -245,7 +269,9 @@ async def test_report_is_skipped_when_origin_differs() -> None:
 
     # Reaches the origin check and returns without attempting a request.
     await areport_aliases(
-        PendingReport(fakts=value, report_map={}, functional=True, token="an-access-token"),
+        PendingReport(
+            fakts=value, report_map={}, functional=True, token="an-access-token"
+        ),
         ssl_context=ssl.create_default_context(),
         allow_insecure_transport=False,
     )
@@ -261,7 +287,9 @@ async def test_report_is_skipped_when_origin_differs() -> None:
         ("customscheme://do-something", False),
     ],
 )
-async def test_browser_only_opens_http_urls(server: Server, monkeypatch: pytest.MonkeyPatch, uri: str, should_open: bool) -> None:
+async def test_browser_only_opens_http_urls(
+    server: Server, monkeypatch: pytest.MonkeyPatch, uri: str, should_open: bool
+) -> None:
     """webbrowser hands unknown schemes to the desktop's handler, so a
     hostile endpoint could otherwise get file:// invoked."""
     opened: list[str] = []
@@ -283,7 +311,9 @@ async def test_browser_only_opens_http_urls(server: Server, monkeypatch: pytest.
     async def token(request: web.Request) -> web.Response:
         return web.json_response({"error": "access_denied"}, status=400)
 
-    base = await server({"/o/app-authorization/": authorize, "/o/token/": token}, method="POST")
+    base = await server(
+        {"/o/app-authorization/": authorize, "/o/token/": token}, method="POST"
+    )
 
     from fakts.grants.remote.errors import UserDeniedError
     from fakts.grants.remote.models import FaktsEndpoint
@@ -299,7 +329,9 @@ async def test_browser_only_opens_http_urls(server: Server, monkeypatch: pytest.
     async def no_sleep(_seconds: float) -> None:
         return None
 
-    authorizer = DeviceCodeAuthorizer(manifest=make_manifest(), sleeper=no_sleep, allow_insecure_transport=True)
+    authorizer = DeviceCodeAuthorizer(
+        manifest=make_manifest(), sleeper=no_sleep, allow_insecure_transport=True
+    )
 
     with pytest.raises(UserDeniedError):
         await authorizer.aauthorize(endpoint)
@@ -312,7 +344,9 @@ async def test_browser_only_opens_http_urls(server: Server, monkeypatch: pytest.
 # --------------------------------------------------------------------------- #
 
 
-_posix_only = pytest.mark.skipif(os.name != "posix", reason="POSIX permission semantics")
+_posix_only = pytest.mark.skipif(
+    os.name != "posix", reason="POSIX permission semantics"
+)
 
 
 def _loose_dir(tmp_path: Path, mode: int = 0o775) -> Path:
@@ -341,7 +375,9 @@ def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 @_posix_only
-async def test_group_writable_dir_with_self_only_group_loads_silently(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_group_writable_dir_with_self_only_group_loads_silently(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The reported bug. `umask 002` plus a user-private group makes every
     directory an app creates 0775 with a single-member group, and the old
     predicate called that "writable by other users" and refused to read."""
@@ -355,7 +391,9 @@ async def test_group_writable_dir_with_self_only_group_loads_silently(tmp_path: 
 
 
 @_posix_only
-async def test_group_writable_dir_with_populated_group_warns_but_loads(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_group_writable_dir_with_populated_group_warns_but_loads(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A group with real other members is a real finding -- but a finding is
     all it is now, because refusing re-runs the grant and hangs scripts."""
     monkeypatch.setattr(file_cache, "_group_may_contain_others", lambda *_: True)
@@ -369,7 +407,9 @@ async def test_group_writable_dir_with_populated_group_warns_but_loads(tmp_path:
 
 
 @_posix_only
-async def test_unresolvable_gid_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_unresolvable_gid_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A gid we cannot enumerate is assumed shared: on an LDAP box it may name
     a real, populated group. Guessing loud costs one log line now."""
 
@@ -406,7 +446,9 @@ async def test_self_only_group_resolves_as_no_other_members(
 
 
 @_posix_only
-async def test_sticky_other_writable_dir_is_silent(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_sticky_other_writable_dir_is_silent(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """The /tmp case: with the sticky bit set, only the owner may replace an
     entry, so world-writable says nothing about who can swap our cache."""
     cache = await _seeded_cache(_loose_dir(tmp_path, 0o1777))
@@ -418,7 +460,9 @@ async def test_sticky_other_writable_dir_is_silent(tmp_path: Path, caplog: pytes
 
 
 @_posix_only
-async def test_other_writable_dir_without_sticky_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_other_writable_dir_without_sticky_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     cache = await _seeded_cache(_loose_dir(tmp_path, 0o777))
 
     with caplog.at_level(logging.DEBUG, logger="fakts.cache.file"):
@@ -431,7 +475,9 @@ async def test_other_writable_dir_without_sticky_warns(tmp_path: Path, caplog: p
 
 
 @_posix_only
-async def test_world_writable_cache_warns_loads_and_is_tightened(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_world_writable_cache_warns_loads_and_is_tightened(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """Replaces `test_world_writable_cache_is_refused`.
 
     A world-writable cache is still a genuine finding and still warns, but it
@@ -454,7 +500,9 @@ async def test_world_writable_cache_warns_loads_and_is_tightened(tmp_path: Path,
 
 
 @_posix_only
-async def test_foreign_owner_warns_but_loads(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_foreign_owner_warns_but_loads(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A cache owned by another uid is the one genuinely exploitable case --
     whoever owns it picks the token endpoint. It is a deliberate decision that
     it warns rather than refuses; the compensating control is that the cache
@@ -474,7 +522,9 @@ async def test_foreign_owner_warns_but_loads(tmp_path: Path, caplog: pytest.LogC
 
 
 @_posix_only
-async def test_group_writable_cache_file_is_tightened(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_group_writable_cache_file_is_tightened(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Benign group, so nothing to report -- but the file is still narrowed,
     because the self-heal is now the strongest control left on an existing
     file."""
@@ -492,7 +542,9 @@ async def test_group_writable_cache_file_is_tightened(tmp_path: Path, caplog: py
 
 
 @_posix_only
-async def test_symlinked_cache_is_reported_as_a_symlink(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_symlinked_cache_is_reported_as_a_symlink(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """O_NOFOLLOW already makes this read fail; the point is that it now says
     so, instead of surfacing as a generic "could not load"."""
     real = await _seeded_cache(_loose_dir(tmp_path, 0o700))
@@ -542,7 +594,9 @@ async def test_hard_grant_does_not_hand_out_its_own_object() -> None:
     assert value.instances["test"].aliases[0].id == "primary"
 
 
-async def test_env_grant_recovers_unattended_when_credential_ages(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_env_grant_recovers_unattended_when_credential_ages(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """An aged env credential must reload from the environment rather than
     raise — that is the whole headless story."""
 

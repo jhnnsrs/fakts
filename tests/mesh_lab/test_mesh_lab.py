@@ -38,7 +38,9 @@ def peer_fakts(lab: MeshLab, *, with_key: bool = True) -> ActiveFakts:
         aliases=[Alias(id="peer", host=lab.peer, port=80, challenge="ht", kind="mesh")],
     )
     if with_key:
-        value.mesh = MeshClaim(ionscale_auth_key=lab.app_key, ionscale_coord_url=lab.coord_url)
+        value.mesh = MeshClaim(
+            ionscale_auth_key=lab.app_key, ionscale_coord_url=lab.coord_url
+        )
     return value
 
 
@@ -53,7 +55,9 @@ def lab_fakts(value: ActiveFakts, state_root: Path) -> Fakts:
 
 
 @pytest.mark.asyncio
-async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(mesh_lab: MeshLab, tmp_path: Path) -> None:
+async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(
+    mesh_lab: MeshLab, tmp_path: Path
+) -> None:
     async with lab_fakts(peer_fakts(mesh_lab), tmp_path) as fakts:
         # The node joined with the granted key, and the challenge went through it.
         alias = await fakts.aget_alias("test")
@@ -80,7 +84,9 @@ async def test_a_mesh_alias_is_resolved_and_reached_through_its_node(mesh_lab: M
 
 
 @pytest.mark.asyncio
-async def test_a_joined_node_rejoins_without_a_key(mesh_lab: MeshLab, tmp_path: Path) -> None:
+async def test_a_joined_node_rejoins_without_a_key(
+    mesh_lab: MeshLab, tmp_path: Path
+) -> None:
     async with lab_fakts(peer_fakts(mesh_lab), tmp_path) as fakts:
         await fakts.aget_alias("test")
     assert any(NativeNode.has_state(d) for d in tmp_path.iterdir())  # noqa: ASYNC240 -- a test inspecting its own tmp dir; nothing else runs on the loop
@@ -118,12 +124,16 @@ async def test_a_real_node(mesh_lab: MeshLab, tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_host_that_is_not_on_the_mesh_is_not_resolved(mesh_lab: MeshLab, tmp_path: Path) -> None:
+async def test_a_host_that_is_not_on_the_mesh_is_not_resolved(
+    mesh_lab: MeshLab, tmp_path: Path
+) -> None:
     """The other tests pass only because the peer is on the mesh."""
     from fakts.errors import CompositionError
 
     value = peer_fakts(mesh_lab)
-    value.instances["test"].aliases = [Alias(id="nobody", host="not-on-the-mesh", port=80, challenge="ht", kind="mesh")]
+    value.instances["test"].aliases = [
+        Alias(id="nobody", host="not-on-the-mesh", port=80, challenge="ht", kind="mesh")
+    ]
     fakts = lab_fakts(value, tmp_path)
     fakts.alias_challenge_timeout = 5
     async with fakts:

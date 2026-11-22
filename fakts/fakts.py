@@ -109,12 +109,16 @@ class Fakts(KoiledModel):
     manifest: Manifest
     """What the app is and which services it requires."""
 
-    ssl_context: SSLContext = Field(default_factory=lambda: ssl.create_default_context(cafile=certifi.where()))
+    ssl_context: SSLContext = Field(
+        default_factory=lambda: ssl.create_default_context(cafile=certifi.where())
+    )
 
     grant: FaktsGrant
     """The grant to load the configuration from"""
 
-    allow_auto_load: bool = Field(default=True, description="Should we autoload on get?")
+    allow_auto_load: bool = Field(
+        default=True, description="Should we autoload on get?"
+    )
     """Should we autoload the grants on a call to get?"""
 
     delete_on_exit: bool = False
@@ -255,7 +259,9 @@ class Fakts(KoiledModel):
     def _ensure_entered(self) -> None:
         """Raise if the context manager was not entered yet."""
         if self._state is None or not self._state.entered:
-            raise NotEnteredError("You need to enter the Fakts context (`with`/`async with`) before calling this function")
+            raise NotEnteredError(
+                "You need to enter the Fakts context (`with`/`async with`) before calling this function"
+            )
 
     async def _aensure_loaded(self) -> ActiveFakts:
         """Return the loaded fakts, auto-loading them if allowed."""
@@ -445,7 +451,9 @@ class Fakts(KoiledModel):
         if challenge_key is not None and challenge_key.kind != "ed25519":
             # Fail closed: the instance pins an identity key precisely so that a
             # plain 200 is not enough. Downgrading to it would accept anyone.
-            raise UnsupportedChallengeKeyError(f"The instance behind alias '{alias.id}' pins a challenge key of kind '{challenge_key.kind}', which this fakts cannot verify. Upgrade fakts.")
+            raise UnsupportedChallengeKeyError(
+                f"The instance behind alias '{alias.id}' pins a challenge key of kind '{challenge_key.kind}', which this fakts cannot verify. Upgrade fakts."
+            )
 
         nonce = generate_nonce() if challenge_key else None
 
@@ -483,10 +491,14 @@ class Fakts(KoiledModel):
                     signature = data["signature"]
                 except Exception as err:
                     body = await resp.text()
-                    raise ChallengeUnsignedError(f"The instance pins a challenge key, but the challenge of alias '{alias.id}' at {alias.challenge_path} did not answer with a signature. Response body: {truncate(body) or '<empty>'}") from err
+                    raise ChallengeUnsignedError(
+                        f"The instance pins a challenge key, but the challenge of alias '{alias.id}' at {alias.challenge_path} did not answer with a signature. Response body: {truncate(body) or '<empty>'}"
+                    ) from err
 
                 if not verify_challenge_signature(challenge_key, nonce, signature):
-                    raise ChallengeSignatureError(f"The challenge of alias '{alias.id}' at {alias.challenge_path} answered with an invalid signature: the host does not hold the service's identity key (possible impersonation or a stale pinned key).")
+                    raise ChallengeSignatureError(
+                        f"The challenge of alias '{alias.id}' at {alias.challenge_path} answered with an invalid signature: the host does not hold the service's identity key (possible impersonation or a stale pinned key)."
+                    )
 
             return True
 
@@ -519,7 +531,9 @@ class Fakts(KoiledModel):
                 Its ``failures`` say which aliases were tried and how each
                 challenge ended.
         """
-        await self._state_resolver().arefresh_aliases(omit_challenge=omit_challenge, omit_report=omit_report)
+        await self._state_resolver().arefresh_aliases(
+            omit_challenge=omit_challenge, omit_report=omit_report
+        )
 
     async def aget_alias(
         self,
@@ -718,12 +732,16 @@ class Fakts(KoiledModel):
         # waiting on -- mutual exclusion would be lost silently. Nothing here
         # needs nesting, so refuse it outright.
         if self._state is not None and self._state.entered:
-            raise NotEnteredError("This Fakts context is already entered. Enter it once and share the instance; nesting `async with` on the same object would silently drop the locks the outer scope is relying on.")
+            raise NotEnteredError(
+                "This Fakts context is already entered. Enter it once and share the instance; nesting `async with` on the same object would silently drop the locks the outer scope is relying on."
+            )
 
         state = self._get_state()
         state.enter()
         self._mesh_route = MeshRoute(self.mesh, self.manifest)
-        self._session = TokenSession(state, self, fetch=lambda interactive: self._afetch_token(interactive))
+        self._session = TokenSession(
+            state, self, fetch=lambda interactive: self._afetch_token(interactive)
+        )
         self._resolver = AliasResolver(
             state,
             self._session,
@@ -755,7 +773,9 @@ class Fakts(KoiledModel):
             # Without somewhere to persist it, every restart re-authenticates
             # and every sibling process revokes the others by rotating.
             if isinstance(self.cache, NoCache) and state.grant_requires_interaction():
-                logger.warning("Fakts is configured with NoCache but the grant needs user interaction. Refresh tokens rotate on every use, so nothing will survive this process and each run will prompt again. Use a FileCache for anything but a one-shot script.")
+                logger.warning(
+                    "Fakts is configured with NoCache but the grant needs user interaction. Refresh tokens rotate on every use, so nothing will survive this process and each run will prompt again. Use a FileCache for anything but a one-shot script."
+                )
         except BaseException:
             self._teardown()
             raise

@@ -22,7 +22,11 @@ class HashVector(TypedDict):
 
 VECTORS: list[HashVector] = [
     {
-        "manifest": {"identifier": "starmist", "version": "0.1.0", "scopes": ["openid"]},
+        "manifest": {
+            "identifier": "starmist",
+            "version": "0.1.0",
+            "scopes": ["openid"],
+        },
         "hash": "c3253e77a90f97c4675523590ba0febcc2c9375174b7ddbb9ef7e21412512cfa",
     },
     {
@@ -66,7 +70,10 @@ def test_the_hash_is_what_it_was_before_the_spec(vector: HashVector) -> None:
 
 def test_the_spec_identity_fields_do_not_move_the_hash() -> None:
     base = VECTORS[0]["manifest"]
-    assert Manifest(**base, author="someone", entrypoint="main:api").hash() == VECTORS[0]["hash"]
+    assert (
+        Manifest(**base, author="someone", entrypoint="main:api").hash()
+        == VECTORS[0]["hash"]
+    )
 
 
 def test_the_login_manifest_is_the_spec_manifest() -> None:
@@ -79,13 +86,17 @@ def test_a_misspelled_field_is_still_refused() -> None:
         Manifest(identifier="a", version="1", scopes=[], authr="x")
 
 
-def test_a_field_the_spec_adds_to_requirements_later_does_not_move_the_hash(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_field_the_spec_adds_to_requirements_later_does_not_move_the_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Requirements used to be hashed whole, so a new spec field would have
     changed every app's hash -- one forced login for everyone."""
     manifest = Manifest(**VECTORS[1]["manifest"])
     real_dump = Manifest.model_dump
 
-    def dump_with_a_new_field(self: Manifest, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def dump_with_a_new_field(
+        self: Manifest, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         dumped = real_dump(self, *args, **kwargs)
         for entry in dumped.get("requirements") or []:
             entry["added_in_a_later_spec"] = "anything"

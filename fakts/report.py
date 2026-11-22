@@ -68,7 +68,9 @@ async def areport_aliases(
     """
     fakts, token = pending.fakts, pending.token
     if not fakts.auth.report_endpoint:
-        logger.info("The endpoint does not advertise a report url. Skipping the alias report.")
+        logger.info(
+            "The endpoint does not advertise a report url. Skipping the alias report."
+        )
         return
 
     # The report carries the access token, so it gets the same transport
@@ -104,7 +106,10 @@ async def areport_aliases(
             oauth2.client_session(
                 ssl_context,
                 timeout=REPORT_TIMEOUT,
-                headers={"Accept": "application/json", "Authorization": f"Bearer {token}"},
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
             ) as session,
             session.post(
                 fakts.auth.report_endpoint,

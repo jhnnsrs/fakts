@@ -32,13 +32,17 @@ Document = Callable[[str], dict[str, str | None]]
 class WellKnownServer(Protocol):
     """The ``wellknown`` fixture: serves ``document`` at /.well-known/fakts, gives host:port."""
 
-    def __call__(self, document: Document, ssl_context: ssl.SSLContext | None = None) -> Awaitable[str]: ...
+    def __call__(
+        self, document: Document, ssl_context: ssl.SSLContext | None = None
+    ) -> Awaitable[str]: ...
 
 
 class CredentialPost(Protocol):
     """:func:`~fakts.oauth2.apost_form` or :func:`~fakts.oauth2.apost_json`, as the redirect test calls them."""
 
-    def __call__(self, url: str, body: Mapping[str, str], /, *, ssl_context: ssl.SSLContext) -> Awaitable[dict[str, Any]]: ...
+    def __call__(
+        self, url: str, body: Mapping[str, str], /, *, ssl_context: ssl.SSLContext
+    ) -> Awaitable[dict[str, Any]]: ...
 
 
 @pytest_asyncio.fixture
@@ -66,7 +70,9 @@ async def server() -> AsyncIterator[Server]:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
 @pytest.mark.parametrize("post", [apost_form, apost_json])
-async def test_a_credential_post_never_follows_a_redirect(server: Server, status: int, post: CredentialPost) -> None:
+async def test_a_credential_post_never_follows_a_redirect(
+    server: Server, status: int, post: CredentialPost
+) -> None:
     """A redirect would resend the form body (307/308) to wherever it points."""
     stolen: list[dict] = []
 
@@ -111,7 +117,9 @@ async def wellknown() -> AsyncIterator[WellKnownServer]:
     """Serve a well-known document built from the server's own origin."""
     runners = []
 
-    async def start(document: Document, ssl_context: ssl.SSLContext | None = None) -> str:
+    async def start(
+        document: Document, ssl_context: ssl.SSLContext | None = None
+    ) -> str:
         async def handler(request: web.Request) -> web.Response:
             return web.json_response(document(f"{request.scheme}://{request.host}"))
 
@@ -131,14 +139,22 @@ async def wellknown() -> AsyncIterator[WellKnownServer]:
 
 
 @pytest.mark.asyncio
-async def test_a_token_endpoint_on_another_origin_is_refused(wellknown: WellKnownServer) -> None:
-    host = await wellknown(lambda origin: _document(origin, token_origin="https://evil.example"))
+async def test_a_token_endpoint_on_another_origin_is_refused(
+    wellknown: WellKnownServer,
+) -> None:
+    host = await wellknown(
+        lambda origin: _document(origin, token_origin="https://evil.example")
+    )
 
     with pytest.raises(DiscoveryError, match="another origin"):
         await check_wellknown(f"http://{host}/", ssl.create_default_context())
 
     # Opted into, for a deployment that really splits its hosts.
-    endpoint = await check_wellknown(f"http://{host}/", ssl.create_default_context(), allow_cross_origin_endpoints=True)
+    endpoint = await check_wellknown(
+        f"http://{host}/",
+        ssl.create_default_context(),
+        allow_cross_origin_endpoints=True,
+    )
     assert endpoint.token_endpoint == "https://evil.example/o/token/"
 
 
@@ -151,11 +167,15 @@ async def test_a_null_token_endpoint_is_refused(wellknown: WellKnownServer) -> N
 
 
 @pytest.mark.asyncio
-async def test_a_plain_http_server_is_still_found_without_a_scheme(wellknown: WellKnownServer) -> None:
+async def test_a_plain_http_server_is_still_found_without_a_scheme(
+    wellknown: WellKnownServer,
+) -> None:
     """https against a plain-http dev server is a protocol mismatch: fall back."""
     host = await wellknown(_document)
 
-    endpoint = await discover_url(f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"])
+    endpoint = await discover_url(
+        f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"]
+    )
     assert endpoint.token_endpoint == f"http://{host}/o/token/"
 
 
@@ -180,7 +200,9 @@ def _untrusted_tls_context() -> ssl.SSLContext:
         .not_valid_before(now - datetime.timedelta(minutes=1))
         .not_valid_after(now + datetime.timedelta(hours=1))
         .add_extension(
-            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+            x509.SubjectAlternativeName(
+                [x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
+            ),
             critical=False,
         )
         .sign(key, hashes.SHA256())
@@ -203,12 +225,16 @@ def _untrusted_tls_context() -> ssl.SSLContext:
 
 
 @pytest.mark.asyncio
-async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown: WellKnownServer) -> None:
+async def test_a_failed_certificate_check_does_not_fall_back_to_http(
+    wellknown: WellKnownServer,
+) -> None:
     pytest.importorskip("cryptography")
     host = await wellknown(_document, ssl_context=_untrusted_tls_context())
 
     with pytest.raises(DiscoveryError, match="TLS verification failed"):
-        await discover_url(f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"])
+        await discover_url(
+            f"{host}/", ssl.create_default_context(), auto_protocols=["https", "http"]
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -219,8 +245,16 @@ async def test_a_failed_certificate_check_does_not_fall_back_to_http(wellknown: 
 def _refresh(previous: ActiveFakts, **members: Any) -> ActiveFakts:
     from fakts.oauth2 import TokenResponse, merge_token_response
 
-    response = TokenResponse(access_token="a2", refresh_token="r2", client_id="test_client_id", **members)
-    return merge_token_response(previous, response, token_endpoint="http://x/token", report_endpoint=None, skew=30)
+    response = TokenResponse(
+        access_token="a2", refresh_token="r2", client_id="test_client_id", **members
+    )
+    return merge_token_response(
+        previous,
+        response,
+        token_endpoint="http://x/token",
+        report_endpoint=None,
+        skew=30,
+    )
 
 
 def test_a_refresh_that_withdraws_every_service_withdraws_them() -> None:
@@ -258,7 +292,9 @@ def test_an_unusable_token_response_does_not_echo_the_tokens() -> None:
     secret = "rt_SECRET_0123456789abcdef"
     with pytest.raises(FaktsError) as info:
         # access_token missing: pydantic would render the whole input.
-        parse_token_response({"refresh_token": secret, "expires_in": "soon"}, "https://x/token")
+        parse_token_response(
+            {"refresh_token": secret, "expires_in": "soon"}, "https://x/token"
+        )
 
     rendered = f"{info.value!r} {info.value} {info.value.__cause__!r} {info.value.__context__!r}"
     assert "access_token: missing" in str(info.value)

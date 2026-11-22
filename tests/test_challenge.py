@@ -61,10 +61,18 @@ async def test_verify_challenge_signature() -> None:
     signature = sign_nonce(private, "some-nonce")
 
     assert verify_challenge_signature(key, "some-nonce", signature)
-    assert not verify_challenge_signature(key, "other-nonce", signature), "A signature must not verify for a different nonce (replay)"
-    assert not verify_challenge_signature(other_key, "some-nonce", signature), "A signature must not verify against another service's key"
-    assert not verify_challenge_signature(key, "some-nonce", "not base64!!"), "Garbage signatures must fail, not raise"
-    assert not verify_challenge_signature(ChallengeKey(key="bm90IGEga2V5"), "some-nonce", signature), "A malformed pinned key must fail the challenge"
+    assert not verify_challenge_signature(key, "other-nonce", signature), (
+        "A signature must not verify for a different nonce (replay)"
+    )
+    assert not verify_challenge_signature(other_key, "some-nonce", signature), (
+        "A signature must not verify against another service's key"
+    )
+    assert not verify_challenge_signature(key, "some-nonce", "not base64!!"), (
+        "Garbage signatures must fail, not raise"
+    )
+    assert not verify_challenge_signature(
+        ChallengeKey(key="bm90IGEga2V5"), "some-nonce", signature
+    ), "A malformed pinned key must fail the challenge"
 
 
 Handler = Callable[[web.Request], Awaitable[web.Response]]
@@ -102,7 +110,9 @@ def make_pinned_fakts(port: int, key: ChallengeKey | None) -> ActiveFakts:
     value = make_fakts_value(host="127.0.0.1")
     instance = value.instances["test"]
     instance.challenge_key = key
-    instance.aliases = [instance.aliases[0].model_copy(update={"port": port, "ssl": False})]
+    instance.aliases = [
+        instance.aliases[0].model_copy(update={"port": port, "ssl": False})
+    ]
     return value
 
 
@@ -122,7 +132,9 @@ async def test_signed_challenge_passes(challenge_server: ChallengeServer) -> Non
     assert alias.id == "primary"
 
 
-async def test_unsigned_200_fails_when_key_is_pinned(challenge_server: ChallengeServer) -> None:
+async def test_unsigned_200_fails_when_key_is_pinned(
+    challenge_server: ChallengeServer,
+) -> None:
     """With a pinned key, a host that merely answers 200 must not pass."""
     _, key = make_keypair()
 
@@ -154,7 +166,9 @@ async def test_wrong_key_signature_fails(challenge_server: ChallengeServer) -> N
             await fakts.aget_alias("test", omit_report=True)
 
 
-async def test_plain_challenge_without_key_still_passes(challenge_server: ChallengeServer) -> None:
+async def test_plain_challenge_without_key_still_passes(
+    challenge_server: ChallengeServer,
+) -> None:
     """Instances without a challenge key keep the plain 200-check."""
 
     async def handler(request: web.Request) -> web.Response:
@@ -170,13 +184,17 @@ async def test_plain_challenge_without_key_still_passes(challenge_server: Challe
     assert alias.id == "primary"
 
 
-async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_says_so(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+async def test_without_cryptography_a_signature_is_not_verified_and_a_warning_says_so(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """Without the optional 'cryptography' package the challenge passes unverified,
     as it would without a pinned key, and the process is told once."""
     import fakts.challenge as challenge
 
     _, key = make_keypair()
-    monkeypatch.setitem(sys.modules, "cryptography.hazmat.primitives.asymmetric.ed25519", None)
+    monkeypatch.setitem(
+        sys.modules, "cryptography.hazmat.primitives.asymmetric.ed25519", None
+    )
     monkeypatch.setattr(challenge, "_warned_unverified", False)
 
     with caplog.at_level(logging.WARNING, logger="fakts.challenge"):
@@ -198,7 +216,9 @@ async def test_build_challenge_message_is_domain_separated() -> None:
     assert build_challenge_message("abc") == f"{CHALLENGE_DOMAIN}:abc".encode()
 
 
-async def test_an_unsupported_key_kind_fails_closed(challenge_server: ChallengeServer) -> None:
+async def test_an_unsupported_key_kind_fails_closed(
+    challenge_server: ChallengeServer,
+) -> None:
     """A pinned key of a kind this fakts cannot verify must not downgrade to
     the plain challenge: the instance pinned a key so a 200 is not enough."""
 
@@ -226,7 +246,9 @@ async def failure_of(fakts: Fakts) -> ServiceFailure:
     return failure
 
 
-async def test_a_wrong_status_is_reported_as_one(challenge_server: ChallengeServer) -> None:
+async def test_a_wrong_status_is_reported_as_one(
+    challenge_server: ChallengeServer,
+) -> None:
     async def handler(request: web.Request) -> web.Response:
         return web.Response(status=503, text="starting")
 
@@ -250,7 +272,9 @@ async def test_nothing_listening_is_unreachable() -> None:
     assert "running" in (failure.hint() or "")
 
 
-async def test_no_answer_in_time_is_a_timeout(challenge_server: ChallengeServer) -> None:
+async def test_no_answer_in_time_is_a_timeout(
+    challenge_server: ChallengeServer,
+) -> None:
     async def handler(request: web.Request) -> web.Response:
         await asyncio.sleep(1)
         return web.Response(text="late")
@@ -265,7 +289,9 @@ async def test_no_answer_in_time_is_a_timeout(challenge_server: ChallengeServer)
     assert attempt.describe().startswith("timed out after 0.")
 
 
-async def test_unsigned_and_forged_answers_are_told_apart(challenge_server: ChallengeServer) -> None:
+async def test_unsigned_and_forged_answers_are_told_apart(
+    challenge_server: ChallengeServer,
+) -> None:
     impostor, _ = make_keypair()
     _, pinned = make_keypair()
 
@@ -273,7 +299,9 @@ async def test_unsigned_and_forged_answers_are_told_apart(challenge_server: Chal
         return web.json_response({"ok": True})
 
     async def forged(request: web.Request) -> web.Response:
-        return web.json_response({"signature": sign_nonce(impostor, request.query["nonce"])})
+        return web.json_response(
+            {"signature": sign_nonce(impostor, request.query["nonce"])}
+        )
 
     for handler, outcome in (
         (unsigned, AttemptOutcome.UNSIGNED),
@@ -286,7 +314,9 @@ async def test_unsigned_and_forged_answers_are_told_apart(challenge_server: Chal
         assert [a.outcome for a in failure.attempts] == [outcome]
 
 
-async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challenge_server: ChallengeServer, caplog: pytest.LogCaptureFixture) -> None:
+async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(
+    challenge_server: ChallengeServer, caplog: pytest.LogCaptureFixture
+) -> None:
     """The alias that works is used, but a host that answers for the service
     without its key is not something to pass over in silence."""
     genuine, pinned = make_keypair()
@@ -294,7 +324,9 @@ async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challe
 
     def signing(private: Ed25519PrivateKey) -> Handler:
         async def handler(request: web.Request) -> web.Response:
-            return web.json_response({"signature": sign_nonce(private, request.query["nonce"])})
+            return web.json_response(
+                {"signature": sign_nonce(private, request.query["nonce"])}
+            )
 
         return handler
 
@@ -302,10 +334,14 @@ async def test_a_forged_answer_is_warned_of_even_when_another_alias_works(challe
     genuine_port = await challenge_server(signing(genuine))
     value = make_pinned_fakts(forged_port, pinned)
     forged = value.instances["test"].aliases[0]
-    value.instances["test"].aliases.append(forged.model_copy(update={"id": "genuine", "port": genuine_port}))
+    value.instances["test"].aliases.append(
+        forged.model_copy(update={"id": "genuine", "port": genuine_port})
+    )
 
     with caplog.at_level("WARNING", logger="fakts.aliases"):
-        async with Fakts(grant=CountingGrant(fakts=value), manifest=make_manifest()) as fakts:
+        async with Fakts(
+            grant=CountingGrant(fakts=value), manifest=make_manifest()
+        ) as fakts:
             alias = await fakts.aget_alias("test", omit_report=True)
     assert alias.id == "genuine"
     (warning,) = [r.getMessage() for r in caplog.records if r.name == "fakts.aliases"]
@@ -319,8 +355,16 @@ async def test_a_forged_answer_is_listed_first() -> None:
         optional=False,
         instance="test_instance",
         attempts=(
-            AliasAttempt("lan", None, "http://10.0.0.4/ht", AttemptOutcome.TIMEOUT, None, 3.0),
-            AliasAttempt("pub", None, "https://lab.example/ht", AttemptOutcome.BAD_SIGNATURE, "forged"),
+            AliasAttempt(
+                "lan", None, "http://10.0.0.4/ht", AttemptOutcome.TIMEOUT, None, 3.0
+            ),
+            AliasAttempt(
+                "pub",
+                None,
+                "https://lab.example/ht",
+                AttemptOutcome.BAD_SIGNATURE,
+                "forged",
+            ),
         ),
     )
     lines = failure.render().splitlines()
@@ -336,7 +380,9 @@ async def test_a_challenge_that_says_no_is_still_an_attempt(
     """A challenger returning False used to leave no trace: 'all 2 aliases
     failed' over an empty list."""
 
-    async def refuses(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def refuses(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         return False
 
     monkeypatch.setattr(Fakts, "_achallenge_alias", refuses)
@@ -367,19 +413,27 @@ def test_the_errors_survive_a_pickle() -> None:
     """They cross process boundaries (an actor's error, a worker's)."""
     import pickle
 
-    failure = ServiceFailure(key="test", service="test_service", optional=True, reason="down")
-    unreachable = pickle.loads(pickle.dumps(ServiceUnreachableError("no alias", failure)))
+    failure = ServiceFailure(
+        key="test", service="test_service", optional=True, reason="down"
+    )
+    unreachable = pickle.loads(
+        pickle.dumps(ServiceUnreachableError("no alias", failure))
+    )
     assert str(unreachable) == "no alias" and unreachable.failure == failure
     composition = pickle.loads(pickle.dumps(CompositionError("all down", (failure,))))
     assert str(composition) == "all down" and composition.failures == (failure,)
-    status = pickle.loads(pickle.dumps(ChallengeStatusError("bad", status=503, body="x")))
+    status = pickle.loads(
+        pickle.dumps(ChallengeStatusError("bad", status=503, body="x"))
+    )
     assert (str(status), status.status, status.body) == ("bad", 503, "x")
 
 
 def test_a_certificate_error_is_not_just_unreachable() -> None:
     """aiohttp's certificate errors are connection errors too: the order of
     the checks is what tells them apart."""
-    assert _classify(ssl.SSLCertVerificationError("certificate verify failed"))[0] is (AttemptOutcome.TLS)
+    assert _classify(ssl.SSLCertVerificationError("certificate verify failed"))[0] is (
+        AttemptOutcome.TLS
+    )
     assert _classify(ConnectionRefusedError("refused"))[0] is AttemptOutcome.UNREACHABLE
     assert _classify(TimeoutError())[0] is AttemptOutcome.TIMEOUT
     assert _classify(ValueError("odd")) == (AttemptOutcome.ERROR, "ValueError: odd")

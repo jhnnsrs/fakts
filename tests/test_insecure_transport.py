@@ -13,16 +13,33 @@ from fakts import aliases
 from fakts.models import Alias
 
 
-def alias(host: str, *, ssl: bool = False, kind: str | None = None, id: str = "a") -> Alias:
-    return Alias(id=id, host=host, port=80, path="/mikro", challenge="ht", ssl=ssl, kind=kind)
+def alias(
+    host: str, *, ssl: bool = False, kind: str | None = None, id: str = "a"
+) -> Alias:
+    return Alias(
+        id=id, host=host, port=80, path="/mikro", challenge="ht", ssl=ssl, kind=kind
+    )
 
 
-@pytest.mark.parametrize("host", ["10.0.0.4", "lab.local", "140.78.80.150", "gateway"])  # gateway: not marked docker
+@pytest.mark.parametrize(
+    "host", ["10.0.0.4", "lab.local", "140.78.80.150", "gateway"]
+)  # gateway: not marked docker
 def test_plain_http_to_another_machine_is_insecure(host: str) -> None:
     assert aliases.is_insecure_transport(alias(host))
 
 
-@pytest.mark.parametrize("host", ["localhost", "LocalHost.", "app.localhost", "127.0.0.1", "127.3.4.5", "::1", "[::1]"])
+@pytest.mark.parametrize(
+    "host",
+    [
+        "localhost",
+        "LocalHost.",
+        "app.localhost",
+        "127.0.0.1",
+        "127.3.4.5",
+        "::1",
+        "[::1]",
+    ],
+)
 def test_loopback_is_not(host: str) -> None:
     assert not aliases.is_insecure_transport(alias(host))
 
@@ -33,7 +50,9 @@ def test_tls_the_mesh_and_docker_are_not() -> None:
     assert not aliases.is_insecure_transport(alias("gateway", kind="docker"))
 
 
-def test_it_is_said_at_info_once_per_alias(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_it_is_said_at_info_once_per_alias(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(aliases, "_noted_insecure", set())
     with caplog.at_level(logging.INFO, logger="fakts.aliases"):
         aliases._note_transport("mikro", alias("10.0.0.4"))

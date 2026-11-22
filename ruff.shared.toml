@@ -5,9 +5,9 @@
 # own `ruff.toml` extends this file and adds only what is its own (excludes for
 # vendored code, per-file ignores, its target version).
 
-# Lines are as long as the code wants them: the formatter normalizes quotes,
-# spacing and trailing commas, and does not rewrap.
-line-length = 300
+# Black's (and ruff's) default. The formatter wraps code to it; a string or a
+# comment it cannot wrap is left long (E501 is not selected).
+line-length = 88
 
 [lint]
 select = [

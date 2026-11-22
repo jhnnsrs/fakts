@@ -83,7 +83,9 @@ def _fakts(base_url: str) -> Fakts:
     )
 
 
-async def test_a_key_session_renews_by_logging_in_again(token_endpoint: TokenServer) -> None:
+async def test_a_key_session_renews_by_logging_in_again(
+    token_endpoint: TokenServer,
+) -> None:
     logins: list[str] = []
 
     async def handler(request: web.Request) -> web.Response:

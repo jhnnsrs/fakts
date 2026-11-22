@@ -34,7 +34,12 @@ def wants_qr(url: str, browser_opened: bool) -> bool:
         return True
 
 
-_HALF_BLOCKS = {(False, False): " ", (True, False): "▀", (False, True): "▄", (True, True): "█"}
+_HALF_BLOCKS = {
+    (False, False): " ",
+    (True, False): "▀",
+    (False, True): "▄",
+    (True, True): "█",
+}
 
 
 def qr_lines(url: str, light_ink: bool = False) -> list[str] | None:
@@ -53,10 +58,16 @@ def qr_lines(url: str, light_ink: bool = False) -> list[str] | None:
         return None
     # make_qr, not make: a short link would otherwise become a Micro QR code,
     # which phone cameras do not read.
-    rows = [[bool(module) != light_ink for module in row] for row in segno.make_qr(url, error="l").matrix_iter(border=2)]
+    rows = [
+        [bool(module) != light_ink for module in row]
+        for row in segno.make_qr(url, error="l").matrix_iter(border=2)
+    ]
     if len(rows) % 2:
         rows.append([light_ink] * len(rows[0]))
-    return ["".join(_HALF_BLOCKS[pair] for pair in zip(top, bottom, strict=True)) for top, bottom in zip(rows[::2], rows[1::2], strict=True)]
+    return [
+        "".join(_HALF_BLOCKS[pair] for pair in zip(top, bottom, strict=True))
+        for top, bottom in zip(rows[::2], rows[1::2], strict=True)
+    ]
 
 
 def print_qr_code(url: str) -> None:

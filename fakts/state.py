@@ -115,7 +115,9 @@ class SessionState:
 
     def ensure_entered(self) -> None:
         if not self.entered:
-            raise NotEnteredError("You need to enter the Fakts context (`with`/`async with`) before calling this function")
+            raise NotEnteredError(
+                "You need to enter the Fakts context (`with`/`async with`) before calling this function"
+            )
 
     # ------------------------------------------------------------------ #
     # Loading                                                            #
@@ -138,7 +140,9 @@ class SessionState:
         if self.loaded_fakts:
             return self.loaded_fakts
         if not self.allow_auto_load:
-            raise FaktsError("No fakts loaded and allow_auto_load is disabled. Please call load() explicitly first.")
+            raise FaktsError(
+                "No fakts loaded and allow_auto_load is disabled. Please call load() explicitly first."
+            )
         return await self.aload()
 
     async def aload(self, reload: bool = False) -> ActiveFakts:
@@ -217,7 +221,9 @@ class SessionState:
         async with self.load_lock:
             await self.apersist_locked(fakts)
 
-    async def apersist_locked(self, fakts: ActiveFakts, fresh_from_grant: bool = False) -> None:
+    async def apersist_locked(
+        self, fakts: ActiveFakts, fresh_from_grant: bool = False
+    ) -> None:
         """As :meth:`apersist`, for callers already holding ``load_lock``.
 
         ``fresh_from_grant`` marks the one write that is allowed to replace a
@@ -240,8 +246,14 @@ class SessionState:
             )
             existing = None
 
-        if existing is not None and not fresh_from_grant and is_stale_auth(fakts, existing):
-            logger.debug("Skipping cache write: the cache holds a newer credential than the one we are about to persist.")
+        if (
+            existing is not None
+            and not fresh_from_grant
+            and is_stale_auth(fakts, existing)
+        ):
+            logger.debug(
+                "Skipping cache write: the cache holds a newer credential than the one we are about to persist."
+            )
             return
 
         try:

@@ -52,7 +52,9 @@ class SlowGrant(BaseModel):
         return self.fakts
 
 
-async def _always_pass(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+async def _always_pass(
+    self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+) -> bool:
     return True
 
 
@@ -61,7 +63,9 @@ async def _always_pass(self: Fakts, alias: Alias, challenge_key: ChallengeKey | 
 # --------------------------------------------------------------------------- #
 
 
-async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_refresh_that_drops_an_instance_reresolves_aliases(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A re-approval that *reduces* the grant must not leave us talking to a
     service we no longer have access to.
 
@@ -71,7 +75,9 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server: T
     """
     body = token_body("access_2", "refresh_2")
     # The renewed session grants a different alias set for the same service.
-    body["instances"]["test"]["aliases"] = [{"id": "relocated", "host": "localhost", "port": 9000, "path": "/test"}]
+    body["instances"]["test"]["aliases"] = [
+        {"id": "relocated", "host": "localhost", "port": 9000, "path": "/test"}
+    ]
 
     async def handler(request: web.Request) -> web.Response:
         return web.json_response(body)
@@ -79,7 +85,9 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server: T
     endpoint = await token_server(handler)
     monkeypatch.setattr(Fakts, "_achallenge_alias", _always_pass)
 
-    value = fakts_pointing_at(endpoint, access_token="access_1", expires_at=time.time() + 3600)
+    value = fakts_pointing_at(
+        endpoint, access_token="access_1", expires_at=time.time() + 3600
+    )
     fakts = Fakts(
         grant=StaticGrant(fakts=value),
         cache=MemoryCache(),
@@ -93,10 +101,14 @@ async def test_refresh_that_drops_an_instance_reresolves_aliases(token_server: T
         await fakts.arefresh_token()
 
         second = await fakts.aget_alias("test", omit_report=True)
-        assert second.id == "relocated", "The refresh replaced this service's aliases; serving the one resolved against the previous grant is exactly the stale-access case instances_changed exists to catch"
+        assert second.id == "relocated", (
+            "The refresh replaced this service's aliases; serving the one resolved against the previous grant is exactly the stale-access case instances_changed exists to catch"
+        )
 
 
-async def test_adopting_a_sibling_credential_reresolves_aliases(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_adopting_a_sibling_credential_reresolves_aliases(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Adoption replaces the whole ActiveFakts, instances included.
 
     Pre-fix, `_aadopt_cached_credentials` never touched the alias state at
@@ -140,7 +152,9 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server: To
         await fakts.arefresh_token()
 
         second = await fakts.aget_alias("test", omit_report=True)
-        assert second.id == "fallback", "Adopting a credential whose instances differ must re-resolve"
+        assert second.id == "fallback", (
+            "Adopting a credential whose instances differ must re-resolve"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -148,7 +162,9 @@ async def test_adopting_a_sibling_credential_reresolves_aliases(token_server: To
 # --------------------------------------------------------------------------- #
 
 
-async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_concurrent_reload_does_not_force_a_spurious_reauth(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A benign `arefresh()` running alongside a 401 must not turn into a
     demand for re-authentication.
 
@@ -190,7 +206,9 @@ async def test_concurrent_reload_does_not_force_a_spurious_reauth(token_server: 
         results = await asyncio.gather(reload_task, token_task)
 
     assert isinstance(results[1], str) and results[1]
-    assert "superseded" not in posted, f"The renewal used the credential the concurrent reload had already replaced. Posted: {posted}"
+    assert "superseded" not in posted, (
+        f"The renewal used the credential the concurrent reload had already replaced. Posted: {posted}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -211,7 +229,9 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
     in_flight = 0
     overlaps = 0
 
-    async def yielding_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def yielding_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         nonlocal in_flight, overlaps
         in_flight += 1
         if in_flight > 1:
@@ -236,7 +256,9 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
             fakts.aget_alias("test", omit_report=True),
         )
 
-        assert overlaps == 0, "Two alias resolutions ran concurrently; one sorts each instance's alias list in place while the other iterates it"
+        assert overlaps == 0, (
+            "Two alias resolutions ran concurrently; one sorts each instance's alias list in place while the other iterates it"
+        )
         for alias in (results[1], results[3]):
             assert alias.id == "fallback"
         assert fakts.alias_map["test"].id == "fallback"
@@ -247,7 +269,9 @@ async def test_concurrent_alias_refresh_and_lookup_are_serialized(
 # --------------------------------------------------------------------------- #
 
 
-async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server: TokenServer, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_untimed_credential_cannot_clobber_a_rotated_one(
+    token_server: TokenServer, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`test_alias_persist_cannot_clobber_a_rotated_credential` stamps
     `refresh_issued_at` on both sides, so it never exercises the branch that
     actually fires in production.
@@ -263,7 +287,9 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server: Tok
 
     endpoint = await token_server(handler)
 
-    async def fake_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def fake_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         if alias.id == "primary":
             raise Exception("unreachable")
         return True
@@ -287,7 +313,9 @@ async def test_untimed_credential_cannot_clobber_a_rotated_one(token_server: Tok
         await fakts.aget_alias("test", omit_report=True)
 
     assert cache.value is not None
-    assert cache.value.auth.refresh_token == "freshly_rotated", "An untimed credential must not overwrite one that was demonstrably rotated; the token on disk would be revoked"
+    assert cache.value.auth.refresh_token == "freshly_rotated", (
+        "An untimed credential must not overwrite one that was demonstrably rotated; the token on disk would be revoked"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -311,7 +339,9 @@ async def test_nested_enter_is_refused() -> None:
         with pytest.raises(NotEnteredError):
             async with fakts:
                 pass
-        assert fakts._state.load_lock is outer_lock, "the refused re-entry must leave the outer scope's locks intact"
+        assert fakts._state.load_lock is outer_lock, (
+            "the refused re-entry must leave the outer scope's locks intact"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -319,7 +349,9 @@ async def test_nested_enter_is_refused() -> None:
 # --------------------------------------------------------------------------- #
 
 
-async def test_alogin_on_a_healthy_session_does_nothing(token_server: TokenServer) -> None:
+async def test_alogin_on_a_healthy_session_does_nothing(
+    token_server: TokenServer,
+) -> None:
     """`alogin()` is the recovery users are told to call, so it has to be
     safe to call unconditionally: no prompt, and above all no rotation.
 
@@ -334,7 +366,9 @@ async def test_alogin_on_a_healthy_session_does_nothing(token_server: TokenServe
 
     endpoint = await token_server(handler)
 
-    value = fakts_pointing_at(endpoint, access_token="still_good", expires_at=time.time() + 3600)
+    value = fakts_pointing_at(
+        endpoint, access_token="still_good", expires_at=time.time() + 3600
+    )
     grant = StaticGrant(fakts=value)
     fakts = Fakts(grant=grant, cache=MemoryCache(), manifest=make_manifest())
 
@@ -349,7 +383,9 @@ async def test_alogin_on_a_healthy_session_does_nothing(token_server: TokenServe
     assert grant.load_count == 1, "alogin() must not re-run the grant"
 
 
-async def test_alogin_recovers_a_dead_session_in_one_call(token_server: TokenServer) -> None:
+async def test_alogin_recovers_a_dead_session_in_one_call(
+    token_server: TokenServer,
+) -> None:
     """The README's worked example, as a test.
 
     The grant here *requires user interaction*, which is the whole point: an
@@ -365,7 +401,9 @@ async def test_alogin_recovers_a_dead_session_in_one_call(token_server: TokenSer
     endpoint = await token_server(handler)
 
     dead = fakts_pointing_at(endpoint, refresh_token="dead")
-    alive = fakts_pointing_at(endpoint, access_token="fresh_access", expires_at=time.time() + 3600)
+    alive = fakts_pointing_at(
+        endpoint, access_token="fresh_access", expires_at=time.time() + 3600
+    )
     grant = StaticGrant(fakts=alive, requires_user_interaction=True)
 
     fakts = Fakts(grant=grant, cache=MemoryCache(), manifest=make_manifest())
@@ -440,7 +478,9 @@ async def test_alogout_concurrent_with_alias_resolution_does_not_deadlock(
     challenging = asyncio.Event()
     proceed = asyncio.Event()
 
-    async def gated_challenge(self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None) -> bool:
+    async def gated_challenge(
+        self: Fakts, alias: Alias, challenge_key: ChallengeKey | None = None
+    ) -> bool:
         challenging.set()
         await proceed.wait()
         return alias.id == "fallback"

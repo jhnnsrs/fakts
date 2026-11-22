@@ -6,7 +6,9 @@ from fakts.oauth2 import TokenResponse
 NestedFaktValue = str | int | float | bool | None | dict[str, Any] | list[Any]
 
 
-FaktValue = str | int | float | bool | None | dict[str, NestedFaktValue] | list[NestedFaktValue]
+FaktValue = (
+    str | int | float | bool | None | dict[str, NestedFaktValue] | list[NestedFaktValue]
+)
 
 
 @runtime_checkable

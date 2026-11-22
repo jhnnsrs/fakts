@@ -204,7 +204,9 @@ class MeshControl(BaseModel):
             return MeshError(KEY_EXPIRED, "needs_login")
         if self.state == "needs_login":
             return MeshError(NEEDS_LOGIN, "needs_login")
-        return MeshError(f"{REMOVED} ({self.reason})" if self.reason else REMOVED, "login")
+        return MeshError(
+            f"{REMOVED} ({self.reason})" if self.reason else REMOVED, "login"
+        )
 
 
 def _without_credentials(url: str) -> str:
@@ -254,7 +256,11 @@ class _MeshControlStatus(Protocol):
     """The bindings' ``ControlStatus`` (arkitekt-mesh >= 0.13)."""
 
     @property
-    def state(self) -> Literal["connected", "reconnecting", "key_expired", "needs_login", "refused"]: ...
+    def state(
+        self,
+    ) -> Literal[
+        "connected", "reconnecting", "key_expired", "needs_login", "refused"
+    ]: ...
     @property
     def reason(self) -> str | None: ...
 
@@ -341,7 +347,9 @@ def _translate(error: Exception, bindings: _MeshBindings, statedir: Path) -> Mes
     if isinstance(error, bindings.NeedsLogin):
         return MeshError(NEEDS_LOGIN, "needs_login")
     if isinstance(error, bindings.Locked):
-        return MeshError(f"Another mesh node is already running in {statedir}", "locked")
+        return MeshError(
+            f"Another mesh node is already running in {statedir}", "locked"
+        )
     if isinstance(error, bindings.Refused):
         return MeshError(_sentence(error), "login")
     if isinstance(error, bindings.Timeout):
@@ -388,7 +396,9 @@ class NativeNode:
         if auth_key:
             logger.info("Joining the mesh as %s", hostname)
         # Only when set: older bindings do not take it.
-        tuning: dict[str, Any] = {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
+        tuning: dict[str, Any] = (
+            {} if options.tcp_buffer is None else {"tcp_buffer": options.tcp_buffer}
+        )
         if hasattr(bindings, "ControlStatus"):  # arkitekt-mesh >= 0.13
             # The proxy asks for credentials (they come back in its url):
             # without them any user of this machine is this node to the mesh.
@@ -418,7 +428,9 @@ class NativeNode:
             info = await self._node.turn()
         except bindings.MeshError as e:
             raise MeshError(str(e)) from e
-        return TurnInfo(urls=list(info.urls), username=info.username, credential=info.credential)
+        return TurnInfo(
+            urls=list(info.urls), username=info.username, credential=info.credential
+        )
 
     async def forward(self, host: str, port: int) -> str:
         """A local ``127.0.0.1:P`` forwarding TCP to ``host:port`` on the mesh."""
@@ -486,7 +498,9 @@ class MeshRoute:
     ``MeshOptions.timeout`` each.
     """
 
-    def __init__(self, mesh: MeshOptions | MeshProxy | None, manifest: Manifest) -> None:
+    def __init__(
+        self, mesh: MeshOptions | MeshProxy | None, manifest: Manifest
+    ) -> None:
         self.options = mesh if isinstance(mesh, MeshOptions) else None
         self.proxy = mesh.url if isinstance(mesh, MeshProxy) else None
         self.forced = mesh is not None and mesh.force
@@ -563,7 +577,9 @@ class MeshRoute:
             # Remembered like any other: this start is the only one there
             # will be, and every later lookup gets its outcome.
             logger.warning("The mesh node could not start", exc_info=True)
-            self.error = MeshError(f"The mesh node could not start: {type(e).__name__}: {e}")
+            self.error = MeshError(
+                f"The mesh node could not start: {type(e).__name__}: {e}"
+            )
             return None, None, self.error
         if self._closed:
             # The block was left while the node was still starting.
@@ -587,7 +603,9 @@ class MeshRoute:
             elif error is None and self.refused is not None:
                 logger.info("The mesh node is back on the mesh")
             elif control.state == "reconnecting":
-                logger.debug("The mesh node lost its coordination server: %s", control.reason)
+                logger.debug(
+                    "The mesh node lost its coordination server: %s", control.reason
+                )
             self.refused = error
 
     async def _anode(self, fakts: ActiveFakts) -> NativeNode:
@@ -603,8 +621,12 @@ class MeshRoute:
         if me.sub and me.organization and me.hub:
             identity = f"{me.sub}-{me.organization}-{me.hub}"
         else:
-            identity = sha256(f"{me.deployment_name}:{self.manifest.hash()}".encode()).hexdigest()[:16]
-        statedir = self.options.node_dir(f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}")
+            identity = sha256(
+                f"{me.deployment_name}:{self.manifest.hash()}".encode()
+            ).hexdigest()[:16]
+        statedir = self.options.node_dir(
+            f"{hostname_label(self.manifest.identifier)}-{hostname_label(identity)}"
+        )
 
         claim = fakts.mesh
         if claim is None and not NativeNode.has_state(statedir):
@@ -615,8 +637,12 @@ class MeshRoute:
         if claim is not None and not coord_url:
             raise MeshError("The server sent a mesh key but no coordination url")
 
-        device = "".join(c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum())[:8]
-        hostname = self.options.hostname or hostname_label(f"{self.manifest.identifier}-{device}")
+        device = "".join(
+            c for c in (self.manifest.device_id or "") if c.isascii() and c.isalnum()
+        )[:8]
+        hostname = self.options.hostname or hostname_label(
+            f"{self.manifest.identifier}-{device}"
+        )
         return await NativeNode.start(
             self.options,
             statedir,

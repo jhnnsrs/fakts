@@ -94,7 +94,10 @@ def _write_tls(directory: Path, address: str) -> None:
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         # Python 3.13's default context is VERIFY_X509_STRICT: without the key
         # identifiers it rejects the chain, and the health check just times out.
-        .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()),
+            critical=False,
+        )
         .add_extension(
             x509.KeyUsage(
                 digital_signature=True,
@@ -132,7 +135,9 @@ def _write_tls(directory: Path, address: str) -> None:
         .not_valid_after(now + datetime.timedelta(days=1))
         .add_extension(x509.SubjectAlternativeName(names), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False
+        )
         .add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
             critical=False,
@@ -149,14 +154,20 @@ def _write_tls(directory: Path, address: str) -> None:
     pem = serialization.Encoding.PEM
     (tls / "ca.pem").write_bytes(ca.public_bytes(pem))
     (tls / "ionskale.pem").write_bytes(cert.public_bytes(pem) + ca.public_bytes(pem))
-    (tls / "ionskale.key").write_bytes(key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+    (tls / "ionskale.key").write_bytes(
+        key.private_bytes(
+            pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+        )
+    )
     # Read by the container's unprivileged user; throwaway material.
     tls.chmod(0o755)
     for file in tls.iterdir():
         file.chmod(0o644)
 
 
-def _write_config(directory: Path, address: str, https: int, stun: int, admin: str) -> None:
+def _write_config(
+    directory: Path, address: str, https: int, stun: int, admin: str
+) -> None:
     (directory / "config.yaml").write_text(
         f"""listen_addr: ":443"
 public_addr: "{address}:{https}"
@@ -193,7 +204,9 @@ def _wait_healthy(url: str, ca_file: str, timeout: float = 60) -> None:
         except OSError as e:
             last = e
         if time.monotonic() > deadline:
-            raise TimeoutError(f"ionskale did not become healthy at {url} (last: {last})")
+            raise TimeoutError(
+                f"ionskale did not become healthy at {url} (last: {last})"
+            )
         time.sleep(0.5)
 
 
@@ -236,8 +249,13 @@ def mesh_lab() -> Iterator[MeshLab]:
                 except TimeoutError as e:
                     # Say why: a runner's docker differs in ways a local run hides.
                     state = deployed.ps(services=["ionskale"])
-                    logs = "\n".join(line for _, line in deployed.logs(services=["ionskale"], tail=60))
-                    raise TimeoutError(f"{e}\ncontainer: {state}\nlogs:\n{logs}") from None
+                    logs = "\n".join(
+                        line
+                        for _, line in deployed.logs(services=["ionskale"], tail=60)
+                    )
+                    raise TimeoutError(
+                        f"{e}\ncontainer: {state}\nlogs:\n{logs}"
+                    ) from None
 
                 cli_env = {
                     "IONSCALE_ADDR": "https://localhost:443",

@@ -24,7 +24,9 @@ def truncate(text: str, max_length: int = 300) -> str:
     text = text.strip()
     if len(text) <= max_length:
         return text
-    return f"{text[:max_length]}... ({len(text) - max_length} more characters truncated)"
+    return (
+        f"{text[:max_length]}... ({len(text) - max_length} more characters truncated)"
+    )
 
 
 def describe_validation_error(error: ValidationError) -> str:
@@ -35,4 +37,7 @@ def describe_validation_error(error: ValidationError) -> str:
     put (part of) a live refresh token into logs and tracebacks. Report only
     where each problem is and what kind it was.
     """
-    return "; ".join(f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}" for problem in error.errors())
+    return "; ".join(
+        f"{'.'.join(str(part) for part in problem['loc']) or '<root>'}: {problem['type']}"
+        for problem in error.errors()
+    )

@@ -668,8 +668,12 @@ Choose explicitly with `mesh`:
 from fakts import MeshOptions, MeshProxy, build_device_code_fakts
 
 build_device_code_fakts(url=url, manifest=manifest)  # MeshOptions(auto=True)
-build_device_code_fakts(url=url, manifest=manifest, mesh=MeshOptions())  # the same, but report what is missing
-build_device_code_fakts(url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055"))  # a running proxy
+build_device_code_fakts(
+    url=url, manifest=manifest, mesh=MeshOptions()
+)  # the same, but report what is missing
+build_device_code_fakts(
+    url=url, manifest=manifest, mesh=MeshProxy(url="http://localhost:1055")
+)  # a running proxy
 build_device_code_fakts(url=url, manifest=manifest, mesh=None)  # off
 ```
 

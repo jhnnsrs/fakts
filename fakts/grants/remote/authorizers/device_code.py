@@ -35,7 +35,12 @@ from fakts.grants.remote.errors import (
 from fakts.grants.remote.models import FaktsEndpoint, SSLContextModel
 from fakts.oauth2 import TokenResponse
 
-from .utils import print_device_code_prompt, print_qr_code, print_succesfull_login, wants_qr
+from .utils import (
+    print_device_code_prompt,
+    print_qr_code,
+    print_succesfull_login,
+    wants_qr,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +57,9 @@ def _as_seconds(raw: object, default: int, field: str) -> int:
     try:
         return int(raw)  # type: ignore[call-overload]
     except (TypeError, ValueError) as e:
-        raise DeviceCodeError(f"The device authorization endpoint sent a non-numeric '{field}': {raw!r}.") from e
+        raise DeviceCodeError(
+            f"The device authorization endpoint sent a non-numeric '{field}': {raw!r}."
+        ) from e
 
 
 @dataclasses.dataclass(frozen=True)
@@ -140,7 +147,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
     """Ask for a key to join the deployment's mesh; it comes back once, with
     the first token (as ``mesh``), if the approver allows it."""
 
-    sleeper: Callable[[float], Awaitable[None]] = Field(default=asyncio.sleep, exclude=True)
+    sleeper: Callable[[float], Awaitable[None]] = Field(
+        default=asyncio.sleep, exclude=True
+    )
     """Injected so tests can assert the polling cadence without spending it."""
 
     requires_user_interaction: bool = True
@@ -154,7 +163,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
     async def arequest_code(self, endpoint: FaktsEndpoint) -> dict:
         """Stage a device code and register a client for this app."""
         if not endpoint.device_authorization_endpoint:
-            raise DeviceCodeError(f"{endpoint.name} did not advertise a device_authorization_endpoint. A fakts protocol v2 server must publish one.")
+            raise DeviceCodeError(
+                f"{endpoint.name} did not advertise a device_authorization_endpoint. A fakts protocol v2 server must publish one."
+            )
 
         payload = {
             "manifest": self.manifest.model_dump(),
@@ -181,11 +192,15 @@ class DeviceCodeAuthorizer(SSLContextModel):
         user_code = started.get("user_code")
         client_id = started.get("client_id")
         if not device_code or not client_id:
-            raise DeviceCodeError(f"{endpoint.name} answered the device authorization request without a device_code and client_id (it sent: {sorted(started)})")
+            raise DeviceCodeError(
+                f"{endpoint.name} answered the device authorization request without a device_code and client_id (it sent: {sorted(started)})"
+            )
 
         # The server hands back a complete approval URL; opening anything we
         # derived ourselves would only reintroduce guesswork.
-        verification_uri = started.get("verification_uri_complete") or started.get("verification_uri")
+        verification_uri = started.get("verification_uri_complete") or started.get(
+            "verification_uri"
+        )
         browser_opened = False
         if self.open_browser and verification_uri:
             # The URL comes from the server, and webbrowser hands unknown
@@ -201,7 +216,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     verification_uri,
                 )
 
-        expires_in = _as_seconds(started.get("expires_in"), self.expiration_time_seconds, "expires_in")
+        expires_in = _as_seconds(
+            started.get("expires_in"), self.expiration_time_seconds, "expires_in"
+        )
         if user_code:
             await self.device_code_hook(
                 DeviceCodeChallenge(
@@ -209,7 +226,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     user_code=user_code,
                     # `configure` is a template with a literal {code}: the fallback
                     # for a server that sent no complete link of its own.
-                    verification_uri_complete=verification_uri or (endpoint.configure or "").replace("{code}", user_code) or endpoint.base_url,
+                    verification_uri_complete=verification_uri
+                    or (endpoint.configure or "").replace("{code}", user_code)
+                    or endpoint.base_url,
                     expires_in=expires_in,
                     browser_opened=browser_opened,
                 )
@@ -219,7 +238,9 @@ class DeviceCodeAuthorizer(SSLContextModel):
         # device response names: the two must never diverge.
         token_endpoint = endpoint.token_endpoint
         if not token_endpoint:
-            raise DeviceCodeError(f"{endpoint.name} advertised no token_endpoint to poll.")
+            raise DeviceCodeError(
+                f"{endpoint.name} advertised no token_endpoint to poll."
+            )
 
         response = await self._apoll(
             token_endpoint,
@@ -291,11 +312,19 @@ class DeviceCodeAuthorizer(SSLContextModel):
                     interval = min(interval + 5, max(1, int(remaining)))
                     continue
                 if e.error == "access_denied":
-                    raise UserDeniedError("The user declined to grant this app access.") from e
+                    raise UserDeniedError(
+                        "The user declined to grant this app access."
+                    ) from e
                 if e.error == "expired_token":
-                    raise DeviceCodeExpiredError("The device code expired before it was approved.") from e
-                raise DeviceCodeError(f"The token endpoint refused the device code: {e}") from e
+                    raise DeviceCodeExpiredError(
+                        "The device code expired before it was approved."
+                    ) from e
+                raise DeviceCodeError(
+                    f"The token endpoint refused the device code: {e}"
+                ) from e
 
             return oauth2.parse_token_response(data, token_endpoint)
 
-        raise DeviceCodeTimeoutError(f"Gave up waiting for the device code to be approved after {budget}s.")
+        raise DeviceCodeTimeoutError(
+            f"Gave up waiting for the device code to be approved after {budget}s."
+        )

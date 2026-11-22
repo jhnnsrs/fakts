@@ -45,7 +45,9 @@ async def test_static_token_is_fetched_once_and_cached() -> None:
 
 @pytest.mark.asyncio
 async def test_zero_lifetime_rotates_every_call_and_last_token_repeats() -> None:
-    async with build_testing_fakts(aliases={}, tokens=["a", "b"], token_lifetime=0) as fakts:
+    async with build_testing_fakts(
+        aliases={}, tokens=["a", "b"], token_lifetime=0
+    ) as fakts:
         assert await fakts.aget_token() == "a"
         assert await fakts.aget_token() == "b"
         assert await fakts.aget_token() == "b"
@@ -68,7 +70,9 @@ async def test_refresh_token_rotates_with_stale_token_semantics() -> None:
 async def test_first_alias_resolution_spends_the_first_fetch() -> None:
     """Real behavior worth pinning: alias refresh takes a report token up
     front, so the first ``aget_alias`` performs the first token fetch."""
-    async with build_testing_fakts(aliases={"svc": "http://x"}, tokens=["a", "b"]) as fakts:
+    async with build_testing_fakts(
+        aliases={"svc": "http://x"}, tokens=["a", "b"]
+    ) as fakts:
         assert fakts.token_fetches == 0
         await fakts.aget_alias("svc")
         assert fakts.token_fetches == 1
@@ -79,7 +83,10 @@ def test_a_sync_with_works_for_synchronous_consumers() -> None:
     """A plain ``with`` enters it for synchronous consumers too."""
     fakts = build_testing_fakts(aliases={"alpaka": "http://testserver"})
     with fakts:
-        assert fakts.get_alias("alpaka").to_http_path("/llm/v1") == "http://testserver/llm/v1"
+        assert (
+            fakts.get_alias("alpaka").to_http_path("/llm/v1")
+            == "http://testserver/llm/v1"
+        )
         assert fakts.get_token() == "test-token"
 
 
@@ -89,7 +96,9 @@ def test_rejects_unparseable_alias_urls() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog: pytest.LogCaptureFixture) -> None:
+async def test_a_service_outside_the_asked_versions_is_used_and_said_once(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     testing = build_testing_fakts(aliases={"mikro": "http://testserver"})
     testing.grant.fakts.instances["mikro"].version = "11.4.0"
     testing.grant.fakts.instances["mikro"].satisfies = False
@@ -98,5 +107,9 @@ async def test_a_service_outside_the_asked_versions_is_used_and_said_once(caplog
             assert (await fakts.aget_alias("mikro")).host == "testserver"
             await fakts.aget_alias("mikro", force_refresh=True)
         (mismatch,) = fakts.version_mismatches()
-        assert (mismatch.key, mismatch.running, mismatch.wanted) == ("mikro", "11.4.0", None)
+        assert (mismatch.key, mismatch.running, mismatch.wanted) == (
+            "mikro",
+            "11.4.0",
+            None,
+        )
     assert len([r for r in caplog.records if "11.4.0" in r.message]) == 1
