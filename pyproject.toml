@@ -42,11 +42,6 @@ dev = [
     "segno>=1.6",
 ]
 
-[tool.basedpyright]
-include = ["fakts"]
-exclude = ["**/__pycache__", "tests"]
-typeCheckingMode = "standard"
-
 [tool.hatch.build.targets.sdist]
 include = ["fakts"]
 
@@ -69,30 +64,6 @@ markers = [
     "integration: marks tests that require a running server (docker)",
     "mesh: marks tests that join a real mesh (tests/mesh_lab, needs arkitekt-mesh)",
 ]
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-# ruff also formats code blocks in Markdown; the README's are aligned by hand.
-extend-exclude = ["*.md"]
-
-[tool.ruff.lint]
-# pyflakes/pycodestyle errors, imports, pyupgrade, bugbear, simplify, ruff.
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = [
-    "E501",   # long lines: docstrings and messages read better whole
-    "RUF001", # ambiguous unicode in strings: the prompts use it on purpose
-    "RUF002",
-    "RUF003",
-    "UP042",  # (str, Enum) -> StrEnum changes str()/format output: behaviour, not style
-    "UP037",
-    "UP038",
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011", "B017"]
-
-
 
 [tool.semantic_release]
 # No version_toml/version_variables: the release version lives only in the git
